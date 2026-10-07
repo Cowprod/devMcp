@@ -102,3 +102,21 @@ Type : SÉCURITÉ
 Statut : VALIDÉE
 Décision : ne pas inventer une authentification statique propriétaire pour ChatGPT.
 Conséquences : en mode tunnel, l'accès repose sur le contrôle OpenAI du tunnel ; un déploiement public futur devra utiliser OAuth 2.1 conforme MCP plutôt qu'une API key ad hoc.
+
+## D-018
+Type : ARCHITECTURE
+Statut : VALIDÉE
+Décision : chaque action déclare un target logique de runner.
+Conséquences : action_start persiste le target ; un worker ne réclame que les jobs correspondant à DEVMCP_TARGET. La valeur par défaut est local.
+
+## D-019
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : deux jobs d'un même projet ne modifient jamais simultanément le même workspace.
+Conséquences : le worker tient un verrou exclusif par projet pendant toute l'exécution de l'action.
+
+## D-020
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : action_run synchrone est interdit par défaut.
+Conséquences : une action doit déclarer sync=true et cibler local pour être exécutable hors worker. Les actions de build/test/mutation passent par action_start.
