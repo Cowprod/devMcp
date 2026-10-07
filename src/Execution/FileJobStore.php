@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Execution;
 
+use Closure;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -37,44 +38,42 @@ final class FileJobStore
     public function get(string $jobId): JobRecord
     {
         $this->assertJobId($jobId);
-        $path = $this->jobDirectory($jobId) . '/job.json';
 
-        if (!is_file($path)) {
-            throw new InvalidArgumentException("Job inconnu : {$jobId}");
-        }
-
-        $json = file_get_contents($path);
-        $data = $json === false ? null : json_decode($json, true);
-
-        if (!is_array($data)) {
-            throw new RuntimeException("Métadonnées invalides pour le job {$jobId}");
-        }
-
-        return JobRecord::fromArray($data);
+        return $this->readUnlocked($jobId);
     }
 
     public function write(JobRecord $job): void
     {
-        $directory = $this->jobDirectory($job->id);
-        if (!is_dir($directory)) {
-            throw new RuntimeException("Dossier du job absent : {$job->id}");
-        }
+        $this->withJobLock(
+            $job->id,
+            function () use ($job): JobRecord {
+                $this->writeUnlocked($job);
 
-        $lock = fopen($directory . '/.lock', 'c+');
-        if ($lock === false) {
-            throw new RuntimeException("Impossible de verrouiller le job {$job->id}");
-        }
+                return $job;
+            },
+        );
+    }
 
-        try {
-            if (!flock($lock, LOCK_EX)) {
-                throw new RuntimeException("Impossible de verrouiller le job {$job->id}");
-            }
+    /**
+     * @param Closure(JobRecord): JobRecord $mutator
+     */
+    public function mutate(string $jobId, Closure $mutator): JobRecord
+    {
+        return $this->withJobLock(
+            $jobId,
+            function () use ($jobId, $mutator): JobRecord {
+                $current = $this->readUnlocked($jobId);
+                $updated = $mutator($current);
 
-            $this->writeUnlocked($job);
-        } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
-        }
+                if ($updated->id !== $jobId) {
+                    throw new RuntimeException('Un mutateur de job ne peut pas changer job_id');
+                }
+
+                $this->writeUnlocked($updated);
+
+                return $updated;
+            },
+        );
     }
 
     public function claimNext(): ?JobRecord
@@ -98,17 +97,26 @@ final class FileJobStore
                     continue;
                 }
 
-                $job = $this->get($jobId);
-                if ($job->status !== 'queued') {
-                    continue;
+                $claimed = false;
+                $job = $this->mutate(
+                    $jobId,
+                    static function (JobRecord $job) use (&$claimed): JobRecord {
+                        if ($job->status !== 'queued') {
+                            return $job;
+                        }
+
+                        $job->status = 'running';
+                        $job->startedAt = gmdate('c');
+                        $job->cancelRequested = false;
+                        $claimed = true;
+
+                        return $job;
+                    },
+                );
+
+                if ($claimed) {
+                    return $job;
                 }
-
-                $job->status = 'running';
-                $job->startedAt = gmdate('c');
-                $job->cancelRequested = false;
-                $this->write($job);
-
-                return $job;
             }
 
             return null;
@@ -120,25 +128,31 @@ final class FileJobStore
 
     public function requestCancel(string $jobId): JobRecord
     {
-        $job = $this->get($jobId);
+        return $this->mutate(
+            $jobId,
+            static function (JobRecord $job): JobRecord {
+                if ($job->status === 'queued') {
+                    $job->status = 'cancelled';
+                    $job->finishedAt = gmdate('c');
+                } elseif ($job->status === 'running') {
+                    $job->cancelRequested = true;
+                }
 
-        if ($job->status === 'queued') {
-            $job->status = 'cancelled';
-            $job->finishedAt = gmdate('c');
-        } elseif ($job->status === 'running') {
-            $job->cancelRequested = true;
-        }
-
-        $this->write($job);
-
-        return $job;
+                return $job;
+            },
+        );
     }
 
     public function setPid(string $jobId, ?int $pid): void
     {
-        $job = $this->get($jobId);
-        $job->pid = $pid;
-        $this->write($job);
+        $this->mutate(
+            $jobId,
+            static function (JobRecord $job) use ($pid): JobRecord {
+                $job->pid = $pid;
+
+                return $job;
+            },
+        );
     }
 
     public function finish(
@@ -147,15 +161,19 @@ final class FileJobStore
         ?int $exitCode,
         ?string $error = null,
     ): JobRecord {
-        $job = $this->get($jobId);
-        $job->status = $status;
-        $job->exitCode = $exitCode;
-        $job->error = $error;
-        $job->finishedAt = gmdate('c');
-        $job->pid = null;
-        $this->write($job);
+        return $this->mutate(
+            $jobId,
+            static function (JobRecord $job) use ($status, $exitCode, $error): JobRecord {
+                $job->status = $status;
+                $job->exitCode = $exitCode;
+                $job->error = $error;
+                $job->finishedAt = gmdate('c');
+                $job->pid = null;
+                $job->cancelRequested = false;
 
-        return $job;
+                return $job;
+            },
+        );
     }
 
     public function appendOutput(string $jobId, string $stream, string $content): void
@@ -178,13 +196,18 @@ final class FileJobStore
         }
 
         if (strlen($content) > $remaining) {
-            $job = $this->get($jobId);
-            if ($stream === 'stdout') {
-                $job->stdoutTruncated = true;
-            } else {
-                $job->stderrTruncated = true;
-            }
-            $this->write($job);
+            $this->mutate(
+                $jobId,
+                static function (JobRecord $job) use ($stream): JobRecord {
+                    if ($stream === 'stdout') {
+                        $job->stdoutTruncated = true;
+                    } else {
+                        $job->stderrTruncated = true;
+                    }
+
+                    return $job;
+                },
+            );
         }
     }
 
@@ -232,12 +255,57 @@ final class FileJobStore
         return [
             'offset' => $offset,
             'next_offset' => $nextOffset,
-            'eof' => $job->status !== 'queued'
-                && $job->status !== 'running'
+            'eof' => !in_array($job->status, ['queued', 'running'], true)
                 && $nextOffset >= $size,
             'truncated' => $truncated,
             'content' => $content,
         ];
+    }
+
+    /**
+     * @template T
+     * @param Closure(): T $callback
+     * @return T
+     */
+    private function withJobLock(string $jobId, Closure $callback): mixed
+    {
+        $directory = $this->jobDirectory($jobId);
+        if (!is_dir($directory)) {
+            throw new InvalidArgumentException("Job inconnu : {$jobId}");
+        }
+
+        $lock = fopen($directory . '/.lock', 'c+');
+        if ($lock === false) {
+            throw new RuntimeException("Impossible de verrouiller le job {$jobId}");
+        }
+
+        try {
+            if (!flock($lock, LOCK_EX)) {
+                throw new RuntimeException("Impossible de verrouiller le job {$jobId}");
+            }
+
+            return $callback();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function readUnlocked(string $jobId): JobRecord
+    {
+        $path = $this->jobDirectory($jobId) . '/job.json';
+        if (!is_file($path)) {
+            throw new InvalidArgumentException("Job inconnu : {$jobId}");
+        }
+
+        $json = file_get_contents($path);
+        $data = $json === false ? null : json_decode($json, true);
+
+        if (!is_array($data)) {
+            throw new RuntimeException("Métadonnées invalides pour le job {$jobId}");
+        }
+
+        return JobRecord::fromArray($data);
     }
 
     private function writeUnlocked(JobRecord $job): void
