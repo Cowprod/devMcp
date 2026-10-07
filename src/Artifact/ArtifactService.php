@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Artifact;
 
-use Cowprod\DevMcp\Execution\JobRecord;
+use Cowprod\DevMcp\Project\ActionDefinition;
+use Cowprod\DevMcp\Project\ProjectDefinition;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -21,12 +22,15 @@ final class ArtifactService
     /**
      * @return array{job_id: string, artifacts: list<array<string, mixed>>}
      */
-    public function list(JobRecord $job): array
-    {
+    public function list(
+        string $jobId,
+        ProjectDefinition $project,
+        ActionDefinition $action,
+    ): array {
         $artifacts = [];
 
-        foreach ($job->action->getArtifacts() as $definition) {
-            $resolved = $this->resolveExistingFile($job->project->root, $definition->path, false);
+        foreach ($action->getArtifacts() as $definition) {
+            $resolved = $this->resolveExistingFile($project->root, $definition->path, false);
 
             $artifacts[] = [
                 ...$definition->toPublicArray(),
@@ -37,7 +41,7 @@ final class ArtifactService
         }
 
         return [
-            'job_id' => $job->id,
+            'job_id' => $jobId,
             'artifacts' => $artifacts,
         ];
     }
@@ -46,7 +50,9 @@ final class ArtifactService
      * @return array<string, mixed>
      */
     public function get(
-        JobRecord $job,
+        string $jobId,
+        ProjectDefinition $project,
+        ActionDefinition $action,
         string $artifactId,
         int $offset = 0,
         ?int $length = null,
@@ -55,8 +61,8 @@ final class ArtifactService
             throw new InvalidArgumentException('offset doit être positif');
         }
 
-        $definition = $job->action->getArtifact($artifactId);
-        $path = $this->resolveExistingFile($job->project->root, $definition->path, true);
+        $definition = $action->getArtifact($artifactId);
+        $path = $this->resolveExistingFile($project->root, $definition->path, true);
 
         if ($path === null) {
             throw new RuntimeException("Artefact introuvable : {$artifactId}");
@@ -88,7 +94,7 @@ final class ArtifactService
                 throw new RuntimeException("Impossible de positionner la lecture de l'artefact");
             }
 
-            $content = $requestedLength > 0 ? fread($handle, $requestedLength) : '';
+            $content = fread($handle, $requestedLength);
             if ($content === false) {
                 throw new RuntimeException("Impossible de lire l'artefact");
             }
@@ -99,7 +105,7 @@ final class ArtifactService
         $nextOffset = $offset + strlen($content);
 
         return [
-            'job_id' => $job->id,
+            'job_id' => $jobId,
             'artifact' => $definition->toPublicArray(),
             'size' => $size,
             'sha256' => hash_file('sha256', $path),
