@@ -31,12 +31,14 @@ return [
                     'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
                     'cwd' => '.',
                     'timeout' => 10,
+                    'sync' => true,
                 ],
                 'php.version' => [
                     'description' => 'Retourne la version PHP du runner.',
                     'argv' => ['/usr/bin/php', '-v'],
                     'cwd' => '.',
                     'timeout' => 10,
+                    'sync' => true,
                 ],
                 'test.phpunit' => [
                     'description' => 'Lance la suite PHPUnit du projet.',
