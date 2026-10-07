@@ -54,7 +54,7 @@ final class ArtifactServiceTest extends TestCase
         $jobs = new JobManager($registry, $store, new ArtifactService(1024), $audit, 4096);
 
         $started = $jobs->start('demo', 'produce');
-        (new JobWorker($registry, $store, $audit, 1000))->runOnce();
+        (new JobWorker($registry, $store, $audit, 'local', 1000))->runOnce();
 
         self::assertSame('succeeded', $jobs->status($started['job_id'])['status']);
 
@@ -88,7 +88,7 @@ final class ArtifactServiceTest extends TestCase
             $store = new FileJobStore($this->root . '/jobs');
             $jobs = new JobManager($registry, $store, new ArtifactService(), $audit);
             $started = $jobs->start('demo', 'noop');
-            (new JobWorker($registry, $store, $audit, 1000))->runOnce();
+            (new JobWorker($registry, $store, $audit, 'local', 1000))->runOnce();
 
             $this->expectException(RuntimeException::class);
             $jobs->artifactList($started['job_id']);
