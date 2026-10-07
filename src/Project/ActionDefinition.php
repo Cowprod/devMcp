@@ -202,7 +202,7 @@ final class ActionDefinition
 
     /**
      * @param array<string, mixed> $arguments
-     * @return array<string, string>
+     * @return array<string, string|int>
      */
     public function normalizeArguments(array $arguments): array
     {
@@ -242,7 +242,7 @@ final class ActionDefinition
                 continue;
             }
 
-            $resolved[] = $normalized[$argument['param']];
+            $resolved[] = (string) $normalized[$argument['param']];
         }
 
         return $resolved;
