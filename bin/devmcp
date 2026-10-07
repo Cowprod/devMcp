@@ -1,0 +1,48 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Audit\AuditLogger;
+use Cowprod\DevMcp\Execution\ActionRunner;
+use Cowprod\DevMcp\Mcp\ProjectTools;
+use Cowprod\DevMcp\Mcp\ServerFactory;
+use Cowprod\DevMcp\Project\ProjectRegistry;
+use Mcp\Server\Transport\StdioTransport;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$configPath = getenv('DEVMCP_CONFIG') ?: dirname(__DIR__) . '/config/global.php';
+
+if (!is_file($configPath)) {
+    fwrite(STDERR, "Configuration devMcp introuvable : {$configPath}" . PHP_EOL);
+    exit(2);
+}
+
+$config = require $configPath;
+if (!is_array($config)) {
+    fwrite(STDERR, "La configuration devMcp doit retourner un tableau PHP." . PHP_EOL);
+    exit(2);
+}
+
+$projects = ProjectRegistry::fromConfig($config);
+$auditFile = $config['audit']['file'] ?? dirname(__DIR__) . '/var/audit.jsonl';
+$maxTimeout = $config['limits']['max_timeout_seconds'] ?? 300;
+$maxOutput = $config['limits']['max_output_bytes'] ?? 65536;
+
+if (!is_string($auditFile) || $auditFile === '') {
+    throw new RuntimeException('audit.file invalide');
+}
+if (!is_int($maxTimeout) || $maxTimeout < 1) {
+    throw new RuntimeException('limits.max_timeout_seconds invalide');
+}
+if (!is_int($maxOutput) || $maxOutput < 1024) {
+    throw new RuntimeException('limits.max_output_bytes invalide');
+}
+
+$audit = new AuditLogger($auditFile);
+$runner = new ActionRunner($audit, $maxTimeout, $maxOutput);
+$tools = new ProjectTools($projects, $runner, $audit);
+$server = (new ServerFactory())->build($tools);
+
+exit($server->run(new StdioTransport()));
