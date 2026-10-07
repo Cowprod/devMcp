@@ -48,7 +48,7 @@ final class JobManagerTest extends TestCase
         $started = $manager->start('demo', 'async.ok');
         self::assertSame('queued', $started['status']);
 
-        $worker = new JobWorker($registry, $store, $audit, 1000);
+        $worker = new JobWorker($registry, $store, $audit, 'local', 1000);
         self::assertTrue($worker->runOnce());
 
         $newManager = new JobManager(
@@ -91,8 +91,35 @@ final class JobManagerTest extends TestCase
 
         self::assertSame('cancelled', $cancelled['status']);
 
-        $worker = new JobWorker($registry, $store, $audit, 1000);
+        $worker = new JobWorker($registry, $store, $audit, 'local', 1000);
         self::assertFalse($worker->runOnce());
+    }
+
+    public function testWorkerOnlyClaimsItsTarget(): void
+    {
+        $registry = $this->registry([
+            'remote.ok' => [
+                'description' => 'Job target remote',
+                'argv' => [PHP_BINARY, '-r', 'fwrite(STDOUT, "remote");'],
+                'target' => 'android-lab',
+                'timeout' => 5,
+            ],
+        ]);
+
+        $audit = new AuditLogger($this->root . '/audit.jsonl');
+        $store = new FileJobStore($this->root . '/jobs');
+        $manager = new JobManager($registry, $store, new ArtifactService(), $audit);
+        $started = $manager->start('demo', 'remote.ok');
+
+        self::assertSame('android-lab', $started['target']);
+
+        $localWorker = new JobWorker($registry, $store, $audit, 'local', 1000);
+        self::assertFalse($localWorker->runOnce());
+        self::assertSame('queued', $manager->status($started['job_id'])['status']);
+
+        $androidWorker = new JobWorker($registry, $store, $audit, 'android-lab', 1000);
+        self::assertTrue($androidWorker->runOnce());
+        self::assertSame('succeeded', $manager->status($started['job_id'])['status']);
     }
 
     public function testWorkerEnforcesTimeout(): void
@@ -110,7 +137,7 @@ final class JobManagerTest extends TestCase
         $manager = new JobManager($registry, $store, new ArtifactService(), $audit);
         $started = $manager->start('demo', 'async.timeout');
 
-        $worker = new JobWorker($registry, $store, $audit, 1000);
+        $worker = new JobWorker($registry, $store, $audit, 'local', 1000);
         $worker->runOnce();
 
         self::assertSame('timed_out', $manager->status($started['job_id'])['status']);
