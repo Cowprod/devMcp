@@ -33,6 +33,7 @@ return [
                     'argv' => [
                         '/usr/bin/php',
                         $devMcpRoot . '/bin/devmcp-workspace-sync',
+                        'Cowprod/multicam',
                         ['param' => 'commit'],
                     ],
                     'cwd' => '.',
