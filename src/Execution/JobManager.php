@@ -24,14 +24,24 @@ final class JobManager
     }
 
     /**
+     * @param array<string, mixed> $arguments
      * @return array<string, mixed>
      */
-    public function start(string $projectId, string $actionId): array
-    {
+    public function start(
+        string $projectId,
+        string $actionId,
+        array $arguments = [],
+    ): array {
         $project = $this->projects->get($projectId);
         $action = $project->getAction($actionId);
+        $normalizedArguments = $action->normalizeArguments($arguments);
 
-        $job = JobRecord::create($projectId, $actionId, $action->target);
+        $job = JobRecord::create(
+            $projectId,
+            $actionId,
+            $action->target,
+            $normalizedArguments,
+        );
         $this->store->create($job);
 
         $this->audit->append([
@@ -40,6 +50,7 @@ final class JobManager
             'project' => $projectId,
             'action' => $actionId,
             'target' => $action->target,
+            'argument_names' => array_keys($normalizedArguments),
         ]);
 
         return $job->toPublicArray();
