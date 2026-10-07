@@ -3,14 +3,8 @@
 
 declare(strict_types=1);
 
-use Cowprod\DevMcp\Artifact\ArtifactService;
-use Cowprod\DevMcp\Audit\AuditLogger;
-use Cowprod\DevMcp\Execution\ActionRunner;
-use Cowprod\DevMcp\Execution\FileJobStore;
-use Cowprod\DevMcp\Execution\JobManager;
-use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\ServerFactory;
-use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
 use Mcp\Server\Transport\StdioTransport;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -28,39 +22,7 @@ if (!is_array($config)) {
     exit(2);
 }
 
-$projects = ProjectRegistry::fromConfig($config);
-$auditFile = $config['audit']['file'] ?? dirname(__DIR__) . '/var/audit.jsonl';
-$jobsDirectory = $config['jobs']['directory'] ?? dirname(__DIR__) . '/var/jobs';
-$maxTimeout = $config['limits']['max_timeout_seconds'] ?? 3600;
-$maxOutput = $config['limits']['max_output_bytes'] ?? 65536;
-$maxJobLog = $config['limits']['max_job_log_bytes'] ?? 4194304;
-$maxArtifactChunk = $config['limits']['max_artifact_chunk_bytes'] ?? 262144;
-
-if (!is_string($auditFile) || $auditFile === '') {
-    throw new RuntimeException('audit.file invalide');
-}
-if (!is_string($jobsDirectory) || $jobsDirectory === '') {
-    throw new RuntimeException('jobs.directory invalide');
-}
-if (!is_int($maxTimeout) || $maxTimeout < 1) {
-    throw new RuntimeException('limits.max_timeout_seconds invalide');
-}
-if (!is_int($maxOutput) || $maxOutput < 1024) {
-    throw new RuntimeException('limits.max_output_bytes invalide');
-}
-if (!is_int($maxJobLog) || $maxJobLog < 1024) {
-    throw new RuntimeException('limits.max_job_log_bytes invalide');
-}
-if (!is_int($maxArtifactChunk) || $maxArtifactChunk < 1024) {
-    throw new RuntimeException('limits.max_artifact_chunk_bytes invalide');
-}
-
-$audit = new AuditLogger($auditFile);
-$runner = new ActionRunner($audit, $maxTimeout, $maxOutput);
-$artifacts = new ArtifactService($maxArtifactChunk);
-$store = new FileJobStore($jobsDirectory, $maxJobLog);
-$jobs = new JobManager($projects, $store, $artifacts, $audit, $maxOutput);
-$tools = new ProjectTools($projects, $runner, $jobs, $audit);
-$server = (new ServerFactory())->build($tools);
+$runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
+$server = (new ServerFactory())->build($runtime->tools);
 
 exit($server->run(new StdioTransport()));
