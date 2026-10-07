@@ -29,6 +29,8 @@ final class JobWorker
             return false;
         }
 
+        $projectLock = $this->store->acquireProjectLock($job->projectId);
+
         $project = $this->projects->get($job->projectId);
         $action = $project->getAction($job->actionId);
         if ($action->target !== $job->target || $job->target !== $this->target) {
@@ -46,6 +48,7 @@ final class JobWorker
                 'target' => $job->target,
                 'worker_target' => $this->target,
             ]);
+            $this->store->releaseProjectLock($projectLock);
 
             return true;
         }
@@ -120,6 +123,8 @@ final class JobWorker
             );
 
             return true;
+        } finally {
+            $this->store->releaseProjectLock($projectLock);
         }
     }
 
