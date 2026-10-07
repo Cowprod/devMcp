@@ -7,9 +7,19 @@ use Symfony\Component\Process\Process;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-$commit = $argv[1] ?? null;
-if (!is_string($commit) || !preg_match('/^[a-fA-F0-9]{40}$/', $commit)) {
-    fwrite(STDERR, "Usage: devmcp-workspace-sync <40-char-sha>" . PHP_EOL);
+$expectedRepository = $argv[1] ?? null;
+$commit = $argv[2] ?? null;
+
+if (
+    !is_string($expectedRepository)
+    || !preg_match('/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/', $expectedRepository)
+    || !is_string($commit)
+    || !preg_match('/^[a-fA-F0-9]{40}$/', $commit)
+) {
+    fwrite(
+        STDERR,
+        "Usage: devmcp-workspace-sync <owner/repository> <40-char-sha>" . PHP_EOL,
+    );
     exit(2);
 }
 $commit = strtolower($commit);
@@ -33,9 +43,30 @@ $run = static function (array $command, int $timeout = 120) use ($root): string 
     return trim($process->getOutput());
 };
 
+$origin = $run(['/usr/bin/git', 'remote', 'get-url', 'origin'], 20);
+$normalizedOrigin = null;
+
+$patterns = [
+    '~^https://github\.com/([^/]+/[^/]+?)(?:\.git)?$~i',
+    '~^git@github\.com:([^/]+/[^/]+?)(?:\.git)?$~i',
+    '~^ssh://git@github\.com/([^/]+/[^/]+?)(?:\.git)?$~i',
+];
+
+foreach ($patterns as $pattern) {
+    if (preg_match($pattern, $origin, $matches) === 1) {
+        $normalizedOrigin = strtolower($matches[1]);
+        break;
+    }
+}
+
+if ($normalizedOrigin !== strtolower($expectedRepository)) {
+    fwrite(STDERR, "Le remote origin ne correspond pas au dépôt attendu." . PHP_EOL);
+    exit(9);
+}
+
 $dirty = $run(['/usr/bin/git', 'status', '--porcelain', '--untracked-files=no'], 20);
 if ($dirty !== '') {
-    fwrite(STDERR, "Workspace refuse : fichiers suivis modifies." . PHP_EOL);
+    fwrite(STDERR, "Workspace refusé : fichiers suivis modifiés." . PHP_EOL);
     fwrite(STDERR, $dirty . PHP_EOL);
     exit(10);
 }
@@ -52,7 +83,10 @@ $remoteRefs = $run([
 ], 20);
 
 if ($remoteRefs === '') {
-    fwrite(STDERR, "Le commit demande n'est contenu dans aucune ref distante origin." . PHP_EOL);
+    fwrite(
+        STDERR,
+        "Le commit demandé n'est contenu dans aucune ref distante origin." . PHP_EOL,
+    );
     exit(11);
 }
 
@@ -60,12 +94,13 @@ $run(['/usr/bin/git', 'checkout', '--detach', $commit], 60);
 $head = strtolower($run(['/usr/bin/git', 'rev-parse', 'HEAD'], 20));
 
 if ($head !== $commit) {
-    fwrite(STDERR, "HEAD ne correspond pas au commit demande." . PHP_EOL);
+    fwrite(STDERR, "HEAD ne correspond pas au commit demandé." . PHP_EOL);
     exit(12);
 }
 
 echo json_encode([
     'ok' => true,
+    'repository' => $expectedRepository,
     'commit' => $head,
     'remote_refs' => preg_split('/\R/', $remoteRefs) ?: [],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
