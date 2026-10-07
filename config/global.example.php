@@ -43,6 +43,7 @@ return [
                     'argv' => ['/usr/bin/php', 'vendor/bin/phpunit'],
                     'cwd' => '.',
                     'timeout' => 300,
+                    'target' => 'local',
                     'artifacts' => [],
                 ],
             ],
