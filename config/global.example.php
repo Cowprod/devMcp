@@ -8,9 +8,17 @@ return [
     'audit' => [
         'file' => __DIR__ . '/../var/audit.jsonl',
     ],
+    'jobs' => [
+        'directory' => __DIR__ . '/../var/jobs',
+    ],
+    'http' => [
+        'sessions_directory' => __DIR__ . '/../var/sessions',
+        'max_body_bytes' => 4 * 1024 * 1024,
+    ],
     'limits' => [
         'max_timeout_seconds' => 3600,
         'max_output_bytes' => 65536,
+        'max_job_log_bytes' => 4 * 1024 * 1024,
         'max_artifact_chunk_bytes' => 262144,
     ],
     'projects' => [
