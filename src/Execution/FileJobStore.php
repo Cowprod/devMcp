@@ -76,8 +76,11 @@ final class FileJobStore
         );
     }
 
-    public function claimNext(): ?JobRecord
+    public function claimNext(string $target): ?JobRecord
     {
+        if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/', $target)) {
+            throw new InvalidArgumentException('Target worker invalide');
+        }
         $queueLock = fopen($this->root . '/.queue.lock', 'c+');
         if ($queueLock === false) {
             throw new RuntimeException('Impossible de verrouiller la file des jobs');
@@ -100,8 +103,8 @@ final class FileJobStore
                 $claimed = false;
                 $job = $this->mutate(
                     $jobId,
-                    static function (JobRecord $job) use (&$claimed): JobRecord {
-                        if ($job->status !== 'queued') {
+                    static function (JobRecord $job) use (&$claimed, $target): JobRecord {
+                        if ($job->status !== 'queued' || $job->target !== $target) {
                             return $job;
                         }
 
