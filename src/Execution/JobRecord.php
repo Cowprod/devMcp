@@ -70,7 +70,10 @@ final class JobRecord
             throw new InvalidArgumentException('Arguments persistants invalides');
         }
         foreach ($arguments as $argumentId => $argumentValue) {
-            if (!is_string($argumentId) || !is_string($argumentValue)) {
+            if (
+                !is_string($argumentId)
+                || (!is_string($argumentValue) && !is_int($argumentValue))
+            ) {
                 throw new InvalidArgumentException('Argument persistant invalide');
             }
         }
