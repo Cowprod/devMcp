@@ -19,7 +19,26 @@ Le cœur impose notamment :
 - des lectures de sortie bornées ;
 - des artefacts explicitement déclarés par action ;
 - un audit JSONL sans stdout/stderr ni secret ;
-- un transport MCP STDIO basé sur le SDK PHP officiel.
+- des jobs persistants exécutés par un worker séparé.
+
+## Transports
+
+### ChatGPT : Secure MCP Tunnel + STDIO
+
+C'est le chemin recommandé.
+
+ChatGPT → Secure MCP Tunnel → tunnel-client sur la VM → bin/devmcp.
+
+Le serveur MCP n'a pas besoin d'être exposé sur Internet.
+
+### Streamable HTTP local
+
+public/index.php expose :
+
+- /mcp : Streamable HTTP MCP ;
+- /healthz : santé minimale.
+
+Le template systemd écoute uniquement sur 127.0.0.1:8765. HTTP utilise FileSessionStore conformément aux exigences du SDK MCP PHP.
 
 ## Installation
 
@@ -27,9 +46,11 @@ Prérequis : PHP 8.3+, Composer.
 
 1. Installer les dépendances avec Composer.
 2. Copier config/global.example.php vers config/global.php et adapter les chemins locaux.
-3. Lancer bin/devmcp.
+3. Démarrer bin/devmcp pour STDIO et bin/devmcp-worker pour les jobs.
 
-En production, le fichier de configuration doit être hors du dépôt et protégé par le système. La variable DEVMCP_CONFIG permet d’indiquer son chemin, par exemple /etc/devmcp/global.php.
+En VM, la configuration doit rester hors du dépôt, typiquement /etc/devmcp/global.php.
+
+Voir docs/DEPLOIEMENT-VM.md.
 
 ## Outils MCP
 
@@ -58,7 +79,5 @@ artifact_get lit les fichiers par morceaux base64 bornés. Un artefact doit êtr
 ### Audit
 
 - audit_tail
-
-Le transport Streamable HTTP sécurisé, les runners distants, Android/ADB, le flash, la série et les services spécialisés arrivent dans les jalons suivants.
 
 Voir docs/CONCEPTION.md, docs/DECISIONS.md et docs/AVANCEMENT.md.
