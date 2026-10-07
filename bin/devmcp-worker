@@ -3,10 +3,8 @@
 
 declare(strict_types=1);
 
-use Cowprod\DevMcp\Audit\AuditLogger;
-use Cowprod\DevMcp\Execution\FileJobStore;
 use Cowprod\DevMcp\Execution\JobWorker;
-use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -23,18 +21,8 @@ if (!is_array($config)) {
     exit(2);
 }
 
-$projects = ProjectRegistry::fromConfig($config);
-$auditFile = $config['audit']['file'] ?? dirname(__DIR__) . '/var/audit.jsonl';
-$jobsDirectory = $config['jobs']['directory'] ?? dirname(__DIR__) . '/var/jobs';
-$maxJobLog = $config['limits']['max_job_log_bytes'] ?? 4194304;
-
-if (!is_string($auditFile) || !is_string($jobsDirectory) || !is_int($maxJobLog)) {
-    throw new RuntimeException('Configuration worker invalide');
-}
-
-$audit = new AuditLogger($auditFile);
-$store = new FileJobStore($jobsDirectory, $maxJobLog);
-$worker = new JobWorker($projects, $store, $audit);
+$runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
+$worker = new JobWorker($runtime->projects, $runtime->jobsStore, $runtime->audit);
 
 if (in_array('--once', $argv, true)) {
     exit($worker->runOnce() ? 0 : 3);
