@@ -6,6 +6,7 @@ namespace Cowprod\DevMcp\Mcp;
 
 use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
+use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use InvalidArgumentException;
 
@@ -14,6 +15,7 @@ final class ProjectTools
     public function __construct(
         private readonly ProjectRegistry $projects,
         private readonly ActionRunner $runner,
+        private readonly JobManager $jobs,
         private readonly AuditLogger $audit,
     ) {
     }
@@ -66,13 +68,76 @@ final class ProjectTools
     }
 
     /**
+     * Exécution synchrone réservée aux actions courtes.
+     *
      * @return array<string, mixed>
      */
     public function actionRun(string $project, string $action): array
     {
-        $definition = $this->projects->get($project);
+        return $this->runner->run($this->projects->get($project), $action);
+    }
 
-        return $this->runner->run($definition, $action);
+    /**
+     * Démarre une action longue et retourne immédiatement un job_id.
+     *
+     * @return array<string, mixed>
+     */
+    public function actionStart(string $project, string $action): array
+    {
+        return $this->jobs->start($this->projects->get($project), $action);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function jobStatus(string $job_id): array
+    {
+        return $this->jobs->status($job_id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function jobOutput(
+        string $job_id,
+        int $stdout_offset = 0,
+        int $stderr_offset = 0,
+        ?int $length = null,
+    ): array {
+        return $this->jobs->output(
+            $job_id,
+            $stdout_offset,
+            $stderr_offset,
+            $length,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function jobCancel(string $job_id): array
+    {
+        return $this->jobs->cancel($job_id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function artifactList(string $job_id): array
+    {
+        return $this->jobs->artifactList($job_id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function artifactGet(
+        string $job_id,
+        string $artifact,
+        int $offset = 0,
+        ?int $length = null,
+    ): array {
+        return $this->jobs->artifactGet($job_id, $artifact, $offset, $length);
     }
 
     /**

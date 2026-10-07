@@ -28,8 +28,8 @@ Conséquences : aucune concaténation de shell ; Symfony Process reçoit un tabl
 Type : TECHNIQUE
 Statut : VALIDÉE
 Décision : le SDK MCP PHP officiel est utilisé.
-Version J01 : mcp/sdk 0.8.1.
-Conséquences : transport STDIO J01 ; Streamable HTTP prévu ensuite.
+Version J01/J02 : mcp/sdk 0.8.1.
+Conséquences : transport STDIO actuel ; Streamable HTTP prévu ensuite.
 
 ## D-006
 Type : ARCHITECTURE
@@ -47,10 +47,34 @@ Conséquences : config/global.php est ignoré ; DEVMCP_CONFIG peut pointer vers 
 Type : PÉRIMÈTRE
 Statut : VALIDÉE
 Décision : le périmètre initial concerne les dépôts Cowprod/devMcp, multicam, touchDeck, archiveCowprod, aiDevMethod et referenciel.
-Conséquences : l'activation réelle d'un projet dépendra de son manifest local et de son workspace présent sur la machine.
+Conséquences : l'activation réelle d'un projet dépend de son manifest local et de son workspace présent sur la machine.
 
 ## D-009
 Type : TECHNIQUE
 Statut : VALIDÉE
-Décision : les opérations longues deviennent des jobs asynchrones.
-Conséquences : J01 ne prend que les actions courtes synchrones ; jobs et artefacts sont planifiés au jalon suivant.
+Décision : les opérations longues sont des jobs asynchrones.
+Conséquences : action_start rend immédiatement un job_id ; suivi, sortie et annulation sont des appels séparés.
+
+## D-010
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : un artefact doit être déclaré statiquement dans l’action.
+Conséquences : aucun chemin de fichier libre n’est accepté par artifact_get.
+
+## D-011
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : la lecture d’un artefact est bornée au workspace après résolution realpath.
+Conséquences : les symlinks pointant hors workspace sont rejetés.
+
+## D-012
+Type : TECHNIQUE
+Statut : VALIDÉE
+Décision : les gros fichiers sont lus par morceaux base64.
+Conséquences : artifact_get accepte offset/length avec une taille maximale configurable.
+
+## D-013
+Type : TECHNIQUE
+Statut : VALIDÉE
+Décision : J02 conserve les jobs en mémoire dans le processus MCP STDIO.
+Conséquences : les jobs ne survivent pas au redémarrage ; la persistance appartient au futur modèle gateway/runner.

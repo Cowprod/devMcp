@@ -9,8 +9,9 @@ return [
         'file' => __DIR__ . '/../var/audit.jsonl',
     ],
     'limits' => [
-        'max_timeout_seconds' => 300,
+        'max_timeout_seconds' => 3600,
         'max_output_bytes' => 65536,
+        'max_artifact_chunk_bytes' => 262144,
     ],
     'projects' => [
         'devmcp' => [
@@ -28,6 +29,13 @@ return [
                     'argv' => ['/usr/bin/php', '-v'],
                     'cwd' => '.',
                     'timeout' => 10,
+                ],
+                'test.phpunit' => [
+                    'description' => 'Lance la suite PHPUnit du projet.',
+                    'argv' => ['/usr/bin/php', 'vendor/bin/phpunit'],
+                    'cwd' => '.',
+                    'timeout' => 300,
+                    'artifacts' => [],
                 ],
             ],
         ],
