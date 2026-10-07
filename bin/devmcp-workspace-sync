@@ -1,0 +1,71 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$commit = $argv[1] ?? null;
+if (!is_string($commit) || !preg_match('/^[a-fA-F0-9]{40}$/', $commit)) {
+    fwrite(STDERR, "Usage: devmcp-workspace-sync <40-char-sha>" . PHP_EOL);
+    exit(2);
+}
+$commit = strtolower($commit);
+
+$root = getcwd();
+if (!is_string($root) || !is_dir($root . '/.git')) {
+    fwrite(STDERR, "Le cwd n'est pas un checkout Git." . PHP_EOL);
+    exit(3);
+}
+
+$run = static function (array $command, int $timeout = 120) use ($root): string {
+    $process = new Process($command, $root, null, null, $timeout);
+    $process->run();
+
+    if (!$process->isSuccessful()) {
+        fwrite(STDERR, $process->getErrorOutput());
+        fwrite(STDERR, $process->getOutput());
+        exit($process->getExitCode() ?: 4);
+    }
+
+    return trim($process->getOutput());
+};
+
+$dirty = $run(['/usr/bin/git', 'status', '--porcelain', '--untracked-files=no'], 20);
+if ($dirty !== '') {
+    fwrite(STDERR, "Workspace refuse : fichiers suivis modifies." . PHP_EOL);
+    fwrite(STDERR, $dirty . PHP_EOL);
+    exit(10);
+}
+
+$run(['/usr/bin/git', 'fetch', '--prune', '--no-tags', 'origin'], 300);
+$run(['/usr/bin/git', 'cat-file', '-e', $commit . '^{commit}'], 20);
+
+$remoteRefs = $run([
+    '/usr/bin/git',
+    'for-each-ref',
+    '--format=%(refname)',
+    '--contains=' . $commit,
+    'refs/remotes/origin/',
+], 20);
+
+if ($remoteRefs === '') {
+    fwrite(STDERR, "Le commit demande n'est contenu dans aucune ref distante origin." . PHP_EOL);
+    exit(11);
+}
+
+$run(['/usr/bin/git', 'checkout', '--detach', $commit], 60);
+$head = strtolower($run(['/usr/bin/git', 'rev-parse', 'HEAD'], 20));
+
+if ($head !== $commit) {
+    fwrite(STDERR, "HEAD ne correspond pas au commit demande." . PHP_EOL);
+    exit(12);
+}
+
+echo json_encode([
+    'ok' => true,
+    'commit' => $head,
+    'remote_refs' => preg_split('/\R/', $remoteRefs) ?: [],
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
