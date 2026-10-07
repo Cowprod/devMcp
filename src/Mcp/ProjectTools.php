@@ -74,7 +74,22 @@ final class ProjectTools
      */
     public function actionRun(string $project, string $action): array
     {
-        return $this->runner->run($this->projects->get($project), $action);
+        $projectDefinition = $this->projects->get($project);
+        $actionDefinition = $projectDefinition->getAction($action);
+
+        if (!$actionDefinition->syncAllowed) {
+            throw new InvalidArgumentException(
+                "L'action {$action} n'autorise pas l'exécution synchrone ; utiliser action_start."
+            );
+        }
+
+        if ($actionDefinition->target !== 'local') {
+            throw new InvalidArgumentException(
+                "L'action {$action} cible {$actionDefinition->target} ; utiliser action_start."
+            );
+        }
+
+        return $this->runner->run($projectDefinition, $action);
     }
 
     /**
