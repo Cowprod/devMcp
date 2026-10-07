@@ -90,7 +90,7 @@ final class ParameterDefinition
         );
     }
 
-    public function normalize(mixed $value): string
+    public function normalize(mixed $value): string|int
     {
         return match ($this->type) {
             'git_sha' => $this->normalizeGitSha($value),
@@ -161,7 +161,7 @@ final class ParameterDefinition
         return $value;
     }
 
-    private function normalizeInteger(mixed $value): string
+    private function normalizeInteger(mixed $value): int
     {
         if (!is_int($value)) {
             throw new InvalidArgumentException(
@@ -181,6 +181,6 @@ final class ParameterDefinition
             );
         }
 
-        return (string) $value;
+        return $value;
     }
 }
