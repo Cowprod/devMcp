@@ -13,6 +13,7 @@ final class JobRecord
         public readonly string $projectId,
         public readonly string $actionId,
         public readonly string $target,
+        public readonly array $arguments = [],
         public string $status = 'queued',
         public readonly string $createdAt = '',
         public ?string $startedAt = null,
@@ -26,13 +27,18 @@ final class JobRecord
     ) {
     }
 
-    public static function create(string $projectId, string $actionId, string $target): self
-    {
+    public static function create(
+        string $projectId,
+        string $actionId,
+        string $target,
+        array $arguments = [],
+    ): self {
         return new self(
             bin2hex(random_bytes(16)),
             $projectId,
             $actionId,
             $target,
+            $arguments,
             'queued',
             gmdate('c'),
         );
@@ -47,6 +53,7 @@ final class JobRecord
         $projectId = $data['project'] ?? null;
         $actionId = $data['action'] ?? null;
         $target = $data['target'] ?? 'local';
+        $arguments = $data['arguments'] ?? [];
         $status = $data['status'] ?? null;
         $createdAt = $data['created_at'] ?? null;
 
@@ -58,6 +65,14 @@ final class JobRecord
         }
         if (!is_string($target) || !preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/', $target)) {
             throw new InvalidArgumentException('Target persistant invalide');
+        }
+        if (!is_array($arguments)) {
+            throw new InvalidArgumentException('Arguments persistants invalides');
+        }
+        foreach ($arguments as $argumentId => $argumentValue) {
+            if (!is_string($argumentId) || !is_string($argumentValue)) {
+                throw new InvalidArgumentException('Argument persistant invalide');
+            }
         }
         if (!is_string($status) || !in_array($status, self::statuses(), true)) {
             throw new InvalidArgumentException('Statut de job persistant invalide');
@@ -71,6 +86,7 @@ final class JobRecord
             $projectId,
             $actionId,
             $target,
+            $arguments,
             $status,
             $createdAt,
             is_string($data['started_at'] ?? null) ? $data['started_at'] : null,
@@ -94,6 +110,7 @@ final class JobRecord
             'project' => $this->projectId,
             'action' => $this->actionId,
             'target' => $this->target,
+            'arguments' => $this->arguments,
             'status' => $this->status,
             'created_at' => $this->createdAt,
             'started_at' => $this->startedAt,
