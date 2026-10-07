@@ -17,19 +17,39 @@ final class JobWorker
         private readonly ProjectRegistry $projects,
         private readonly FileJobStore $store,
         private readonly AuditLogger $audit,
+        private readonly string $target = 'local',
         private readonly int $pollMicroseconds = 100000,
     ) {
     }
 
     public function runOnce(): bool
     {
-        $job = $this->store->claimNext();
+        $job = $this->store->claimNext($this->target);
         if ($job === null) {
             return false;
         }
 
         $project = $this->projects->get($job->projectId);
         $action = $project->getAction($job->actionId);
+        if ($action->target !== $job->target || $job->target !== $this->target) {
+            $this->store->finish(
+                $job->id,
+                'failed',
+                null,
+                'Target du job incohérent avec le manifest ou le worker',
+            );
+            $this->audit->append([
+                'event' => 'job_target_mismatch',
+                'job_id' => $job->id,
+                'project' => $job->projectId,
+                'action' => $job->actionId,
+                'target' => $job->target,
+                'worker_target' => $this->target,
+            ]);
+
+            return true;
+        }
+
         $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
 
         $process = new Process($action->argv, $cwd, null, null, null);
@@ -44,6 +64,7 @@ final class JobWorker
                 'job_id' => $job->id,
                 'project' => $job->projectId,
                 'action' => $job->actionId,
+                'target' => $job->target,
                 'pid' => $process->getPid(),
             ]);
 
@@ -147,6 +168,7 @@ final class JobWorker
             'job_id' => $job->id,
             'project' => $job->projectId,
             'action' => $job->actionId,
+            'target' => $job->target,
             'status' => $finished->status,
             'exit_code' => $finished->exitCode,
         ]);
