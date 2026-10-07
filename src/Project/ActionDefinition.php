@@ -31,6 +31,7 @@ final class ActionDefinition
 
     /**
      * @param list<string> $argv
+     * @param array<string, ArtifactDefinition> $artifacts
      */
     private function __construct(
         public readonly string $id,
@@ -38,6 +39,7 @@ final class ActionDefinition
         public readonly array $argv,
         public readonly string $cwd,
         public readonly int $timeoutSeconds,
+        private readonly array $artifacts,
     ) {
     }
 
@@ -80,7 +82,55 @@ final class ActionDefinition
             throw new InvalidArgumentException("timeout invalide pour l'action {$id}");
         }
 
-        return new self($id, trim($description), $normalizedArgv, $cwd, $timeout);
+        $rawArtifacts = $data['artifacts'] ?? [];
+        if (!is_array($rawArtifacts)) {
+            throw new InvalidArgumentException("Liste d'artefacts invalide pour l'action {$id}");
+        }
+
+        $artifacts = [];
+        foreach ($rawArtifacts as $rawArtifact) {
+            if (!is_array($rawArtifact)) {
+                throw new InvalidArgumentException("Définition d'artefact invalide pour l'action {$id}");
+            }
+
+            $artifact = ArtifactDefinition::fromArray($rawArtifact);
+            if (isset($artifacts[$artifact->id])) {
+                throw new InvalidArgumentException(
+                    "Artefact dupliqué {$artifact->id} pour l'action {$id}"
+                );
+            }
+            $artifacts[$artifact->id] = $artifact;
+        }
+
+        ksort($artifacts);
+
+        return new self(
+            $id,
+            trim($description),
+            $normalizedArgv,
+            $cwd,
+            $timeout,
+            $artifacts,
+        );
+    }
+
+    /**
+     * @return array<string, ArtifactDefinition>
+     */
+    public function getArtifacts(): array
+    {
+        return $this->artifacts;
+    }
+
+    public function getArtifact(string $artifactId): ArtifactDefinition
+    {
+        if (!isset($this->artifacts[$artifactId])) {
+            throw new InvalidArgumentException(
+                "Artefact inconnu pour l'action {$this->id} : {$artifactId}"
+            );
+        }
+
+        return $this->artifacts[$artifactId];
     }
 
     /**
@@ -94,6 +144,10 @@ final class ActionDefinition
             'cwd' => $this->cwd,
             'timeout_seconds' => $this->timeoutSeconds,
             'parameters' => [],
+            'artifacts' => array_values(array_map(
+                static fn (ArtifactDefinition $artifact): array => $artifact->toPublicArray(),
+                $this->artifacts,
+            )),
         ];
     }
 
