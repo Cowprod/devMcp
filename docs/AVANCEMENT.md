@@ -3,21 +3,28 @@
 | Jalon | Statut | Branche / PR | Objet | Preuves |
 | --- | --- | --- | --- | --- |
 | J01 | ACCEPTÉ | main / PR #2 | cœur MCP sécurisé, registre projets, actions synchrones, audit, CI | merge 92640d353409e9e7a57f843358a0df3fb6969ead |
-| J02 | PASS TECHNIQUE | feat/j02-jobs-artifacts | jobs asynchrones, lecture progressive des sorties, annulation, artefacts déclarés et bornés | GitHub Actions : SUCCESS ; 9 tests / 28 assertions |
-| J03 | À FAIRE | - | Streamable HTTP sécurisé + authentification | - |
-| J04 | À FAIRE | - | runners/agents distants et isolation par projet | - |
-| J05 | À FAIRE | - | adapters Android/services/matériel selon priorité | - |
+| J02 | ACCEPTÉ | main / PR #3 | jobs asynchrones, sorties progressives, annulation, artefacts bornés | merge 37dab1bb3cee0d4a6cd1edce0b3fb7778da77231 |
+| J03 | PASS TECHNIQUE | feat/j03-http-tunnel | jobs persistants, worker séparé, Streamable HTTP local, Secure MCP Tunnel, templates VM | CI SUCCESS ; 11 tests / 35 assertions ; lint entrypoints |
+| J04 | À FAIRE | - | runners/targets et isolation multi-machine | - |
+| J05 | À FAIRE | - | première intégration projet réelle, priorité multicam/Android | - |
 
-## Revue technique J02
+## Revue technique J03
 
-- action_start retourne un job_id sans attendre la fin : PASS ;
-- transition running → succeeded : PASS ;
-- annulation d’un job actif : PASS ;
-- lecture stdout/stderr par offsets bornés : PASS ;
-- artefact déclaré : présence, taille, SHA-256 : PASS ;
-- lecture base64 par chunks : PASS ;
+- jobs persistants entre instances de JobManager : PASS ;
+- claim de job atomique : PASS ;
+- transitions concurrentes protégées par verrou par job : PASS ;
+- worker séparé : PASS ;
+- timeout worker : PASS ;
+- annulation d’un job queued : PASS ;
+- sorties persistantes bornées : PASS ;
+- artefacts après exécution persistante : PASS ;
 - symlink d’artefact hors workspace : rejeté ;
-- construction du serveur MCP avec les nouveaux outils : PASS ;
-- régression J01 : PASS.
+- Streamable HTTP initialize : PASS ;
+- FileSessionStore HTTP : PASS ;
+- STDIO conservé : PASS ;
+- endpoint HTTP template limité à 127.0.0.1 : PASS ;
+- diagnostic VM ajouté : PASS ;
+- chemin ChatGPT recommandé documenté : Secure MCP Tunnel + STDIO ;
+- aucune API key propriétaire ajoutée au protocole MCP.
 
-J02 ne dépend d’aucun choix de VM ou de réseau.
+La seule preuve manquante pour ACCEPTÉ est l’intégration physique sur la VM : tunnel-client + service worker + premier appel depuis ChatGPT. Le code et l’architecture peuvent être mergés indépendamment de cette qualification physique.
