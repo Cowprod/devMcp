@@ -7,6 +7,7 @@ namespace Cowprod\DevMcp\Tests;
 use Cowprod\DevMcp\Artifact\ArtifactService;
 use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
+use Cowprod\DevMcp\Execution\FileJobStore;
 use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\ServerFactory;
@@ -33,7 +34,8 @@ final class ServerFactoryTest extends TestCase
 
             $audit = new AuditLogger($root . '/audit.jsonl');
             $artifacts = new ArtifactService();
-            $jobs = new JobManager($audit, $artifacts);
+            $store = new FileJobStore($root . '/jobs');
+            $jobs = new JobManager($registry, $store, $artifacts, $audit);
             $tools = new ProjectTools(
                 $registry,
                 new ActionRunner($audit),
@@ -45,8 +47,29 @@ final class ServerFactoryTest extends TestCase
 
             self::assertInstanceOf(Server::class, $server);
         } finally {
-            @unlink($root . '/audit.jsonl');
-            @rmdir($root);
+            self::removeTree($root);
         }
+    }
+
+    private static function removeTree(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $child = $path . DIRECTORY_SEPARATOR . $entry;
+            if (is_dir($child) && !is_link($child)) {
+                self::removeTree($child);
+            } else {
+                @unlink($child);
+            }
+        }
+
+        @rmdir($path);
     }
 }
