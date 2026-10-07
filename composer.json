@@ -1,0 +1,27 @@
+{
+  "name": "cowprod/dev-mcp",
+  "description": "MCP PHP générique pour l'exécution contrôlée des opérations de développement Cowprod",
+  "type": "project",
+  "license": "proprietary",
+  "require": {
+    "php": "^8.3",
+    "mcp/sdk": "0.8.1",
+    "symfony/process": "^7.3"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Cowprod\\DevMcp\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Cowprod\\DevMcp\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}
