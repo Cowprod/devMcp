@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Tests;
 
+use Cowprod\DevMcp\Artifact\ArtifactService;
 use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
+use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\ServerFactory;
 use Cowprod\DevMcp\Project\ProjectRegistry;
@@ -30,9 +32,12 @@ final class ServerFactoryTest extends TestCase
             ]);
 
             $audit = new AuditLogger($root . '/audit.jsonl');
+            $artifacts = new ArtifactService();
+            $jobs = new JobManager($audit, $artifacts);
             $tools = new ProjectTools(
                 $registry,
                 new ActionRunner($audit),
+                $jobs,
                 $audit,
             );
 
