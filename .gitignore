@@ -1,0 +1,5 @@
+/vendor/
+/config/global.php
+/var/*
+!/var/.gitkeep
+.phpunit.result.cache
