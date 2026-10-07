@@ -28,8 +28,8 @@ Conséquences : aucune concaténation de shell ; Symfony Process reçoit un tabl
 Type : TECHNIQUE
 Statut : VALIDÉE
 Décision : le SDK MCP PHP officiel est utilisé.
-Version J01/J02 : mcp/sdk 0.8.1.
-Conséquences : transport STDIO actuel ; Streamable HTTP prévu ensuite.
+Version actuelle : mcp/sdk 0.8.1.
+Conséquences : STDIO et Streamable HTTP utilisent la même registry d'outils.
 
 ## D-006
 Type : ARCHITECTURE
@@ -75,6 +75,30 @@ Conséquences : artifact_get accepte offset/length avec une taille maximale conf
 
 ## D-013
 Type : TECHNIQUE
+Statut : REMPLACÉE PAR D-014
+Décision historique J02 : conserver les jobs uniquement en mémoire du processus MCP STDIO.
+Motif du remplacement : incompatible avec plusieurs requêtes HTTP et insuffisant pour un service distant fiable.
+
+## D-014
+Type : ARCHITECTURE
 Statut : VALIDÉE
-Décision : J02 conserve les jobs en mémoire dans le processus MCP STDIO.
-Conséquences : les jobs ne survivent pas au redémarrage ; la persistance appartient au futur modèle gateway/runner.
+Décision : les jobs sont persistés sur disque et exécutés par un worker séparé.
+Conséquences : frontend MCP, worker et appels successifs peuvent être des processus distincts ; les sorties et métadonnées survivent à un redémarrage du frontend.
+
+## D-015
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : pour ChatGPT, le chemin de déploiement privilégié est Secure MCP Tunnel avec binding STDIO.
+Conséquences : aucun port MCP public n'est requis ; le tunnel-client reste dans la VM et effectue uniquement des connexions sortantes.
+
+## D-016
+Type : TECHNIQUE
+Statut : VALIDÉE
+Décision : devMcp fournit aussi un endpoint Streamable HTTP local utilisant FileSessionStore.
+Conséquences : HTTP peut servir à MCP Inspector ou à un binding tunnel HTTP ; le template écoute uniquement sur 127.0.0.1.
+
+## D-017
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : ne pas inventer une authentification statique propriétaire pour ChatGPT.
+Conséquences : en mode tunnel, l'accès repose sur le contrôle OpenAI du tunnel ; un déploiement public futur devra utiliser OAuth 2.1 conforme MCP plutôt qu'une API key ad hoc.

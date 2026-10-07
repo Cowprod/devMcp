@@ -6,7 +6,9 @@ namespace Cowprod\DevMcp\Tests;
 
 use Cowprod\DevMcp\Artifact\ArtifactService;
 use Cowprod\DevMcp\Audit\AuditLogger;
+use Cowprod\DevMcp\Execution\FileJobStore;
 use Cowprod\DevMcp\Execution\JobManager;
+use Cowprod\DevMcp\Execution\JobWorker;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -23,59 +25,38 @@ final class ArtifactServiceTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->root . '/*') ?: [] as $file) {
-            if (is_file($file) || is_link($file)) {
-                @unlink($file);
-            }
-        }
-        @rmdir($this->root);
+        self::removeTree($this->root);
     }
 
     public function testListsAndReadsDeclaredArtifact(): void
     {
-        $registry = ProjectRegistry::fromConfig([
-            'projects' => [
-                'demo' => [
-                    'root' => $this->root,
-                    'actions' => [
-                        'produce' => [
-                            'description' => 'Produit un artefact',
-                            'argv' => [
-                                PHP_BINARY,
-                                '-r',
-                                'file_put_contents("result.bin", "abcdef");',
-                            ],
-                            'timeout' => 5,
-                            'artifacts' => [
-                                [
-                                    'id' => 'result',
-                                    'path' => 'result.bin',
-                                    'media_type' => 'application/octet-stream',
-                                ],
-                            ],
-                        ],
+        $registry = $this->registry([
+            'produce' => [
+                'description' => 'Produit un artefact',
+                'argv' => [
+                    PHP_BINARY,
+                    '-r',
+                    'file_put_contents("result.bin", "abcdef");',
+                ],
+                'timeout' => 5,
+                'artifacts' => [
+                    [
+                        'id' => 'result',
+                        'path' => 'result.bin',
+                        'media_type' => 'application/octet-stream',
                     ],
                 ],
             ],
         ]);
 
-        $jobs = new JobManager(
-            new AuditLogger($this->root . '/audit.jsonl'),
-            new ArtifactService(1024),
-            30,
-            4096,
-        );
+        $audit = new AuditLogger($this->root . '/audit.jsonl');
+        $store = new FileJobStore($this->root . '/jobs');
+        $jobs = new JobManager($registry, $store, new ArtifactService(1024), $audit, 4096);
 
-        $started = $jobs->start($registry->get('demo'), 'produce');
-        for ($i = 0; $i < 50; $i++) {
-            $status = $jobs->status($started['job_id']);
-            if ($status['status'] !== 'running') {
-                break;
-            }
-            usleep(10000);
-        }
+        $started = $jobs->start('demo', 'produce');
+        (new JobWorker($registry, $store, $audit, 1000))->runOnce();
 
-        self::assertSame('succeeded', $status['status']);
+        self::assertSame('succeeded', $jobs->status($started['job_id'])['status']);
 
         $listed = $jobs->artifactList($started['job_id']);
         self::assertTrue($listed['artifacts'][0]['exists']);
@@ -93,41 +74,63 @@ final class ArtifactServiceTest extends TestCase
         symlink($outside, $this->root . '/result.bin');
 
         try {
-            $registry = ProjectRegistry::fromConfig([
-                'projects' => [
-                    'demo' => [
-                        'root' => $this->root,
-                        'actions' => [
-                            'noop' => [
-                                'description' => 'Ne fait rien',
-                                'argv' => [PHP_BINARY, '-r', ''],
-                                'artifacts' => [
-                                    ['id' => 'result', 'path' => 'result.bin'],
-                                ],
-                            ],
-                        ],
+            $registry = $this->registry([
+                'noop' => [
+                    'description' => 'Ne fait rien',
+                    'argv' => [PHP_BINARY, '-r', ''],
+                    'artifacts' => [
+                        ['id' => 'result', 'path' => 'result.bin'],
                     ],
                 ],
             ]);
 
-            $jobs = new JobManager(
-                new AuditLogger($this->root . '/audit.jsonl'),
-                new ArtifactService(),
-            );
-            $started = $jobs->start($registry->get('demo'), 'noop');
-
-            for ($i = 0; $i < 50; $i++) {
-                $status = $jobs->status($started['job_id']);
-                if ($status['status'] !== 'running') {
-                    break;
-                }
-                usleep(10000);
-            }
+            $audit = new AuditLogger($this->root . '/audit.jsonl');
+            $store = new FileJobStore($this->root . '/jobs');
+            $jobs = new JobManager($registry, $store, new ArtifactService(), $audit);
+            $started = $jobs->start('demo', 'noop');
+            (new JobWorker($registry, $store, $audit, 1000))->runOnce();
 
             $this->expectException(RuntimeException::class);
             $jobs->artifactList($started['job_id']);
         } finally {
             @unlink($outside);
         }
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $actions
+     */
+    private function registry(array $actions): ProjectRegistry
+    {
+        return ProjectRegistry::fromConfig([
+            'projects' => [
+                'demo' => [
+                    'root' => $this->root,
+                    'actions' => $actions,
+                ],
+            ],
+        ]);
+    }
+
+    private static function removeTree(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $child = $path . DIRECTORY_SEPARATOR . $entry;
+            if (is_dir($child) && !is_link($child)) {
+                self::removeTree($child);
+            } else {
+                @unlink($child);
+            }
+        }
+
+        @rmdir($path);
     }
 }

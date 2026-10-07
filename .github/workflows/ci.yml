@@ -15,4 +15,10 @@ jobs:
           coverage: none
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist
+      - name: Lint PHP entrypoints
+        run: |
+          php -l bin/devmcp
+          php -l bin/devmcp-worker
+          php -l bin/devmcp-doctor
+          php -l public/index.php
       - run: composer test

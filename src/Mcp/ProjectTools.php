@@ -84,7 +84,7 @@ final class ProjectTools
      */
     public function actionStart(string $project, string $action): array
     {
-        return $this->jobs->start($this->projects->get($project), $action);
+        return $this->jobs->start($project, $action);
     }
 
     /**

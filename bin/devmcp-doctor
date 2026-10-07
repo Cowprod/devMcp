@@ -1,0 +1,117 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Security\PathGuard;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$configPath = getenv('DEVMCP_CONFIG') ?: dirname(__DIR__) . '/config/global.php';
+$checks = [];
+$ok = true;
+
+$report = static function (string $name, bool $passed, string $detail = '') use (&$checks, &$ok): void {
+    $checks[] = [
+        'name' => $name,
+        'ok' => $passed,
+        'detail' => $detail,
+    ];
+    if (!$passed) {
+        $ok = false;
+    }
+};
+
+$report('php.version', PHP_VERSION_ID >= 80300, PHP_VERSION);
+
+if (!is_file($configPath)) {
+    $report('config.exists', false, $configPath);
+    echo json_encode(['ok' => false, 'checks' => $checks], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(1);
+}
+
+$report('config.exists', true, $configPath);
+
+$config = require $configPath;
+if (!is_array($config)) {
+    $report('config.array', false, 'La configuration doit retourner un tableau PHP.');
+    echo json_encode(['ok' => false, 'checks' => $checks], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(1);
+}
+
+$report('config.array', true);
+
+try {
+    $projects = ProjectRegistry::fromConfig($config);
+    $report('projects.registry', true, (string) count($projects->all()));
+} catch (Throwable $exception) {
+    $report('projects.registry', false, $exception->getMessage());
+    echo json_encode(['ok' => false, 'checks' => $checks], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(1);
+}
+
+$paths = [
+    'audit.file' => $config['audit']['file'] ?? dirname(__DIR__) . '/var/audit.jsonl',
+    'jobs.directory' => $config['jobs']['directory'] ?? dirname(__DIR__) . '/var/jobs',
+    'http.sessions_directory' => $config['http']['sessions_directory'] ?? dirname(__DIR__) . '/var/sessions',
+];
+
+foreach ($paths as $name => $path) {
+    if (!is_string($path) || $path === '') {
+        $report($name, false, 'Chemin invalide');
+        continue;
+    }
+
+    $directory = $name === 'audit.file' ? dirname($path) : $path;
+    if (!is_dir($directory)) {
+        $report($name, false, "Dossier absent : {$directory}");
+        continue;
+    }
+
+    $report($name, is_writable($directory), $directory);
+}
+
+foreach ($projects->all() as $project) {
+    $report(
+        "project.{$project->id}.root",
+        is_dir($project->root) && is_readable($project->root),
+        $project->root,
+    );
+
+    foreach ($project->getActions() as $action) {
+        $executable = $action->argv[0];
+        $report(
+            "project.{$project->id}.action.{$action->id}.executable",
+            is_file($executable) && is_executable($executable),
+            $executable,
+        );
+
+        try {
+            $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
+            $report(
+                "project.{$project->id}.action.{$action->id}.cwd",
+                true,
+                $cwd,
+            );
+        } catch (Throwable $exception) {
+            $report(
+                "project.{$project->id}.action.{$action->id}.cwd",
+                false,
+                $exception->getMessage(),
+            );
+        }
+    }
+}
+
+echo json_encode(
+    [
+        'ok' => $ok,
+        'php' => PHP_VERSION,
+        'config' => $configPath,
+        'checks' => $checks,
+    ],
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+) . PHP_EOL;
+
+exit($ok ? 0 : 1);

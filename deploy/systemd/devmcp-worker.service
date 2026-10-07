@@ -1,0 +1,22 @@
+[Unit]
+Description=devMcp local job worker
+After=network.target
+
+[Service]
+Type=simple
+User=devmcp
+Group=devmcp
+WorkingDirectory=/opt/devmcp
+Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-worker
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/devmcp /var/log/devmcp /srv/devmcp-workspaces
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
