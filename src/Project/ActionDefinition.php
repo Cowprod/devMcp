@@ -39,6 +39,7 @@ final class ActionDefinition
         public readonly array $argv,
         public readonly string $cwd,
         public readonly int $timeoutSeconds,
+        public readonly string $target,
         private readonly array $artifacts,
     ) {
     }
@@ -82,6 +83,11 @@ final class ActionDefinition
             throw new InvalidArgumentException("timeout invalide pour l'action {$id}");
         }
 
+        $target = $data['target'] ?? 'local';
+        if (!is_string($target) || !preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/', $target)) {
+            throw new InvalidArgumentException("target invalide pour l'action {$id}");
+        }
+
         $rawArtifacts = $data['artifacts'] ?? [];
         if (!is_array($rawArtifacts)) {
             throw new InvalidArgumentException("Liste d'artefacts invalide pour l'action {$id}");
@@ -110,6 +116,7 @@ final class ActionDefinition
             $normalizedArgv,
             $cwd,
             $timeout,
+            $target,
             $artifacts,
         );
     }
@@ -143,6 +150,7 @@ final class ActionDefinition
             'description' => $this->description,
             'cwd' => $this->cwd,
             'timeout_seconds' => $this->timeoutSeconds,
+            'target' => $this->target,
             'parameters' => [],
             'artifacts' => array_values(array_map(
                 static fn (ArtifactDefinition $artifact): array => $artifact->toPublicArray(),
