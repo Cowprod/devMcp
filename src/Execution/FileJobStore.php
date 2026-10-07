@@ -23,6 +23,48 @@ final class FileJobStore
         }
     }
 
+    /**
+     * @return resource
+     */
+    public function acquireProjectLock(string $projectId): mixed
+    {
+        if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/', $projectId)) {
+            throw new InvalidArgumentException('Identifiant projet invalide pour verrou');
+        }
+
+        $locksDirectory = $this->root . '/.project-locks';
+        if (
+            !is_dir($locksDirectory)
+            && !mkdir($locksDirectory, 0770, true)
+            && !is_dir($locksDirectory)
+        ) {
+            throw new RuntimeException('Impossible de créer le dossier des verrous projet');
+        }
+
+        $handle = fopen($locksDirectory . '/' . $projectId . '.lock', 'c+');
+        if ($handle === false || !flock($handle, LOCK_EX)) {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            throw new RuntimeException("Impossible de verrouiller le projet {$projectId}");
+        }
+
+        return $handle;
+    }
+
+    /**
+     * @param resource $handle
+     */
+    public function releaseProjectLock(mixed $handle): void
+    {
+        if (!is_resource($handle)) {
+            return;
+        }
+
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+
     public function create(JobRecord $job): void
     {
         $directory = $this->jobDirectory($job->id);
