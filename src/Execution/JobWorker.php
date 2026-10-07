@@ -17,88 +17,133 @@ final class JobWorker
         private readonly ProjectRegistry $projects,
         private readonly FileJobStore $store,
         private readonly AuditLogger $audit,
+        private readonly string $target = 'local',
         private readonly int $pollMicroseconds = 100000,
     ) {
     }
 
     public function runOnce(): bool
     {
-        $job = $this->store->claimNext();
+        $job = $this->store->claimNext($this->target);
         if ($job === null) {
             return false;
         }
 
-        $project = $this->projects->get($job->projectId);
-        $action = $project->getAction($job->actionId);
-        $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
-
-        $process = new Process($action->argv, $cwd, null, null, null);
-        $started = hrtime(true) / 1_000_000_000;
+        $projectLock = $this->store->acquireProjectLock($job->projectId);
 
         try {
-            $process->start();
-            $this->store->setPid($job->id, $process->getPid());
+            $project = $this->projects->get($job->projectId);
+            $action = $project->getAction($job->actionId);
 
+            if ($action->target !== $job->target || $job->target !== $this->target) {
+                $this->store->finish(
+                    $job->id,
+                    'failed',
+                    null,
+                    'Target du job incohérent avec le manifest ou le worker',
+                );
+                $this->audit->append([
+                    'event' => 'job_target_mismatch',
+                    'job_id' => $job->id,
+                    'project' => $job->projectId,
+                    'action' => $job->actionId,
+                    'target' => $job->target,
+                    'worker_target' => $this->target,
+                ]);
+
+                return true;
+            }
+
+            $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
+            $process = new Process($action->argv, $cwd, null, null, null);
+            $started = hrtime(true) / 1_000_000_000;
+
+            try {
+                $process->start();
+                $this->store->setPid($job->id, $process->getPid());
+
+                $this->audit->append([
+                    'event' => 'job_started',
+                    'job_id' => $job->id,
+                    'project' => $job->projectId,
+                    'action' => $job->actionId,
+                    'target' => $job->target,
+                    'pid' => $process->getPid(),
+                ]);
+
+                while ($process->isRunning()) {
+                    $this->drain($job->id, $process);
+
+                    $current = $this->store->get($job->id);
+                    if ($current->cancelRequested) {
+                        $process->stop(1.0);
+                        $this->drain($job->id, $process);
+                        $this->finish($job, 'cancelled', $process->getExitCode());
+
+                        return true;
+                    }
+
+                    $elapsed = (hrtime(true) / 1_000_000_000) - $started;
+                    if ($elapsed > $action->timeoutSeconds) {
+                        $process->stop(1.0);
+                        $this->drain($job->id, $process);
+                        $this->finish(
+                            $job,
+                            'timed_out',
+                            $process->getExitCode(),
+                            "Timeout après {$action->timeoutSeconds} s",
+                        );
+
+                        return true;
+                    }
+
+                    usleep($this->pollMicroseconds);
+                }
+
+                $this->drain($job->id, $process);
+                $exitCode = $process->getExitCode();
+                $this->finish(
+                    $job,
+                    $exitCode === 0 ? 'succeeded' : 'failed',
+                    $exitCode,
+                );
+
+                return true;
+            } catch (Throwable $exception) {
+                if ($process->isRunning()) {
+                    $process->stop(1.0);
+                }
+
+                $this->drain($job->id, $process);
+                $this->finish(
+                    $job,
+                    'failed',
+                    $process->getExitCode(),
+                    $exception->getMessage(),
+                );
+
+                return true;
+            }
+        } catch (Throwable $exception) {
+            $this->store->finish(
+                $job->id,
+                'failed',
+                null,
+                $exception->getMessage(),
+            );
             $this->audit->append([
-                'event' => 'job_started',
+                'event' => 'job_finished',
                 'job_id' => $job->id,
                 'project' => $job->projectId,
                 'action' => $job->actionId,
-                'pid' => $process->getPid(),
+                'target' => $job->target,
+                'status' => 'failed',
+                'exit_code' => null,
             ]);
 
-            while ($process->isRunning()) {
-                $this->drain($job->id, $process);
-
-                $current = $this->store->get($job->id);
-                if ($current->cancelRequested) {
-                    $process->stop(1.0);
-                    $this->drain($job->id, $process);
-                    $this->finish($job, 'cancelled', $process->getExitCode());
-
-                    return true;
-                }
-
-                $elapsed = (hrtime(true) / 1_000_000_000) - $started;
-                if ($elapsed > $action->timeoutSeconds) {
-                    $process->stop(1.0);
-                    $this->drain($job->id, $process);
-                    $this->finish(
-                        $job,
-                        'timed_out',
-                        $process->getExitCode(),
-                        "Timeout après {$action->timeoutSeconds} s",
-                    );
-
-                    return true;
-                }
-
-                usleep($this->pollMicroseconds);
-            }
-
-            $this->drain($job->id, $process);
-            $exitCode = $process->getExitCode();
-            $this->finish(
-                $job,
-                $exitCode === 0 ? 'succeeded' : 'failed',
-                $exitCode,
-            );
-
             return true;
-        } catch (Throwable $exception) {
-            if ($process->isRunning()) {
-                $process->stop(1.0);
-            }
-
-            $this->drain($job->id, $process);
-            $this->finish(
-                $job,
-                'failed',
-                $process->getExitCode(),
-                $exception->getMessage(),
-            );
-
-            return true;
+        } finally {
+            $this->store->releaseProjectLock($projectLock);
         }
     }
 
@@ -147,6 +192,7 @@ final class JobWorker
             'job_id' => $job->id,
             'project' => $job->projectId,
             'action' => $job->actionId,
+            'target' => $job->target,
             'status' => $finished->status,
             'exit_code' => $finished->exitCode,
         ]);

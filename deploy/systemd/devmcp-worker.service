@@ -8,6 +8,7 @@ User=devmcp
 Group=devmcp
 WorkingDirectory=/opt/devmcp
 Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
+Environment=DEVMCP_TARGET=local
 ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-worker
 Restart=on-failure
 RestartSec=2

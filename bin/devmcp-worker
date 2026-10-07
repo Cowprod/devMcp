@@ -9,6 +9,12 @@ use Cowprod\DevMcp\Runtime\RuntimeFactory;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $configPath = getenv('DEVMCP_CONFIG') ?: dirname(__DIR__) . '/config/global.php';
+$target = getenv('DEVMCP_TARGET') ?: 'local';
+
+if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/', $target)) {
+    fwrite(STDERR, "DEVMCP_TARGET invalide." . PHP_EOL);
+    exit(2);
+}
 
 if (!is_file($configPath)) {
     fwrite(STDERR, "Configuration devMcp introuvable : {$configPath}" . PHP_EOL);
@@ -22,7 +28,12 @@ if (!is_array($config)) {
 }
 
 $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
-$worker = new JobWorker($runtime->projects, $runtime->jobsStore, $runtime->audit);
+$worker = new JobWorker(
+    $runtime->projects,
+    $runtime->jobsStore,
+    $runtime->audit,
+    $target,
+);
 
 if (in_array('--once', $argv, true)) {
     exit($worker->runOnce() ? 0 : 3);

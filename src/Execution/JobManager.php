@@ -29,9 +29,9 @@ final class JobManager
     public function start(string $projectId, string $actionId): array
     {
         $project = $this->projects->get($projectId);
-        $project->getAction($actionId);
+        $action = $project->getAction($actionId);
 
-        $job = JobRecord::create($projectId, $actionId);
+        $job = JobRecord::create($projectId, $actionId, $action->target);
         $this->store->create($job);
 
         $this->audit->append([
@@ -39,6 +39,7 @@ final class JobManager
             'job_id' => $job->id,
             'project' => $projectId,
             'action' => $actionId,
+            'target' => $action->target,
         ]);
 
         return $job->toPublicArray();
