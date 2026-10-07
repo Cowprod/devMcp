@@ -30,7 +30,8 @@ final class ActionDefinition
     ];
 
     /**
-     * @param list<string> $argv
+     * @param list<string|array{param: string}> $argv
+     * @param array<string, ParameterDefinition> $parameters
      * @param array<string, ArtifactDefinition> $artifacts
      */
     private function __construct(
@@ -41,6 +42,7 @@ final class ActionDefinition
         public readonly int $timeoutSeconds,
         public readonly string $target,
         public readonly bool $syncAllowed,
+        private readonly array $parameters,
         private readonly array $artifacts,
     ) {
     }
@@ -59,20 +61,87 @@ final class ActionDefinition
             throw new InvalidArgumentException("Description obligatoire pour l'action {$id}");
         }
 
+        $rawParameters = $data['parameters'] ?? [];
+        if (!is_array($rawParameters)) {
+            throw new InvalidArgumentException("Paramètres invalides pour l'action {$id}");
+        }
+
+        $parameters = [];
+        foreach ($rawParameters as $parameterId => $parameterData) {
+            if (!is_string($parameterId) || !is_array($parameterData)) {
+                throw new InvalidArgumentException(
+                    "Définition de paramètre invalide pour l'action {$id}"
+                );
+            }
+
+            $parameters[$parameterId] = ParameterDefinition::fromArray(
+                $parameterId,
+                $parameterData,
+            );
+        }
+        ksort($parameters);
+
         $argv = $data['argv'] ?? null;
         if (!is_array($argv) || $argv === []) {
             throw new InvalidArgumentException("argv obligatoire pour l'action {$id}");
         }
 
         $normalizedArgv = [];
-        foreach ($argv as $argument) {
-            if (!is_string($argument) || str_contains($argument, "\0")) {
-                throw new InvalidArgumentException("Argument argv invalide pour l'action {$id}");
+        $referencedParameters = [];
+
+        foreach ($argv as $index => $argument) {
+            if (is_string($argument)) {
+                if (str_contains($argument, "\0")) {
+                    throw new InvalidArgumentException(
+                        "Argument argv invalide pour l'action {$id}"
+                    );
+                }
+                $normalizedArgv[] = $argument;
+                continue;
             }
-            $normalizedArgv[] = $argument;
+
+            if (
+                !is_array($argument)
+                || array_keys($argument) !== ['param']
+                || !is_string($argument['param'])
+            ) {
+                throw new InvalidArgumentException(
+                    "Template argv invalide pour l'action {$id}"
+                );
+            }
+
+            if ($index === 0) {
+                throw new InvalidArgumentException(
+                    "L'exécutable d'une action ne peut pas être un paramètre"
+                );
+            }
+
+            $parameterId = $argument['param'];
+            if (!isset($parameters[$parameterId])) {
+                throw new InvalidArgumentException(
+                    "Paramètre argv inconnu {$parameterId} pour l'action {$id}"
+                );
+            }
+
+            $referencedParameters[$parameterId] = true;
+            $normalizedArgv[] = ['param' => $parameterId];
+        }
+
+        if (!is_string($normalizedArgv[0])) {
+            throw new InvalidArgumentException(
+                "L'exécutable de l'action {$id} doit être statique"
+            );
         }
 
         self::assertDirectExecutable($id, $normalizedArgv[0]);
+
+        foreach (array_keys($parameters) as $parameterId) {
+            if (!isset($referencedParameters[$parameterId])) {
+                throw new InvalidArgumentException(
+                    "Paramètre déclaré mais inutilisé {$parameterId} pour l'action {$id}"
+                );
+            }
+        }
 
         $cwd = $data['cwd'] ?? '.';
         if (!is_string($cwd) || trim($cwd) === '') {
@@ -102,7 +171,9 @@ final class ActionDefinition
         $artifacts = [];
         foreach ($rawArtifacts as $rawArtifact) {
             if (!is_array($rawArtifact)) {
-                throw new InvalidArgumentException("Définition d'artefact invalide pour l'action {$id}");
+                throw new InvalidArgumentException(
+                    "Définition d'artefact invalide pour l'action {$id}"
+                );
             }
 
             $artifact = ArtifactDefinition::fromArray($rawArtifact);
@@ -124,8 +195,57 @@ final class ActionDefinition
             $timeout,
             $target,
             $syncAllowed,
+            $parameters,
             $artifacts,
         );
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, string>
+     */
+    public function normalizeArguments(array $arguments): array
+    {
+        $extra = array_diff(array_keys($arguments), array_keys($this->parameters));
+        if ($extra !== []) {
+            throw new InvalidArgumentException(
+                'Arguments non déclarés : ' . implode(', ', $extra)
+            );
+        }
+
+        $normalized = [];
+        foreach ($this->parameters as $parameterId => $definition) {
+            if (!array_key_exists($parameterId, $arguments)) {
+                throw new InvalidArgumentException(
+                    "Argument obligatoire absent : {$parameterId}"
+                );
+            }
+
+            $normalized[$parameterId] = $definition->normalize($arguments[$parameterId]);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @return list<string>
+     */
+    public function buildArgv(array $arguments = []): array
+    {
+        $normalized = $this->normalizeArguments($arguments);
+        $resolved = [];
+
+        foreach ($this->argv as $argument) {
+            if (is_string($argument)) {
+                $resolved[] = $argument;
+                continue;
+            }
+
+            $resolved[] = $normalized[$argument['param']];
+        }
+
+        return $resolved;
     }
 
     /**
@@ -159,7 +279,10 @@ final class ActionDefinition
             'timeout_seconds' => $this->timeoutSeconds,
             'target' => $this->target,
             'sync_allowed' => $this->syncAllowed,
-            'parameters' => [],
+            'parameters' => array_values(array_map(
+                static fn (ParameterDefinition $parameter): array => $parameter->toPublicArray(),
+                $this->parameters,
+            )),
             'artifacts' => array_values(array_map(
                 static fn (ArtifactDefinition $artifact): array => $artifact->toPublicArray(),
                 $this->artifacts,
