@@ -6,8 +6,8 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
 use Cowprod\DevMcp\Mcp\ProjectTools;
+use Cowprod\DevMcp\Mcp\ServerFactory;
 use Cowprod\DevMcp\Project\ProjectRegistry;
-use Mcp\Server;
 use Mcp\Server\Transport\StdioTransport;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -43,15 +43,6 @@ if (!is_int($maxOutput) || $maxOutput < 1024) {
 $audit = new AuditLogger($auditFile);
 $runner = new ActionRunner($audit, $maxTimeout, $maxOutput);
 $tools = new ProjectTools($projects, $runner, $audit);
-
-$server = Server::builder()
-    ->setServerInfo('devMcp', '0.1.0')
-    ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
-    ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
-    ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
-    ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée.')
-    ->addTool([$tools, 'actionRun'], 'action_run', description: 'Exécute une action déclarée côté serveur.')
-    ->addTool([$tools, 'auditTail'], 'audit_tail', description: "Lit les dernières traces d'audit d'un projet.")
-    ->build();
+$server = (new ServerFactory())->build($tools);
 
 exit($server->run(new StdioTransport()));
