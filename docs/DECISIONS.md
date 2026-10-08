@@ -120,3 +120,33 @@ Type : SÉCURITÉ
 Statut : VALIDÉE
 Décision : action_run synchrone est interdit par défaut.
 Conséquences : une action doit déclarer sync=true et cibler local pour être exécutable hors worker. Les actions de build/test/mutation passent par action_start.
+
+## D-021
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : les arguments dynamiques d'une action sont déclarés et typés côté serveur.
+Conséquences : J05 n'autorise que git_sha, android_serial, enum et integer borné ; les arguments inconnus, absents ou invalides sont rejetés avant création du job.
+
+## D-022
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : un paramètre ne peut jamais remplacer l'exécutable d'une action.
+Conséquences : argv[0] reste statique et absolu ; un paramètre devient toujours un élément argv indépendant, jamais une interpolation de shell.
+
+## D-023
+Type : PROCESSUS
+Statut : VALIDÉE
+Décision : un build autonome est qualifié sur un SHA Git complet et non sur un nom de branche mutable.
+Conséquences : workspace.sync accepte uniquement un SHA de 40 caractères, vérifie origin, fetch les refs distantes et checkout en detached HEAD.
+
+## D-024
+Type : SÉCURITÉ
+Statut : VALIDÉE
+Décision : workspace.sync refuse un dépôt dont origin ne correspond pas au dépôt attendu.
+Conséquences : une erreur de chemin local ne peut pas conduire devMcp à exécuter le build dans un autre checkout.
+
+## D-025
+Type : TECHNIQUE
+Statut : VALIDÉE
+Décision : MultiCam est le premier manifest de projet réel préparé.
+Conséquences : la première qualification physique couvre workspace.sync, build Android, APK, ADB devices/install/force-stop/logcat sur le target android-lab.

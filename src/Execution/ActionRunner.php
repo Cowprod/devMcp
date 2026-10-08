@@ -21,16 +21,21 @@ final class ActionRunner
     }
 
     /**
+     * @param array<string, mixed> $arguments
      * @return array<string, mixed>
      */
-    public function run(ProjectDefinition $project, string $actionId): array
-    {
+    public function run(
+        ProjectDefinition $project,
+        string $actionId,
+        array $arguments = [],
+    ): array {
         $action = $project->getAction($actionId);
+        $argv = $action->buildArgv($arguments);
         $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
         $timeout = min($action->timeoutSeconds, $this->maxTimeoutSeconds);
 
         $started = hrtime(true);
-        $process = new Process($action->argv, $cwd, null, null, $timeout);
+        $process = new Process($argv, $cwd, null, null, $timeout);
 
         $timedOut = false;
         $error = null;
@@ -70,8 +75,10 @@ final class ActionRunner
         }
 
         $this->audit->append([
+            'event' => 'action_run',
             'project' => $project->id,
             'action' => $action->id,
+            'argument_names' => array_keys($arguments),
             'ok' => $ok,
             'exit_code' => $exitCode,
             'timed_out' => $timedOut,

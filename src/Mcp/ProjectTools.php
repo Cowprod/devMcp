@@ -72,7 +72,11 @@ final class ProjectTools
      *
      * @return array<string, mixed>
      */
-    public function actionRun(string $project, string $action): array
+    public function actionRun(
+        string $project,
+        string $action,
+        array $arguments = [],
+    ): array
     {
         $projectDefinition = $this->projects->get($project);
         $actionDefinition = $projectDefinition->getAction($action);
@@ -89,7 +93,7 @@ final class ProjectTools
             );
         }
 
-        return $this->runner->run($projectDefinition, $action);
+        return $this->runner->run($projectDefinition, $action, $arguments);
     }
 
     /**
@@ -97,9 +101,12 @@ final class ProjectTools
      *
      * @return array<string, mixed>
      */
-    public function actionStart(string $project, string $action): array
-    {
-        return $this->jobs->start($project, $action);
+    public function actionStart(
+        string $project,
+        string $action,
+        array $arguments = [],
+    ): array {
+        return $this->jobs->start($project, $action, $arguments);
     }
 
     /**

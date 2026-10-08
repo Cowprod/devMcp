@@ -55,7 +55,8 @@ final class JobWorker
             }
 
             $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
-            $process = new Process($action->argv, $cwd, null, null, null);
+            $argv = $action->buildArgv($job->arguments);
+            $process = new Process($argv, $cwd, null, null, null);
             $started = hrtime(true) / 1_000_000_000;
 
             try {
