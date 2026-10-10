@@ -34,8 +34,12 @@ final class ProjectRegistry
             if (!is_string($actionId) || !is_array($actionData)) {
                 throw new InvalidArgumentException('Definition shared_actions invalide');
             }
-            // Validate even unused templates: reject forbidden executables at startup.
-            ActionDefinition::fromArray($actionId, $actionData);
+            // Project-bound repository placeholders are validated after expansion.
+            // Every other shared template is validated even when unused.
+            $containsRepository = in_array(['project' => 'repository'], $actionData['argv'] ?? [], true);
+            if (!$containsRepository) {
+                ActionDefinition::fromArray($actionId, $actionData);
+            }
         }
 
         $projects = [];
@@ -58,7 +62,21 @@ final class ProjectRegistry
                 if (array_key_exists($actionId, $actions)) {
                     throw new InvalidArgumentException("Collision d'action partagee pour {$projectId} : {$actionId}");
                 }
-                $actions[$actionId] = $sharedActions[$actionId];
+                $template = $sharedActions[$actionId];
+                foreach ($template['argv'] ?? [] as $index => $argument) {
+                    if ($argument !== ['project' => 'repository']) {
+                        continue;
+                    }
+                    if ($index === 0) {
+                        throw new InvalidArgumentException('Le repository ne peut pas etre executable');
+                    }
+                    $repository = $projectData['repository'] ?? null;
+                    if (!is_string($repository) || !preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$~D', $repository)) {
+                        throw new InvalidArgumentException("Repository invalide pour {$projectId}");
+                    }
+                    $template['argv'][$index] = $repository;
+                }
+                $actions[$actionId] = $template;
             }
             $projectData['actions'] = $actions;
             $projects[$projectId] = ProjectDefinition::fromArray($projectId, $projectData);
