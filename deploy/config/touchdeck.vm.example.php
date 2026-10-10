@@ -24,25 +24,28 @@ return [
         'max_job_log_bytes' => 4 * 1024 * 1024,
         'max_artifact_chunk_bytes' => 256 * 1024,
     ],
+    'shared_actions' => [
+        'git.status' => [
+            'description' => 'Consulte les modifications locales du workspace.',
+            'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
+            'cwd' => '.',
+            'timeout' => 10,
+            'sync' => true,
+        ],
+        'git.head' => [
+            'description' => 'Retourne le SHA Git exact actuellement extrait.',
+            'argv' => ['/usr/bin/git', 'rev-parse', 'HEAD'],
+            'cwd' => '.',
+            'timeout' => 10,
+            'sync' => true,
+        ],
+    ],
     'projects' => [
         'touchdeck' => [
             'description' => 'TouchDeck - ESP32 tactile',
             'root' => $touchDeckRoot,
+            'shared_actions' => ['git.status', 'git.head'],
             'actions' => [
-                'git.status' => [
-                    'description' => 'Consulte les modifications locales du workspace.',
-                    'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
-                    'cwd' => '.',
-                    'timeout' => 10,
-                    'sync' => true,
-                ],
-                'git.head' => [
-                    'description' => 'Retourne le SHA Git exact actuellement extrait.',
-                    'argv' => ['/usr/bin/git', 'rev-parse', 'HEAD'],
-                    'cwd' => '.',
-                    'timeout' => 10,
-                    'sync' => true,
-                ],
                 'workspace.sync' => [
                     'description' => 'Synchronise vers un commit GitHub origin par SHA complet verifie ; refuse les modifications locales suivies.',
                     'argv' => [
