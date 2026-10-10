@@ -26,6 +26,7 @@ final class SharedActionPresetTest extends TestCase
                         'workspace.sync',
                         'platformio.build',
                         'platformio.upload',
+                        'serial.capture',
                     ],
                 ],
             ],
@@ -33,6 +34,37 @@ final class SharedActionPresetTest extends TestCase
 
         self::assertArrayHasKey('platformio.build', $registry->get('demo')->getActions());
         self::assertArrayHasKey('platformio.upload', $registry->get('demo')->getActions());
+        self::assertArrayHasKey('serial.capture', $registry->get('demo')->getActions());
+    }
+
+    public function testSerialCaptureHasBoundedParameters(): void
+    {
+        $actions = require dirname(__DIR__, 2) . '/config/shared-actions.php';
+        $action = ProjectRegistry::fromConfig([
+            'shared_actions' => $actions,
+            'projects' => [
+                'demo' => [
+                    'root' => sys_get_temp_dir(),
+                    'shared_actions' => ['serial.capture'],
+                ],
+            ],
+        ])->get('demo')->getAction('serial.capture');
+
+        self::assertSame(
+            ['port' => '/dev/ttyACM0', 'baud' => '115200', 'seconds' => 5],
+            $action->normalizeArguments([
+                'port' => '/dev/ttyACM0',
+                'baud' => '115200',
+                'seconds' => 5,
+            ]),
+        );
+
+        $this->expectException(InvalidArgumentException::class);
+        $action->normalizeArguments([
+            'port' => '/dev/ttyACM0',
+            'baud' => '115200',
+            'seconds' => 31,
+        ]);
     }
 
     public function testSerialDeviceParameterAcceptsOnlyBoundedDevicePaths(): void
