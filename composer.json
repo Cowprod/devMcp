@@ -5,7 +5,7 @@
   "license": "proprietary",
   "require": {
     "php": "^8.3",
-    "mcp/sdk": "dev-server-stdio-dual-era#2456cc3b60e8bf48d4b2ff6b4c4c5b878dbbe1a9",
+    "mcp/sdk": "dev-main#b560eeaa7ae307c287f445a7c9d2f8a2329e3733",
     "symfony/process": "^7.3",
     "nyholm/psr7": "^1.8",
     "laminas/laminas-httphandlerrunner": "^2.13"
