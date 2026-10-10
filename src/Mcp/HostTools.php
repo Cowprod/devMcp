@@ -21,7 +21,7 @@ final class HostTools
             'python3' => ['/usr/bin/python3'],
             'pip3' => ['/usr/bin/pip3', '/usr/local/bin/pip3'],
             'pipx' => ['/usr/bin/pipx', '/usr/local/bin/pipx'],
-            'platformio' => ['/usr/local/bin/pio', '/usr/bin/pio', '/usr/local/bin/platformio', '/usr/bin/platformio'],
+            'platformio' => ['/opt/devmcp-tools/platformio/bin/pio', '/opt/devmcp-tools/platformio/bin/platformio', '/usr/local/bin/pio', '/usr/bin/pio', '/usr/local/bin/platformio', '/usr/bin/platformio'],
             'esptool' => ['/usr/bin/esptool.py', '/usr/local/bin/esptool.py', '/usr/bin/esptool', '/usr/local/bin/esptool'],
             'arduino-cli' => ['/usr/bin/arduino-cli', '/usr/local/bin/arduino-cli'],
             'lsusb' => ['/usr/bin/lsusb'],

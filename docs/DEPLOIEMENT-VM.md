@@ -47,10 +47,18 @@ Le fichier `/etc/devmcp/tunnel.env` reste root:root mode 0600. systemd le lit av
 
 Le template deploy/systemd/devmcp-worker.service exécute la file persistante de jobs.
 
+Pour les hôtes de développement embarqué, le service rejoint explicitement le groupe système `dialout` afin d'accéder aux ports série autorisés par udev. Il utilise `HOME=/var/lib/devmcp` et ajoute `/opt/devmcp-tools/platformio/bin` au PATH.
+
 Il dispose en écriture uniquement de :
 - /var/lib/devmcp
 - /var/log/devmcp
 - /srv/devmcp-workspaces
+
+### Toolchain ESP32 / PlatformIO
+
+Le script `deploy/install-platformio.sh` installe PlatformIO Core dans un environnement virtuel dédié `/opt/devmcp-tools/platformio`. La version est épinglée pour rendre l'hôte reproductible ; les paquets de plateformes et toolchains téléchargés par PlatformIO restent sous le HOME de `devmcp`, donc hors du dépôt et dans une zone writable par le worker.
+
+L'accès série ne donne aucun privilège root : il repose sur le groupe `dialout`. Les actions de flash restent des actions devMcp déclarées et bornées par projet ; aucun shell générique n'est exposé.
 
 ### Endpoint HTTP local facultatif
 
@@ -134,7 +142,7 @@ Les jobs sont eux aussi persistants sur disque et exécutés par devmcp-worker :
 2. /opt/devmcp installé et composer install exécuté.
 3. /etc/devmcp/global.php créé depuis deploy/config/global.vm.example.php.
 4. Workspaces utiles présents sous /srv/devmcp-workspaces (racine standard du worker).
-5. devmcp-worker actif.
+5. devmcp-worker actif ; pour les projets matériels, accès `dialout` et toolchain PlatformIO qualifiés.
 6. bin/devmcp-doctor retourne ok=true.
 7. bin/devmcp démarre sans erreur avec DEVMCP_CONFIG.
 8. tunnel-client doctor est vert.

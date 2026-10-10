@@ -6,9 +6,12 @@ After=network.target
 Type=simple
 User=devmcp
 Group=devmcp
+SupplementaryGroups=dialout
 WorkingDirectory=/opt/devmcp
 Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
 Environment=DEVMCP_TARGET=local
+Environment=HOME=/var/lib/devmcp
+Environment=PATH=/opt/devmcp-tools/platformio/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-worker
 Restart=on-failure
 RestartSec=2

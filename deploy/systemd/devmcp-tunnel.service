@@ -7,9 +7,11 @@ After=network-online.target
 Type=simple
 User=devmcp
 Group=devmcp
+SupplementaryGroups=dialout
 WorkingDirectory=/opt/devmcp
 EnvironmentFile=/etc/devmcp/tunnel.env
 Environment=HOME=/var/lib/devmcp
+Environment=PATH=/opt/devmcp-tools/platformio/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/usr/local/bin/tunnel-client run --profile devmcp
 Restart=always
 RestartSec=5
