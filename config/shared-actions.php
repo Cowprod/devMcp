@@ -38,6 +38,30 @@ return [
         ],
     ],
 
+    'platformio.version' => [
+        'description' => 'Retourne la version du PlatformIO Core géré par devMcp.',
+        'argv' => [
+            '/opt/devmcp-tools/platformio/bin/pio',
+            '--version',
+        ],
+        'cwd' => '.',
+        'timeout' => 10,
+        'sync' => true,
+    ],
+
+    'platformio.devices' => [
+        'description' => 'Liste les ports série vus par PlatformIO.',
+        'argv' => [
+            '/opt/devmcp-tools/platformio/bin/pio',
+            'device',
+            'list',
+            '--json-output',
+        ],
+        'cwd' => '.',
+        'timeout' => 20,
+        'sync' => true,
+    ],
+
     'platformio.build' => [
         'description' => 'Compile le projet PlatformIO dans son workspace.',
         'argv' => [
