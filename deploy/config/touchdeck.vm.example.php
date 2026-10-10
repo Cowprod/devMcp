@@ -5,7 +5,7 @@ declare(strict_types=1);
 // Example only. Copy the project entry into /etc/devmcp/global.php.
 // The actual configuration and credentials must stay outside Git.
 $devMcpRoot = '/opt/devmcp';
-$touchDeckRoot = '/srv/projects/touchDeck';
+$touchDeckRoot = '/srv/devmcp-workspaces/touchDeck';
 
 return [
     'audit' => [
