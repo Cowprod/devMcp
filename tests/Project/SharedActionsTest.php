@@ -15,6 +15,7 @@ final class SharedActionsTest extends TestCase
         return [
             'shared_actions' => [
                 'git.head' => [
+                    'description' => 'Read current Git commit',
                     'argv' => ['/usr/bin/git', 'rev-parse', 'HEAD'],
                     'sync' => true,
                 ],
