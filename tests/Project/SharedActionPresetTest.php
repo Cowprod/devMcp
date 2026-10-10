@@ -51,7 +51,7 @@ final class SharedActionPresetTest extends TestCase
         ])->get('demo')->getAction('serial.capture');
 
         self::assertSame(
-            ['port' => '/dev/ttyACM0', 'baud' => '115200', 'seconds' => 5],
+            ['baud' => '115200', 'port' => '/dev/ttyACM0', 'seconds' => 5],
             $action->normalizeArguments([
                 'port' => '/dev/ttyACM0',
                 'baud' => '115200',
