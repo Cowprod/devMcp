@@ -32,6 +32,8 @@ final class HostToolsTest extends TestCase
             self::assertMatchesRegularExpression('~^/dev/tty(?:ACM|USB)[0-9]+$~D', $device['path']);
             self::assertIsBool($device['readable']);
             self::assertIsBool($device['writable']);
+            self::assertArrayHasKey('usb', $device);
+            self::assertIsArray($device['usb']);
         }
 
         self::assertArrayHasKey('uid', $result['process']);
