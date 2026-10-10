@@ -37,6 +37,12 @@ Le worker n'obtient pas sudo. Les opérations nécessitant un privilège systèm
 
 ## Services
 
+### Secure MCP Tunnel
+
+Le template `deploy/systemd/devmcp-tunnel.service` exécute `tunnel-client` comme utilisateur `devmcp`, charge la Runtime API key depuis `/etc/devmcp/tunnel.env` et redémarre automatiquement le tunnel.
+
+Le fichier `/etc/devmcp/tunnel.env` reste root:root mode 0600. systemd le lit avant la baisse de privilèges du service. Le service n'obtient aucun accès sudo.
+
 ### Worker
 
 Le template deploy/systemd/devmcp-worker.service exécute la file persistante de jobs.
@@ -127,11 +133,11 @@ Les jobs sont eux aussi persistants sur disque et exécutés par devmcp-worker :
 1. PHP 8.3+ et Composer disponibles.
 2. /opt/devmcp installé et composer install exécuté.
 3. /etc/devmcp/global.php créé depuis deploy/config/global.vm.example.php.
-4. Workspaces utiles présents sous /srv/devmcp-workspaces.
+4. Workspaces utiles présents sous /srv/devmcp-workspaces (racine standard du worker).
 5. devmcp-worker actif.
 6. bin/devmcp-doctor retourne ok=true.
 7. bin/devmcp démarre sans erreur avec DEVMCP_CONFIG.
 8. tunnel-client doctor est vert.
-9. tunnel-client runtime actif.
+9. devmcp-tunnel actif et tunnel-client connecté.
 10. outil project_list visible depuis ChatGPT.
 11. premier action_run en lecture validé avant les actions mutantes.
