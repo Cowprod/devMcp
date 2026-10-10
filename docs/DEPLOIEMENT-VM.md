@@ -148,6 +148,16 @@ Le SDK MCP PHP officiel nécessite un stockage de sessions persistant pour les s
 
 Les jobs sont eux aussi persistants sur disque et exécutés par devmcp-worker : un appel HTTP qui lance un job peut donc être suivi par un autre processus PHP ou après un redémarrage du frontend.
 
+## Application du runtime VM en une commande
+
+Après un `git pull`, le script `deploy/apply-vm-runtime.sh` applique le runtime versionné : validation de la configuration PHP, répertoires nécessaires, installation/upgrade de PlatformIO, unités systemd worker+tunnel, reload, enable et restart. Il ne modifie pas `/etc/devmcp/global.php` et ne crée aucun secret.
+
+```sh
+sudo /opt/devmcp/deploy/apply-vm-runtime.sh
+```
+
+Le script échoue explicitement si le groupe `dialout` ou la configuration locale manquent.
+
 ## Checklist avant connexion ChatGPT
 
 1. PHP 8.3+ et Composer disponibles.
