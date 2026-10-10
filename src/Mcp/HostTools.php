@@ -9,7 +9,7 @@ final class HostTools
     /**
      * @return array{
      *   executables: list<array{name:string,path:string,available:bool}>,
-     *   serial_devices: list<array{path:string,readable:bool,writable:bool}>,
+     *   serial_devices: list<array{path:string,readable:bool,writable:bool,usb:array<string,string>}>,
      *   process: array{uid:int|null,user:string|null,groups:list<string>}
      * }
      */
@@ -55,6 +55,7 @@ final class HostTools
                     'path' => $device,
                     'readable' => is_readable($device),
                     'writable' => is_writable($device),
+                    'usb' => $this->usbMetadataForTty($device),
                 ];
             }
         }
@@ -89,5 +90,63 @@ final class HostTools
                 'groups' => array_values(array_unique($groups)),
             ],
         ];
+    }
+    /**
+     * @return array<string, string>
+     */
+    private function usbMetadataForTty(string $device): array
+    {
+        $tty = basename($device);
+        $path = realpath('/sys/class/tty/' . $tty . '/device');
+        if ($path === false) {
+            return [];
+        }
+
+        while ($path !== '/' && str_starts_with($path, '/sys/')) {
+            $vendor = $this->readTrimmed($path . '/idVendor');
+            $productId = $this->readTrimmed($path . '/idProduct');
+
+            if ($vendor !== null && $productId !== null) {
+                $result = [
+                    'vendor_id' => strtolower($vendor),
+                    'product_id' => strtolower($productId),
+                ];
+
+                foreach ([
+                    'manufacturer' => 'manufacturer',
+                    'product' => 'product',
+                    'serial' => 'serial',
+                ] as $key => $file) {
+                    $value = $this->readTrimmed($path . '/' . $file);
+                    if ($value !== null && $value !== '') {
+                        $result[$key] = $value;
+                    }
+                }
+
+                return $result;
+            }
+
+            $parent = dirname($path);
+            if ($parent === $path) {
+                break;
+            }
+            $path = $parent;
+        }
+
+        return [];
+    }
+
+    private function readTrimmed(string $path): ?string
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            return null;
+        }
+
+        $value = file_get_contents($path);
+        if (!is_string($value)) {
+            return null;
+        }
+
+        return trim($value);
     }
 }
