@@ -12,7 +12,9 @@ final class ServerFactory
     public function build(
         ProjectTools $tools,
         ?SessionStoreInterface $sessionStore = null,
+        ?HostTools $hostTools = null,
     ): Server {
+        $hostTools ??= new HostTools();
         $actionInputSchema = [
             'type' => 'object',
             'properties' => [
@@ -42,6 +44,7 @@ final class ServerFactory
                 '0.5.0',
                 description: 'Plan d’exécution de développement borné par projet.',
             )
+            ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
