@@ -119,6 +119,18 @@ Limite importante du binding STDIO : une seule instance tunnel-client active par
 
 Pour une supervision long-lived gérée par tunnel-client, la documentation OpenAI recommande aussi le mécanisme runtimes connect/status plutôt qu'un nohup/disown artisanal.
 
+## Actions partagées versionnées
+
+Les actions génériques maintenues par devMcp sont regroupées dans `config/shared-actions.php`. Une configuration locale peut les charger directement :
+
+```php
+'shared_actions' => require '/opt/devmcp/config/shared-actions.php',
+```
+
+Chaque projet continue d'activer explicitement uniquement les actions dont il a besoin. Les presets fournis couvrent actuellement Git (`git.status`, `git.head`, `workspace.sync`) et PlatformIO (`platformio.build`, `platformio.upload`). Le flash accepte uniquement des chemins série bornés `/dev/ttyACM<n>` ou `/dev/ttyUSB<n>`.
+
+Cela évite de recopier les définitions génériques dans `/etc/devmcp/global.php` tout en conservant l'opt-in et les restrictions par projet.
+
 ## Configuration ChatGPT
 
 Dans ChatGPT :
