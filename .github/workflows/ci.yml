@@ -22,4 +22,6 @@ jobs:
           php -l bin/devmcp-doctor
           php -l bin/devmcp-workspace-sync
           php -l public/index.php
+      - name: Lint deployment scripts
+        run: sh -n deploy/install-platformio.sh
       - run: composer test
