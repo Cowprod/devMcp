@@ -24,7 +24,7 @@ install -d -o devmcp -g devmcp -m 0700 /var/lib/devmcp /var/lib/devmcp/jobs /var
 install -d -o devmcp -g devmcp -m 0750 /var/log/devmcp
 install -d -o devmcp -g devmcp -m 0750 /srv/devmcp-workspaces
 
-"$DEVMCP_ROOT/deploy/install-platformio.sh"
+sh "$DEVMCP_ROOT/deploy/install-platformio.sh"
 
 install -o root -g root -m 0644 "$DEVMCP_ROOT/deploy/systemd/devmcp-worker.service" /etc/systemd/system/devmcp-worker.service
 install -o root -g root -m 0644 "$DEVMCP_ROOT/deploy/systemd/devmcp-tunnel.service" /etc/systemd/system/devmcp-tunnel.service
