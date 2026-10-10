@@ -7,7 +7,11 @@ namespace Cowprod\DevMcp\Mcp;
 final class HostTools
 {
     /**
-     * @return array{executables: list<array{name:string,path:string,available:bool}>, serial_devices: list<string>}
+     * @return array{
+     *   executables: list<array{name:string,path:string,available:bool}>,
+     *   serial_devices: list<array{path:string,readable:bool,writable:bool}>,
+     *   process: array{uid:int|null,user:string|null,groups:list<string>}
+     * }
      */
     public function capabilities(): array
     {
@@ -15,6 +19,8 @@ final class HostTools
             'git' => ['/usr/bin/git'],
             'php' => ['/usr/bin/php'],
             'python3' => ['/usr/bin/python3'],
+            'pip3' => ['/usr/bin/pip3', '/usr/local/bin/pip3'],
+            'pipx' => ['/usr/bin/pipx', '/usr/local/bin/pipx'],
             'platformio' => ['/usr/local/bin/pio', '/usr/bin/pio', '/usr/local/bin/platformio', '/usr/bin/platformio'],
             'esptool' => ['/usr/bin/esptool.py', '/usr/local/bin/esptool.py', '/usr/bin/esptool', '/usr/local/bin/esptool'],
             'arduino-cli' => ['/usr/bin/arduino-cli', '/usr/local/bin/arduino-cli'],
@@ -41,16 +47,47 @@ final class HostTools
         $serialDevices = [];
         foreach (['/dev/ttyACM*', '/dev/ttyUSB*'] as $pattern) {
             foreach (glob($pattern) ?: [] as $device) {
-                if (is_string($device) && is_file($device)) {
-                    $serialDevices[] = $device;
+                if (!is_string($device) || !file_exists($device)) {
+                    continue;
+                }
+
+                $serialDevices[$device] = [
+                    'path' => $device,
+                    'readable' => is_readable($device),
+                    'writable' => is_writable($device),
+                ];
+            }
+        }
+        ksort($serialDevices, SORT_STRING);
+
+        $groups = [];
+        if (function_exists('posix_getgroups') && function_exists('posix_getgrgid')) {
+            foreach (posix_getgroups() as $gid) {
+                $group = posix_getgrgid($gid);
+                if (is_array($group) && isset($group['name']) && is_string($group['name'])) {
+                    $groups[] = $group['name'];
                 }
             }
         }
-        sort($serialDevices, SORT_STRING);
+        sort($groups, SORT_STRING);
+
+        $uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
+        $user = null;
+        if (is_int($uid) && function_exists('posix_getpwuid')) {
+            $account = posix_getpwuid($uid);
+            if (is_array($account) && isset($account['name']) && is_string($account['name'])) {
+                $user = $account['name'];
+            }
+        }
 
         return [
             'executables' => $resolved,
-            'serial_devices' => array_values(array_unique($serialDevices)),
+            'serial_devices' => array_values($serialDevices),
+            'process' => [
+                'uid' => $uid,
+                'user' => $user,
+                'groups' => array_values(array_unique($groups)),
+            ],
         ];
     }
 }
