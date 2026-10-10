@@ -25,11 +25,65 @@ final class ProjectRegistry
             throw new InvalidArgumentException('La configuration doit contenir projects');
         }
 
+        // Shared action definitions are opt-in per project, never globally executable.
+        $sharedActions = $config['shared_actions'] ?? [];
+        if (!is_array($sharedActions)) {
+            throw new InvalidArgumentException('shared_actions doit etre un tableau');
+        }
+        foreach ($sharedActions as $actionId => $actionData) {
+            if (!is_string($actionId) || !is_array($actionData)) {
+                throw new InvalidArgumentException('Definition shared_actions invalide');
+            }
+            // Validate all templates, including unused ones, with a safe placeholder.
+            $validation = $actionData;
+            foreach ($validation['argv'] ?? [] as $index => $argument) {
+                if ($argument === ['project' => 'repository']) {
+                    if ($index === 0) {
+                        throw new InvalidArgumentException('Le repository ne peut pas etre executable');
+                    }
+                    $validation['argv'][$index] = 'validation/repository';
+                }
+            }
+            ActionDefinition::fromArray($actionId, $validation);
+        }
+
         $projects = [];
         foreach ($rawProjects as $projectId => $projectData) {
             if (!is_string($projectId) || !is_array($projectData)) {
                 throw new InvalidArgumentException('Définition de projet invalide');
             }
+            $enabled = $projectData['shared_actions'] ?? [];
+            if (!is_array($enabled) || !array_is_list($enabled)) {
+                throw new InvalidArgumentException("shared_actions invalide pour {$projectId}");
+            }
+            $actions = $projectData['actions'] ?? [];
+            if (!is_array($actions)) {
+                throw new InvalidArgumentException("Actions invalides pour {$projectId}");
+            }
+            foreach ($enabled as $actionId) {
+                if (!is_string($actionId) || !array_key_exists($actionId, $sharedActions)) {
+                    throw new InvalidArgumentException("Action partagee inconnue pour {$projectId}");
+                }
+                if (array_key_exists($actionId, $actions)) {
+                    throw new InvalidArgumentException("Collision d'action partagee pour {$projectId} : {$actionId}");
+                }
+                $template = $sharedActions[$actionId];
+                foreach ($template['argv'] ?? [] as $index => $argument) {
+                    if ($argument !== ['project' => 'repository']) {
+                        continue;
+                    }
+                    if ($index === 0) {
+                        throw new InvalidArgumentException('Le repository ne peut pas etre executable');
+                    }
+                    $repository = $projectData['repository'] ?? null;
+                    if (!is_string($repository) || !preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$~D', $repository)) {
+                        throw new InvalidArgumentException("Repository invalide pour {$projectId}");
+                    }
+                    $template['argv'][$index] = $repository;
+                }
+                $actions[$actionId] = $template;
+            }
+            $projectData['actions'] = $actions;
             $projects[$projectId] = ProjectDefinition::fromArray($projectId, $projectData);
         }
 

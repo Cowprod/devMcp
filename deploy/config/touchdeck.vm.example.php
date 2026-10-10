@@ -24,43 +24,48 @@ return [
         'max_job_log_bytes' => 4 * 1024 * 1024,
         'max_artifact_chunk_bytes' => 256 * 1024,
     ],
+    'shared_actions' => [
+        'git.status' => [
+            'description' => 'Consulte les modifications locales du workspace.',
+            'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
+            'cwd' => '.',
+            'timeout' => 10,
+            'sync' => true,
+        ],
+        'git.head' => [
+            'description' => 'Retourne le SHA Git exact actuellement extrait.',
+            'argv' => ['/usr/bin/git', 'rev-parse', 'HEAD'],
+            'cwd' => '.',
+            'timeout' => 10,
+            'sync' => true,
+        ],
+        'workspace.sync' => [
+            'description' => 'Synchronise le workspace vers un SHA origin verifie.',
+            'argv' => [
+                '/usr/bin/php',
+                '/opt/devmcp/bin/devmcp-workspace-sync',
+                ['project' => 'repository'],
+                ['param' => 'commit'],
+            ],
+            'cwd' => '.',
+            'timeout' => 360,
+            'target' => 'local',
+            'parameters' => [
+                'commit' => [
+                    'type' => 'git_sha',
+                    'description' => 'SHA Git complet de 40 caracteres.',
+                ],
+            ],
+        ],
+    ],
     'projects' => [
         'touchdeck' => [
             'description' => 'TouchDeck - ESP32 tactile',
             'root' => $touchDeckRoot,
+            'repository' => 'Cowprod/touchDeck',
+            'shared_actions' => ['git.status', 'git.head', 'workspace.sync'],
             'actions' => [
-                'git.status' => [
-                    'description' => 'Consulte les modifications locales du workspace.',
-                    'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
-                    'cwd' => '.',
-                    'timeout' => 10,
-                    'sync' => true,
-                ],
-                'git.head' => [
-                    'description' => 'Retourne le SHA Git exact actuellement extrait.',
-                    'argv' => ['/usr/bin/git', 'rev-parse', 'HEAD'],
-                    'cwd' => '.',
-                    'timeout' => 10,
-                    'sync' => true,
-                ],
-                'workspace.sync' => [
-                    'description' => 'Synchronise vers un commit GitHub origin par SHA complet verifie ; refuse les modifications locales suivies.',
-                    'argv' => [
-                        '/usr/bin/php',
-                        $devMcpRoot . '/bin/devmcp-workspace-sync',
-                        'Cowprod/touchDeck',
-                        ['param' => 'commit'],
-                    ],
-                    'cwd' => '.',
-                    'timeout' => 360,
-                    'target' => 'local',
-                    'parameters' => [
-                        'commit' => [
-                            'type' => 'git_sha',
-                            'description' => 'SHA GitHub complet de 40 caracteres.',
-                        ],
-                    ],
-                ],
+
             ],
         ],
     ],
