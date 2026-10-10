@@ -34,12 +34,17 @@ final class ProjectRegistry
             if (!is_string($actionId) || !is_array($actionData)) {
                 throw new InvalidArgumentException('Definition shared_actions invalide');
             }
-            // Project-bound repository placeholders are validated after expansion.
-            // Every other shared template is validated even when unused.
-            $containsRepository = in_array(['project' => 'repository'], $actionData['argv'] ?? [], true);
-            if (!$containsRepository) {
-                ActionDefinition::fromArray($actionId, $actionData);
+            // Validate all templates, including unused ones, with a safe placeholder.
+            $validation = $actionData;
+            foreach ($validation['argv'] ?? [] as $index => $argument) {
+                if ($argument === ['project' => 'repository']) {
+                    if ($index === 0) {
+                        throw new InvalidArgumentException('Le repository ne peut pas etre executable');
+                    }
+                    $validation['argv'][$index] = 'validation/repository';
+                }
             }
+            ActionDefinition::fromArray($actionId, $validation);
         }
 
         $projects = [];
