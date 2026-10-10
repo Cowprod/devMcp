@@ -16,8 +16,10 @@ final class StdioDualEraTest extends TestCase
         $root = sys_get_temp_dir() . '/devmcp-stdio-' . bin2hex(random_bytes(4));
         mkdir($root, 0770, true);
 
-        $input = fopen('php://temp', 'w+');
-        $output = fopen('php://temp', 'w+');
+        $inputPath = $root . '/stdin.jsonl';
+        $outputPath = $root . '/stdout.jsonl';
+        $input = fopen($inputPath, 'w+');
+        $output = fopen($outputPath, 'w+');
         self::assertIsResource($input);
         self::assertIsResource($output);
 
@@ -55,8 +57,7 @@ final class StdioDualEraTest extends TestCase
             $result = $server->run(new StdioTransport($input, $output));
             self::assertSame(0, $result);
 
-            rewind($output);
-            $response = stream_get_contents($output);
+            $response = file_get_contents($outputPath);
             self::assertIsString($response);
             self::assertStringContainsString('"id":"openai-mcp-discover"', $response);
             self::assertStringContainsString('"supportedVersions":["2026-07-28"]', $response);
