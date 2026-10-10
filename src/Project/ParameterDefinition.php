@@ -33,7 +33,7 @@ final class ParameterDefinition
         $type = $data['type'] ?? null;
         if (!is_string($type) || !in_array(
             $type,
-            ['git_sha', 'android_serial', 'enum', 'integer'],
+            ['git_sha', 'android_serial', 'serial_device', 'enum', 'integer'],
             true,
         )) {
             throw new InvalidArgumentException("Type de paramètre interdit : {$id}");
@@ -95,6 +95,7 @@ final class ParameterDefinition
         return match ($this->type) {
             'git_sha' => $this->normalizeGitSha($value),
             'android_serial' => $this->normalizeAndroidSerial($value),
+            'serial_device' => $this->normalizeSerialDevice($value),
             'enum' => $this->normalizeEnum($value),
             'integer' => $this->normalizeInteger($value),
             default => throw new InvalidArgumentException("Type inconnu : {$this->type}"),
@@ -144,6 +145,20 @@ final class ParameterDefinition
         ) {
             throw new InvalidArgumentException(
                 "Le paramètre {$this->id} n'est pas un serial Android valide"
+            );
+        }
+
+        return $value;
+    }
+
+    private function normalizeSerialDevice(mixed $value): string
+    {
+        if (
+            !is_string($value)
+            || !preg_match('~^/dev/tty(?:ACM|USB)[0-9]+$~D', $value)
+        ) {
+            throw new InvalidArgumentException(
+                "Le paramètre {$this->id} n'est pas un port série autorisé"
             );
         }
 
