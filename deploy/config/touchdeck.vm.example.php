@@ -30,7 +30,16 @@ return [
             'description' => 'TouchDeck - ESP32 tactile',
             'root' => $touchDeckRoot,
             'repository' => 'Cowprod/touchDeck',
-            'shared_actions' => ['git.status', 'git.head', 'workspace.sync'],
+            'shared_actions' => [
+                'git.status',
+                'git.head',
+                'workspace.sync',
+                'platformio.version',
+                'platformio.devices',
+                'serial.capture',
+                'platformio.build',
+                'platformio.upload',
+            ],
             'actions' => [
 
             ],
