@@ -17,11 +17,12 @@ final class ProjectTools
         private readonly ActionRunner $runner,
         private readonly JobManager $jobs,
         private readonly AuditLogger $audit,
+        private readonly HostTools $hostTools = new HostTools(),
     ) {
     }
 
     /**
-     * @return array{projects: list<array<string, mixed>>}
+     * @return array{projects: list<array<string, mixed>>, host: array<string, mixed>}
      */
     public function projectList(): array
     {
@@ -30,7 +31,10 @@ final class ProjectTools
             $projects[] = $project->toPublicArray();
         }
 
-        return ['projects' => $projects];
+        return [
+            'projects' => $projects,
+            'host' => $this->hostTools->capabilities(),
+        ];
     }
 
     /**

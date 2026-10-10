@@ -29,6 +29,16 @@ final class ProjectToolsTest extends TestCase
         self::removeTree($this->root);
     }
 
+    public function testProjectListIncludesHostCapabilitiesBootstrap(): void
+    {
+        $result = $this->tools([])->projectList();
+
+        self::assertArrayHasKey('projects', $result);
+        self::assertArrayHasKey('host', $result);
+        self::assertArrayHasKey('executables', $result['host']);
+        self::assertArrayHasKey('serial_devices', $result['host']);
+    }
+
     public function testActionRunAllowsExplicitLocalSyncAction(): void
     {
         $tools = $this->tools([
