@@ -1,0 +1,27 @@
+[Unit]
+Description=devMcp - OpenAI Secure MCP Tunnel
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=devmcp
+Group=devmcp
+WorkingDirectory=/opt/devmcp
+EnvironmentFile=/etc/devmcp/tunnel.env
+Environment=HOME=/var/lib/devmcp
+ExecStart=/usr/local/bin/tunnel-client run --profile devmcp
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/devmcp /var/log/devmcp
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=devmcp-tunnel
+
+[Install]
+WantedBy=multi-user.target
