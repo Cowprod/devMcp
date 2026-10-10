@@ -37,6 +37,33 @@ final class SharedActionsTest extends TestCase
         self::assertArrayNotHasKey('git.head', $registry->get('disabled')->getActions());
     }
 
+    public function testRepositoryIsBoundFromProjectConfiguration(): void
+    {
+        $config = $this->config();
+        $config['shared_actions']['workspace.sync'] = [
+            'description' => 'Sync a fixed repository',
+            'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-workspace-sync',
+                ['project' => 'repository'], ['param' => 'commit']],
+            'parameters' => ['commit' => ['type' => 'git_sha']],
+        ];
+        $config['projects']['enabled']['repository'] = 'Cowprod/touchDeck';
+        $config['projects']['enabled']['shared_actions'][] = 'workspace.sync';
+        $action = ProjectRegistry::fromConfig($config)->get('enabled')->getAction('workspace.sync');
+        self::assertSame('Cowprod/touchDeck', $action->argv[2]);
+    }
+
+    public function testRepositoryBoundActionRequiresRepository(): void
+    {
+        $config = $this->config();
+        $config['shared_actions']['workspace.sync'] = [
+            'description' => 'Sync a fixed repository',
+            'argv' => ['/usr/bin/php', ['project' => 'repository']],
+        ];
+        $config['projects']['enabled']['shared_actions'][] = 'workspace.sync';
+        $this->expectException(InvalidArgumentException::class);
+        ProjectRegistry::fromConfig($config);
+    }
+
     public function testUnknownSharedActionIsRejected(): void
     {
         $config = $this->config();
