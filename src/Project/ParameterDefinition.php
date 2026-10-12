@@ -168,7 +168,7 @@ final class ParameterDefinition
 
     private function normalizeRelativePath(mixed $value): string
     {
-        if (!is_string($value) || strlen($value) > 512 || $value === '' || str_contains($value, "\\0")
+        if (!is_string($value) || strlen($value) > 512 || $value === '' || str_contains($value, chr(0))
             || str_starts_with($value, '/') || str_contains($value, '\\\\')
             || ($value !== '.' && preg_match('~^(?!/)[A-Za-z0-9._/-]+$~D', $value) !== 1)
             || in_array('..', explode('/', $value), true)
