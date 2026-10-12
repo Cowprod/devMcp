@@ -5,6 +5,11 @@ set -eu
 exec 9>/run/lock/devmcp-update.lock
 flock -n 9 || { echo "devMcp update already running" >&2; exit 1; }
 cd /opt/devmcp
+# Git runs as root while the checkout belongs to the deployment user.
+# Scope trust to this invocation; do not modify root's global git config.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0=/opt/devmcp
 [ "$(git rev-parse --show-toplevel)" = /opt/devmcp ] || exit 1
 [ "$(git branch --show-current)" = main ] || { echo "Expected main branch" >&2; exit 1; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "Tracked local modifications: abort" >&2; exit 1; }
