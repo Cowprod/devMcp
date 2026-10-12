@@ -1,0 +1,2 @@
+# Single privileged operation, never a generic shell.
+devmcp ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block devmcp-update.service

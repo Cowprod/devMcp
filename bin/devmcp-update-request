@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+// Unprivileged, fixed-argument trigger. Privilege is limited by sudoers.
+$cmd = ['/usr/bin/sudo', '-n', '/usr/bin/systemctl', 'start', '--no-block', 'devmcp-update.service'];
+$proc = proc_open($cmd, [0 => ['pipe','r'], 1 => ['pipe','w'], 2 => ['pipe','w']], $pipes);
+if (!is_resource($proc)) { fwrite(STDERR, "Unable to request update\n"); exit(1); }
+fclose($pipes[0]);
+echo stream_get_contents($pipes[1]);
+fwrite(STDERR, stream_get_contents($pipes[2]));
+fclose($pipes[1]); fclose($pipes[2]);
+exit(proc_close($proc));
