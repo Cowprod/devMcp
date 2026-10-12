@@ -20,6 +20,6 @@ git merge --ff-only "$new"
 if [ -f composer.lock ]; then
     composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 fi
-/usr/bin/php /opt/devmcp/bin/devmcp-doctor
+DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
 systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
 echo "devMcp updated: $old -> $new"
