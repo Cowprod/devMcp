@@ -52,6 +52,17 @@ return [
         ],
     ],
 
+    'workspace.find' => [
+        'description' => 'Recherche bornée par extension autorisée, sans suivre les liens symboliques.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-workspace-inspect', 'find', ['param' => 'path'], ['param' => 'filter']],
+        'cwd' => '.', 'timeout' => 15, 'sync' => true,
+        'parameters' => [
+            'path' => ['type' => 'relative_path', 'description' => 'Répertoire relatif à explorer.'],
+            'filter' => ['type' => 'enum', 'description' => 'Extension autorisée ou all.',
+                'values' => ['all','php','js','json','md']],
+        ],
+    ],
+
     'workspace.sync' => [
         'description' => 'Synchronise le workspace vers un SHA origin vérifié.',
         'argv' => [

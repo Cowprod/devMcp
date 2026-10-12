@@ -1,0 +1,77 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+use Symfony\Component\Process\Process;
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+[$script, $op, $pm2, $name, $entry, $port] = array_pad($argv, 6, '');
+$healthPath = $argv[6] ?? '/health';
+$cwd = getcwd();
+if (!is_string($cwd) || !in_array($op, ['start','stop','restart','reload','status','logs','health'], true)
+    || !in_array($pm2, ['/usr/bin/pm2','/usr/local/bin/pm2'], true)
+    || preg_match('/^[a-z][a-z0-9-]{1,63}$/D', $name) !== 1
+    || preg_match('~^[a-zA-Z0-9_./-]+\\.js$~D', $entry) !== 1
+    || str_contains($entry, '..') || str_starts_with($entry, '/')
+    || preg_match('~^/[A-Za-z0-9/_-]{1,100}$~D', $healthPath) !== 1
+    || filter_var($port, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1024,'max_range'=>65535]]) === false) {
+    fwrite(STDERR, "Invalid PM2 service configuration\n"); exit(2);
+}
+$entryReal = realpath($cwd . '/' . $entry);
+if ($entryReal === false || !str_starts_with($entryReal, $cwd . '/') || !is_file($entryReal)) {
+    fwrite(STDERR, "Entry must be a file inside service cwd\n"); exit(2);
+}
+$home = '/var/lib/devmcp/pm2';
+if (!is_dir($home)) { fwrite(STDERR, "Dedicated PM2_HOME must be provisioned\n"); exit(2); }
+$env = ['PM2_HOME'=>$home, 'HOST'=>'127.0.0.1', 'PORT'=>(string)$port, 'NODE_ENV'=>'production'];
+$run = static function (array $cmd, int $timeout=30) use ($cwd,$env): Process {
+    $p = new Process($cmd, $cwd, $env, null, $timeout);
+    $p->run();
+    return $p;
+};
+if ($op === 'health') {
+    $ctx = stream_context_create(['http'=>['timeout'=>3,'ignore_errors'=>true]]);
+    $url = 'http://127.0.0.1:' . $port . $healthPath;
+    $data = @file_get_contents($url, false, $ctx);
+    $status = $http_response_header[0] ?? '';
+    echo json_encode(['url'=>$url,'http_status'=>$status,'healthy'=>str_contains($status,' 200 '),'body'=>is_string($data)?substr($data,0,2048):null]) . PHP_EOL;
+    exit(str_contains($status,' 200 ') ? 0 : 4);
+}
+$p = $run([$pm2,'jlist']);
+if (!$p->isSuccessful()) { fwrite(STDERR, "Unable to query PM2\n"); exit(4); }
+$list = json_decode($p->getOutput(), true);
+if (!is_array($list)) { fwrite(STDERR, "Invalid PM2 process list\n"); exit(4); }
+$owned = false;
+foreach ($list as $item) {
+    if (($item['name'] ?? '') !== $name) { continue; }
+    $recorded = $item['pm2_env']['pm_cwd'] ?? null;
+    $recordedScript = $item['pm2_env']['pm_exec_path'] ?? null;
+    if ($recorded !== $cwd || $recordedScript !== $entryReal) {
+        fwrite(STDERR, "PM2 name collision: service not owned by this project\n"); exit(5);
+    }
+    $owned = true;
+}
+if ($op === 'status') {
+    $statuses = [];
+    foreach ($list as $item) { if (($item['name'] ?? '') === $name) { $statuses[] = ['pid'=>$item['pid']??null,'status'=>$item['pm2_env']['status']??null,'restarts'=>$item['pm2_env']['restart_time']??null]; } }
+    echo json_encode(['name'=>$name,'exists'=>$owned,'processes'=>$statuses],JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(0);
+}
+if ($op === 'logs') {
+    if (!$owned) { fwrite(STDERR, "Service not started\n"); exit(5); }
+    $p=$run([$pm2,'logs',$name,'--nostream','--lines','50','--raw'],15);
+    $out=substr($p->getOutput() . $p->getErrorOutput(),0,8192);
+    $out=preg_replace('/(?i)(authorization|token|password|secret|api[_-]?key)\\s*[:=]\\s*[^\\s]+/', '$1=[REDACTED]', $out);
+    echo $out;
+    exit($p->getExitCode()??1);
+}
+if (!$owned && $op !== 'start') { fwrite(STDERR, "Service not started\n"); exit(5); }
+if ($op === 'start' && $owned) { fwrite(STDERR, "Service already registered\n"); exit(5); }
+$cmd = $op === 'start'
+    ? [$pm2,'start',$entryReal,'--name',$name,'--cwd',$cwd,'--interpreter','node','--update-env']
+    : ($op === 'stop' ? [$pm2,'stop',$name] : [$pm2,$op,$name,'--update-env']);
+$p=$run($cmd,60);
+if (!$p->isSuccessful()) { fwrite(STDERR, substr($p->getErrorOutput(),0,2048)); exit($p->getExitCode()??4); }
+$saved=$run([$pm2,'save','--force'],30);
+if (!$saved->isSuccessful()) { fwrite(STDERR, "PM2 operation succeeded but persistence failed\\n"); exit(6); }
+echo json_encode(['operation'=>$op,'name'=>$name,'ok'=>true,'saved'=>true]) . PHP_EOL;

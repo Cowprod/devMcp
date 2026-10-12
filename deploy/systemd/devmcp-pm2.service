@@ -1,0 +1,19 @@
+[Unit]
+Description=Dedicated devMcp PM2 process manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=devmcp
+Group=devmcp
+Environment=PM2_HOME=/var/lib/devmcp/pm2
+Environment=HOME=/var/lib/devmcp
+PIDFile=/var/lib/devmcp/pm2/pm2.pid
+ExecStart=/usr/bin/pm2 resurrect
+ExecStop=/usr/bin/pm2 kill
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
