@@ -11,7 +11,7 @@ Cette extension conserve la séparation GitHub (code) / devMcp (exécution). Auc
 - `node.test`, `node.build` : uniquement les scripts présents dans `package.json`, avec actions explicitement activées par projet.
 - `service.start|stop|restart|reload|status|logs|health` : service PM2 à nom, entrée, cwd et port statiques, dans un PM2_HOME dédié.
 
-Les actions npm exécutent du code du dépôt, y compris les hooks d'installation. L'administrateur doit n'activer ces actions que sur un dépôt et une révision de confiance. Les chemins d'exécutables Node, npm et PM2 doivent être vérifiés sur chaque hôte. Le PM2 helper refuse un nom déjà occupé par un service dont le cwd et l'entrée ne correspondent pas.
+Les définitions `node.*` et `service.*` sont désormais dans `config/shared-actions.php`. Chaque projet n'en active que les identifiants nécessaires dans `shared_actions` ; les valeurs propres au projet sont dans `node.cwd` et `service.{name,entry,port,health_path}`. Aucun `argv` spécifique au projet n'est nécessaire. Le moteur substitue ces champs via une liste blanche et valide leurs formats. `node.build` reste disponible globalement mais n'est pas activé pour TouchDeck.\n\nLes actions npm exécutent du code du dépôt, y compris les hooks d'installation. L'administrateur doit n'activer ces actions que sur un dépôt et une révision de confiance. Les chemins d'exécutables Node, npm et PM2 doivent être vérifiés sur chaque hôte. Le PM2 helper refuse un nom déjà occupé par un service dont le cwd et l'entrée ne correspondent pas.
 
 ## Préparation VM (administrateur)
 
