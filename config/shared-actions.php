@@ -63,6 +63,78 @@ return [
         ],
     ],
 
+
+    // Generic Node.js actions. Each project explicitly opts in and supplies node.cwd.
+    'node.version' => [
+        'description' => 'Version du runtime Node.js.',
+        'argv' => ['/usr/bin/node', '--version'],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 10, 'sync' => true,
+    ],
+    'node.dependencies' => [
+        'description' => 'Opération npm dependencies sur un dépôt autorisé.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'dependencies', '/usr/bin/node', '/usr/bin/npm'],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 950,
+    ],
+    'node.test' => [
+        'description' => 'Opération npm test sur un dépôt autorisé.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'test', '/usr/bin/node', '/usr/bin/npm'],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 650,
+    ],
+    'node.build' => [
+        'description' => 'Opération npm build sur un dépôt autorisé.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'build', '/usr/bin/node', '/usr/bin/npm'],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 950,
+    ],
+    'service.start' => [
+        'description' => 'Gestion générique du service PM2 déclaré (start).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'start', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90,
+    ],
+    'service.stop' => [
+        'description' => 'Gestion générique du service PM2 déclaré (stop).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'stop', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90,
+    ],
+    'service.restart' => [
+        'description' => 'Gestion générique du service PM2 déclaré (restart).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'restart', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90,
+    ],
+    'service.reload' => [
+        'description' => 'Gestion générique du service PM2 déclaré (reload).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'reload', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90,
+    ],
+    'service.status' => [
+        'description' => 'Gestion générique du service PM2 déclaré (status).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'status', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90, 'sync' => true,
+    ],
+    'service.logs' => [
+        'description' => 'Gestion générique du service PM2 déclaré (logs).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'logs', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 90,
+    ],
+    'service.health' => [
+        'description' => 'Gestion générique du service PM2 déclaré (health).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'health', '/usr/bin/pm2',
+            ['project' => 'service.name'], ['project' => 'service.entry'],
+            ['project' => 'service.port'], ['project' => 'service.health_path']],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 10, 'sync' => true,
+    ],
+
     'workspace.sync' => [
         'description' => 'Synchronise le workspace vers un SHA origin vérifié.',
         'argv' => [
