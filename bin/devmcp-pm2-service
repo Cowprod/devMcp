@@ -70,4 +70,6 @@ $cmd = $op === 'start'
     : ($op === 'stop' ? [$pm2,'stop',$name] : [$pm2,$op,$name,'--update-env']);
 $p=$run($cmd,60);
 if (!$p->isSuccessful()) { fwrite(STDERR, substr($p->getErrorOutput(),0,2048)); exit($p->getExitCode()??4); }
-echo json_encode(['operation'=>$op,'name'=>$name,'ok'=>true]) . PHP_EOL;
+$saved=$run([$pm2,'save','--force'],30);
+if (!$saved->isSuccessful()) { fwrite(STDERR, "PM2 operation succeeded but persistence failed\\n"); exit(6); }
+echo json_encode(['operation'=>$op,'name'=>$name,'ok'=>true,'saved'=>true]) . PHP_EOL;
