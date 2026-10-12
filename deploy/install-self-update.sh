@@ -5,7 +5,9 @@ set -eu
 cp /opt/devmcp/deploy/systemd/devmcp-update.service /etc/systemd/system/devmcp-update.service
 cp /opt/devmcp/deploy/systemd/devmcp-update.timer /etc/systemd/system/devmcp-update.timer
 sh /opt/devmcp/deploy/install-update-trigger.sh
+cp /opt/devmcp/deploy/systemd/devmcp-update-request.service /etc/systemd/system/devmcp-update-request.service
+cp /opt/devmcp/deploy/systemd/devmcp-update-request.timer /etc/systemd/system/devmcp-update-request.timer
 systemctl daemon-reload
-systemctl enable --now devmcp-update.timer
+systemctl enable --now devmcp-update.timer devmcp-update-request.timer
 systemctl start devmcp-update.service
 systemctl status devmcp-update.timer --no-pager
