@@ -52,11 +52,13 @@ switch ($operation) {
         $result = ['path' => $relative, 'entries' => $entries, 'total_visible' => $visible, 'truncated' => $visible > 200];
         break;
     case 'find':
+        $filter = $argv[3] ?? 'all';
+        if (!in_array($filter, ['all','php','js','json','md'], true)) { fwrite(STDERR, "Invalid find filter\\n"); exit(2); }
         if (!is_dir($real)) { fwrite(STDERR, "Not a directory\\n"); exit(4); }
         $results = [];
         $scanned = 0;
         $maxDepth = 5;
-        $walk = static function (string $dir, string $prefix, int $depth) use (&$walk, &$results, &$scanned, $deny, $maxDepth): void {
+        $walk = static function (string $dir, string $prefix, int $depth) use (&$walk, &$results, &$scanned, $deny, $maxDepth, $filter): void {
             if ($depth > $maxDepth || $scanned >= 2000 || count($results) >= 200) { return; }
             $names = scandir($dir);
             if ($names === false) { return; }
@@ -66,7 +68,9 @@ switch ($operation) {
                 $path = $dir . '/' . $name;
                 if (is_link($path)) { continue; }
                 $relativeName = ($prefix === '.' ? '' : $prefix . '/') . $name;
-                $results[] = ['path'=>$relativeName,'type'=>is_dir($path)?'directory':'file'];
+                if ($filter === 'all' || (is_file($path) && str_ends_with(strtolower($name), '.' . $filter))) {
+                    $results[] = ['path'=>$relativeName,'type'=>is_dir($path)?'directory':'file'];
+                }
                 if (count($results) >= 200) { return; }
                 if (is_dir($path)) { $walk($path, $relativeName, $depth + 1); }
             }
