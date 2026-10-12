@@ -1,0 +1,67 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+// Workspace-only, read-only inspection. CWD is the trusted project root.
+$operation = $argv[1] ?? '';
+$relative = $argv[2] ?? '.';
+$root = realpath(getcwd() ?: '');
+if ($root === false || !is_dir($root)) { fwrite(STDERR, "Invalid workspace\n"); exit(2); }
+if (!is_string($relative) || strlen($relative) > 512 || str_contains($relative, "\0") || str_starts_with($relative, '/') || str_contains($relative, '\\')) {
+    fwrite(STDERR, "Invalid relative path\n"); exit(2);
+}
+$segments = $relative === '.' ? [] : explode('/', $relative);
+$deny = '/^(?:\.env(?:\..*)?|\.git|\.ssh|\.aws|\.npmrc|\.pypirc|id_(?:rsa|ed25519|ecdsa).*|.*\.(?:pem|key|p12|pfx)|credentials(?:\..*)?|secrets?(?:\..*)?)$/i';
+foreach ($segments as $segment) {
+    if ($segment === '' || $segment === '.' || $segment === '..' || preg_match('/[\x00-\x1f]/', $segment) || preg_match($deny, $segment)) {
+        fwrite(STDERR, "Forbidden path\n"); exit(3);
+    }
+}
+$path = $root;
+foreach ($segments as $segment) {
+    $path .= '/' . $segment;
+    if (is_link($path)) { fwrite(STDERR, "Symbolic links forbidden\n"); exit(3); }
+}
+$real = realpath($path);
+if ($real === false || ($real !== $root && !str_starts_with($real, $root . '/'))) {
+    fwrite(STDERR, "Path outside workspace or not found\n"); exit(3);
+}
+$info = static function (string $p, string $rel): array {
+    $s = lstat($p);
+    return ['path' => $rel, 'type' => is_link($p) ? 'symlink' : (is_dir($p) ? 'directory' : (is_file($p) ? 'file' : 'other')),
+        'size' => $s === false ? null : $s['size'], 'modified_utc' => $s === false ? null : gmdate('c', $s['mtime'])];
+};
+$result = null;
+switch ($operation) {
+    case 'stat':
+        $result = $info($real, $relative);
+        break;
+    case 'list':
+        if (!is_dir($real)) { fwrite(STDERR, "Not a directory\n"); exit(4); }
+        $names = scandir($real);
+        if ($names === false) { fwrite(STDERR, "Directory not readable\n"); exit(4); }
+        $entries = [];
+        $visible = 0;
+        foreach ($names as $name) {
+            if ($name === '.' || $name === '..' || preg_match($deny, $name)) { continue; }
+            $visible++;
+            if (count($entries) >= 200) { continue; }
+            $child = $real . '/' . $name;
+            $entries[] = $info($child, ($relative === '.' ? '' : $relative . '/') . $name);
+        }
+        $result = ['path' => $relative, 'entries' => $entries, 'total_visible' => $visible, 'truncated' => $visible > 200];
+        break;
+    case 'read':
+        if (!is_file($real) || !is_readable($real)) { fwrite(STDERR, "Not a readable file\n"); exit(4); }
+        $size = filesize($real);
+        if ($size === false || $size > 65536) { fwrite(STDERR, "File exceeds 64 KiB limit\n"); exit(4); }
+        $data = file_get_contents($real);
+        if ($data === false || str_contains($data, "\0") || !preg_match('//u', $data)) {
+            fwrite(STDERR, "Binary or invalid UTF-8 file\n"); exit(4);
+        }
+        $result = ['path' => $relative, 'size' => strlen($data), 'content' => $data];
+        break;
+    default:
+        fwrite(STDERR, "Unknown operation\n"); exit(2);
+}
+echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . PHP_EOL;
