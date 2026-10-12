@@ -4,16 +4,14 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=forking
+Type=oneshot
 User=devmcp
 Group=devmcp
 Environment=PM2_HOME=/var/lib/devmcp/pm2
 Environment=HOME=/var/lib/devmcp
-PIDFile=/var/lib/devmcp/pm2/pm2.pid
 ExecStart=/usr/bin/pm2 resurrect
 ExecStop=/usr/bin/pm2 kill
-Restart=on-failure
-RestartSec=5
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
