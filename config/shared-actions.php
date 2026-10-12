@@ -3,6 +3,12 @@
 declare(strict_types=1);
 
 return [
+    'devmcp.update' => [
+        'description' => 'Demande la mise à jour privilégiée de devMcp via le service systemd dédié.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-update-request'],
+        'cwd' => '.', 'timeout' => 15, 'sync' => true,
+    ],
+
     'git.status' => [
         'description' => 'Consulte les modifications locales du workspace.',
         'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
