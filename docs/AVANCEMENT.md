@@ -12,7 +12,7 @@
 | J08 | ACCEPTÉ | PR #15 | bootstrap ESP32 reproductible | PlatformIO 6.2.0 épinglé, dialout, PATH/HOME systemd |
 | J09 | ACCEPTÉ | PR #16 | presets d’actions Git/PlatformIO versionnés | serial_device borné, build/upload sans shell libre |
 | J10 | ACCEPTÉ | PR #17 | application runtime VM en une commande | deploy/apply-vm-runtime.sh, CI verte |
-| J12 | PARTIEL | feat/node-pm2-workspace | inspection find, actions Node/npm, PM2 et documentation | CI et qualification VM à confirmer ; package-lock TouchDeck absent |
+| J12 | PARTIEL | feat/node-pm2-workspace | inspection find, actions Node/npm, PM2 et documentation | CI et qualification VM à confirmer ; premier npm install non reproductible sans lockfile TouchDeck |
 | J11 | EN COURS | - | qualification toolchain ESP32 sur VM réelle | déploiement et relecture host_capabilities à faire |
 
 ## État de la chaîne validée
