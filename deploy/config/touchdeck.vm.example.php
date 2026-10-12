@@ -64,37 +64,37 @@ return [
                 // node.build is deliberately not enabled: TouchDeck has no build script.
                 'service.start' => [
                     'description' => 'TouchDeck PM2 start (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'start', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'start', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90,
                 ],
                 'service.stop' => [
                     'description' => 'TouchDeck PM2 stop (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'stop', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'stop', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90,
                 ],
                 'service.restart' => [
                     'description' => 'TouchDeck PM2 restart (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'restart', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'restart', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90,
                 ],
                 'service.reload' => [
                     'description' => 'TouchDeck PM2 reload (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'reload', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'reload', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90,
                 ],
                 'service.status' => [
                     'description' => 'TouchDeck PM2 status (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'status', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'status', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90, 'sync' => true,
                 ],
                 'service.logs' => [
                     'description' => 'TouchDeck PM2 logs (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'logs', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'logs', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 90,
                 ],
                 'service.health' => [
                     'description' => 'TouchDeck PM2 health (dedicated PM2_HOME)',
-                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'health', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000'],
+                    'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'health', '/usr/bin/pm2', 'touchdeck-server', 'src/index.js', '3000', '/api/health'],
                     'cwd' => 'server', 'timeout' => 10, 'sync' => true,
                 ],
 
