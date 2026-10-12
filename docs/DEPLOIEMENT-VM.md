@@ -195,3 +195,9 @@ sudo systemctl disable --now devmcp-update.timer
 ```
 
 Les contrôles post-update incluent la syntaxe PHP, Composer lorsque le lockfile existe, `devmcp-doctor`, et le redémarrage des services existants. Une erreur interrompt le déploiement et reste visible dans `journalctl -u devmcp-update.service`. Ce dispositif n'effectue pas encore de rollback automatique et ne modifie pas les permissions locales des projets.
+
+### Déclenchement depuis ChatGPT
+
+L'installation initiale `sudo sh deploy/install-self-update.sh` installe aussi une règle sudoers limitée à `systemctl start --no-block devmcp-update.service` pour le compte `devmcp`, puis autorise une seule action `devmcp.update` dans le projet déjà configuré avec `node.dependencies`. La configuration est sauvegardée avant modification. Si cette action ne peut pas être identifiée sans ambiguïté, l'installation échoue plutôt que de modifier une autre entrée.
+
+L'action MCP `devmcp.update` ne reçoit aucun argument et demande le lancement asynchrone du service systemd. Son retour signifie « mise à jour demandée », pas « mise à jour réussie ». Consulter `journalctl -u devmcp-update.service` pour le résultat. Le service reste propriétaire des privilèges et des vérifications Git.
