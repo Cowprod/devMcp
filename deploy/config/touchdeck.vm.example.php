@@ -52,7 +52,7 @@ return [
                     'cwd' => 'server', 'timeout' => 10, 'sync' => true,
                 ],
                 'node.dependencies' => [
-                    'description' => 'Reproducible npm ci (requires package-lock.json)',
+                    'description' => 'npm ci with lockfile; npm install bootstrap otherwise',
                     'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'dependencies', '/usr/bin/node', '/usr/bin/npm'],
                     'cwd' => 'server', 'timeout' => 950,
                 ],
