@@ -9,7 +9,7 @@ $operation = $argv[1] ?? '';
 $node = $argv[2] ?? '';
 $npm = $argv[3] ?? '';
 $cwd = getcwd();
-if (!is_string($cwd) || !is_file($cwd . '/package.json') || !is_file($cwd . '/package-lock.json')) {
+if (!is_string($cwd) || ($operation !== 'version' && (!is_file($cwd . '/package.json') || !is_file($cwd . '/package-lock.json')))) {
     fwrite(STDERR, "package.json and package-lock.json required for reproducible execution\n"); exit(2);
 }
 if (!in_array($operation, ['version', 'dependencies', 'test', 'build'], true)
@@ -17,7 +17,7 @@ if (!in_array($operation, ['version', 'dependencies', 'test', 'build'], true)
     || !in_array($npm, ['/usr/bin/npm', '/usr/local/bin/npm'], true)) {
     fwrite(STDERR, "Unapproved Node task or executable\n"); exit(2);
 }
-$package = json_decode(file_get_contents($cwd . '/package.json') ?: '', true);
+$package = $operation === 'version' ? [] : json_decode(file_get_contents($cwd . '/package.json') ?: '', true);
 if (!is_array($package)) { fwrite(STDERR, "Invalid package.json\n"); exit(2); }
 if ($operation === 'version') { $cmd = [$node, '--version']; }
 elseif ($operation === 'dependencies') { $cmd = [$npm, 'ci', '--no-audit', '--no-fund']; }
