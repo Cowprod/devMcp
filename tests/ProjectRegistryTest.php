@@ -46,6 +46,48 @@ final class ProjectRegistryTest extends TestCase
         self::assertSame('php.version', $project->getAction('php.version')->id);
     }
 
+    public function testSharedNodeAndPm2ActionsResolveFromProjectSettings(): void
+    {
+        mkdir($this->root . '/server');
+        $shared = require dirname(__DIR__) . '/config/shared-actions.php';
+        $registry = ProjectRegistry::fromConfig([
+            'shared_actions' => $shared,
+            'projects' => [
+                'demo' => [
+                    'root' => $this->root,
+                    'node' => ['cwd' => 'server'],
+                    'service' => [
+                        'name' => 'demo-server', 'entry' => 'src/index.js',
+                        'port' => 3000, 'health_path' => '/api/health',
+                    ],
+                    'shared_actions' => ['workspace.list', 'node.version', 'node.dependencies', 'node.test', 'service.start', 'service.health'],
+                ],
+            ],
+        ]);
+        $project = $registry->get('demo');
+        self::assertSame('server', $project->getAction('node.test')->cwd);
+        self::assertSame(
+            ['/usr/bin/php', '/opt/devmcp/bin/devmcp-pm2-service', 'start',
+                '/usr/bin/pm2', 'demo-server', 'src/index.js', '3000', '/api/health'],
+            $project->getAction('service.start')->buildArgv(),
+        );
+        self::assertCount(6, $project->getActions());
+    }
+
+    public function testRejectsUnsafeProjectServiceName(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        ProjectRegistry::fromConfig([
+            'shared_actions' => require dirname(__DIR__) . '/config/shared-actions.php',
+            'projects' => ['demo' => [
+                'root' => $this->root, 'node' => ['cwd' => '.'],
+                'service' => ['name' => '../other', 'entry' => 'index.js',
+                    'port' => 3000, 'health_path' => '/api/health'],
+                'shared_actions' => ['service.start'],
+            ]],
+        ]);
+    }
+
     public function testRejectsShellActions(): void
     {
         $this->expectException(InvalidArgumentException::class);

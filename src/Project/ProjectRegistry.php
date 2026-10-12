@@ -37,12 +37,20 @@ final class ProjectRegistry
             // Validate all templates, including unused ones, with a safe placeholder.
             $validation = $actionData;
             foreach ($validation['argv'] ?? [] as $index => $argument) {
+                if (is_array($argument) && isset($argument['project']) && in_array($argument['project'], ['node.cwd', 'service.name', 'service.entry', 'service.port', 'service.health_path'], true)) {
+                    if ($index === 0) { throw new InvalidArgumentException('Executable de projet interdit'); }
+                    $validation['argv'][$index] = 'validation';
+                    continue;
+                }
                 if ($argument === ['project' => 'repository']) {
                     if ($index === 0) {
                         throw new InvalidArgumentException('Le repository ne peut pas etre executable');
                     }
                     $validation['argv'][$index] = 'validation/repository';
                 }
+            }
+            if (isset($validation['cwd']) && $validation['cwd'] === ['project' => 'node.cwd']) {
+                $validation['cwd'] = '.';
             }
             ActionDefinition::fromArray($actionId, $validation);
         }
@@ -69,7 +77,11 @@ final class ProjectRegistry
                 }
                 $template = $sharedActions[$actionId];
                 foreach ($template['argv'] ?? [] as $index => $argument) {
-                    if ($argument !== ['project' => 'repository']) {
+                    if (!is_array($argument) || array_keys($argument) !== ['project']) { continue; }
+                    if ($index === 0) { throw new InvalidArgumentException('Executable de projet interdit'); }
+                    $key = $argument['project'];
+                    if ($key !== 'repository') {
+                        $template['argv'][$index] = self::resolveProjectSetting($projectData, $key, $projectId);
                         continue;
                     }
                     if ($index === 0) {
@@ -81,6 +93,9 @@ final class ProjectRegistry
                     }
                     $template['argv'][$index] = $repository;
                 }
+                if (($template['cwd'] ?? null) === ['project' => 'node.cwd']) {
+                    $template['cwd'] = self::resolveProjectSetting($projectData, 'node.cwd', $projectId);
+                }
                 $actions[$actionId] = $template;
             }
             $projectData['actions'] = $actions;
@@ -90,6 +105,37 @@ final class ProjectRegistry
         ksort($projects);
 
         return new self($projects);
+    }
+
+    /**
+     * Resolve only allowlisted project configuration, never caller-supplied paths or commands.
+     * @param array<string,mixed> $data
+     */
+    private static function resolveProjectSetting(array $data, string $key, string $id): string
+    {
+        $node = $data['node'] ?? [];
+        $service = $data['service'] ?? [];
+        $value = match ($key) {
+            'node.cwd' => is_array($node) ? ($node['cwd'] ?? null) : null,
+            'service.name' => is_array($service) ? ($service['name'] ?? null) : null,
+            'service.entry' => is_array($service) ? ($service['entry'] ?? null) : null,
+            'service.port' => is_array($service) ? ($service['port'] ?? null) : null,
+            'service.health_path' => is_array($service) ? ($service['health_path'] ?? null) : null,
+            default => null,
+        };
+        if ($key === 'service.port' && is_int($value)) { $value = (string) $value; }
+        $patterns = [
+            'node.cwd' => '~^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,128}$~D',
+            'service.name' => '~^[a-z][a-z0-9-]{1,63}$~D',
+            'service.entry' => '~^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+\\.js$~D',
+            'service.port' => '~^[0-9]{4,5}$~D',
+            'service.health_path' => '~^/[A-Za-z0-9/_-]{1,100}$~D',
+        ];
+        if (!is_string($value) || !isset($patterns[$key]) || preg_match($patterns[$key], $value) !== 1
+            || ($key === 'service.port' && ((int)$value < 1024 || (int)$value > 65535))) {
+            throw new InvalidArgumentException("Configuration {$key} invalide pour {$id}");
+        }
+        return $value;
     }
 
     public function get(string $projectId): ProjectDefinition
