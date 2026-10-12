@@ -1,0 +1,10 @@
+[Unit]
+Description=Dispatch queued devMcp update requests
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=devmcp-update-request.service
+
+[Install]
+WantedBy=timers.target
