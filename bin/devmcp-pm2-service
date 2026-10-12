@@ -6,12 +6,14 @@ use Symfony\Component\Process\Process;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 [$script, $op, $pm2, $name, $entry, $port] = array_pad($argv, 6, '');
+$healthPath = $argv[6] ?? '/health';
 $cwd = getcwd();
 if (!is_string($cwd) || !in_array($op, ['start','stop','restart','reload','status','logs','health'], true)
     || !in_array($pm2, ['/usr/bin/pm2','/usr/local/bin/pm2'], true)
     || preg_match('/^[a-z][a-z0-9-]{1,63}$/D', $name) !== 1
     || preg_match('~^[a-zA-Z0-9_./-]+\\.js$~D', $entry) !== 1
     || str_contains($entry, '..') || str_starts_with($entry, '/')
+    || preg_match('~^/[A-Za-z0-9/_-]{1,100}$~D', $healthPath) !== 1
     || filter_var($port, FILTER_VALIDATE_INT, ['options'=>['min_range'=>1024,'max_range'=>65535]]) === false) {
     fwrite(STDERR, "Invalid PM2 service configuration\n"); exit(2);
 }
@@ -29,7 +31,7 @@ $run = static function (array $cmd, int $timeout=30) use ($cwd,$env): Process {
 };
 if ($op === 'health') {
     $ctx = stream_context_create(['http'=>['timeout'=>3,'ignore_errors'=>true]]);
-    $url = 'http://127.0.0.1:' . $port . '/api/health';
+    $url = 'http://127.0.0.1:' . $port . $healthPath;
     $data = @file_get_contents($url, false, $ctx);
     $status = $http_response_header[0] ?? '';
     echo json_encode(['url'=>$url,'http_status'=>$status,'healthy'=>str_contains($status,' 200 '),'body'=>is_string($data)?substr($data,0,2048):null]) . PHP_EOL;
