@@ -9,8 +9,8 @@ $operation = $argv[1] ?? '';
 $node = $argv[2] ?? '';
 $npm = $argv[3] ?? '';
 $cwd = getcwd();
-if (!is_string($cwd) || ($operation !== 'version' && (!is_file($cwd . '/package.json') || !is_file($cwd . '/package-lock.json')))) {
-    fwrite(STDERR, "package.json and package-lock.json required for reproducible execution\n"); exit(2);
+if (!is_string($cwd) || ($operation !== 'version' && !is_file($cwd . '/package.json'))) {
+    fwrite(STDERR, "package.json required\n"); exit(2);
 }
 if (!in_array($operation, ['version', 'dependencies', 'test', 'build'], true)
     || !in_array($node, ['/usr/bin/node', '/usr/local/bin/node'], true)
@@ -20,7 +20,7 @@ if (!in_array($operation, ['version', 'dependencies', 'test', 'build'], true)
 $package = $operation === 'version' ? [] : json_decode(file_get_contents($cwd . '/package.json') ?: '', true);
 if (!is_array($package)) { fwrite(STDERR, "Invalid package.json\n"); exit(2); }
 if ($operation === 'version') { $cmd = [$node, '--version']; }
-elseif ($operation === 'dependencies') { $cmd = [$npm, 'ci', '--no-audit', '--no-fund']; }
+elseif ($operation === 'dependencies') { $cmd = [$npm, is_file($cwd . '/package-lock.json') ? 'ci' : 'install', '--no-audit', '--no-fund']; }
 else {
     if (!isset($package['scripts'][$operation]) || !is_string($package['scripts'][$operation])) {
         fwrite(STDERR, "Script not declared in package.json\n"); exit(3);
