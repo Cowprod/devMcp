@@ -34,8 +34,20 @@ if ($op === 'health') {
     $url = 'http://127.0.0.1:' . $port . $healthPath;
     $data = @file_get_contents($url, false, $ctx);
     $status = $http_response_header[0] ?? '';
-    echo json_encode(['url'=>$url,'http_status'=>$status,'healthy'=>str_contains($status,' 200 '),'body'=>is_string($data)?substr($data,0,2048):null]) . PHP_EOL;
-    exit(str_contains($status,' 200 ') ? 0 : 4);
+    $healthy = str_contains($status, ' 200 ');
+    $error = error_get_last();
+    $diagnostic = [
+        'url' => $url,
+        'http_status' => $status,
+        'healthy' => $healthy,
+        'body' => is_string($data) ? substr($data, 0, 2048) : null,
+    ];
+    if (!$healthy) {
+        $diagnostic['allow_url_fopen'] = (bool) ini_get('allow_url_fopen');
+        $diagnostic['error'] = is_array($error) ? substr((string) ($error['message'] ?? ''), 0, 512) : null;
+    }
+    echo json_encode($diagnostic, JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit($healthy ? 0 : 4);
 }
 $p = $run([$pm2,'jlist']);
 if (!$p->isSuccessful()) { fwrite(STDERR, "Unable to query PM2\n"); exit(4); }
