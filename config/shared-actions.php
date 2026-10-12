@@ -75,6 +75,11 @@ return [
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'dependencies', '/usr/bin/node', '/usr/bin/npm'],
         'cwd' => ['project' => 'node.cwd'], 'timeout' => 950,
     ],
+    'node.dependencies.update' => [
+        'description' => 'Met à jour les dépendances npm et le lockfile via npm install dans le répertoire Node autorisé.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'dependencies-update', '/usr/bin/node', '/usr/bin/npm'],
+        'cwd' => ['project' => 'node.cwd'], 'timeout' => 950,
+    ],
     'node.test' => [
         'description' => 'Opération npm test sur un dépôt autorisé.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-node-task', 'test', '/usr/bin/node', '/usr/bin/npm'],

@@ -40,6 +40,7 @@ return [
                 'workspace.find',
                 'node.version',
                 'node.dependencies',
+                'node.dependencies.update',
                 'node.test',
                 'service.start',
                 'service.stop',
