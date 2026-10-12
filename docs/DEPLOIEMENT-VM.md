@@ -171,3 +171,27 @@ Le script échoue explicitement si le groupe `dialout` ou la configuration local
 9. devmcp-tunnel actif et tunnel-client connecté.
 10. outil project_list visible depuis ChatGPT.
 11. premier action_run en lecture validé avant les actions mutantes.
+
+## Mises à jour automatiques (optionnelles)
+
+Le bootstrap initial nécessite une seule intervention root après avoir extrait la version contenant cette fonctionnalité :
+
+```sh
+cd /opt/devmcp && sudo git pull --ff-only && sudo sh deploy/install-self-update.sh
+```
+
+Le timer systemd vérifie quotidiennement `origin/main` à 04:00 (+ délai aléatoire de 15 minutes). Les mises à jour sont limitées à une avance rapide de `main`, avec refus en cas de modification locale suivie par Git. Le script ne touche jamais à `/etc/devmcp/global.php`, ni aux workspaces des projets. Le fichier `composer.lock` non suivi n'est pas supprimé. Les opérations sont sérialisées par `flock`.
+
+Pour déclencher une vérification manuelle ultérieurement :
+
+```sh
+sudo systemctl start devmcp-update.service
+```
+
+Pour désactiver les mises à jour automatiques :
+
+```sh
+sudo systemctl disable --now devmcp-update.timer
+```
+
+Les contrôles post-update incluent la syntaxe PHP, Composer lorsque le lockfile existe, `devmcp-doctor`, et le redémarrage des services existants. Une erreur interrompt le déploiement et reste visible dans `journalctl -u devmcp-update.service`. Ce dispositif n'effectue pas encore de rollback automatique et ne modifie pas les permissions locales des projets.

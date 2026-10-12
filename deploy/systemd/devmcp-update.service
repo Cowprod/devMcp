@@ -1,0 +1,11 @@
+[Unit]
+Description=Update devMcp from approved GitHub main branch
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/devmcp
+ExecStart=/bin/sh /opt/devmcp/deploy/self-update.sh
+TimeoutStartSec=900
