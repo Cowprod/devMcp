@@ -1,11 +1,11 @@
 [Unit]
-Description=Check devMcp updates on request and daily
+Description=Check devMcp updates daily
 
 [Timer]
 OnCalendar=*-*-* 04:00:00
-OnCalendar=*-*-* *:*:00
 Persistent=true
-Unit=devmcp-update-dispatch.service
+RandomizedDelaySec=15min
+Unit=devmcp-update.service
 
 [Install]
 WantedBy=timers.target
