@@ -9,9 +9,10 @@ User=devmcp
 Group=devmcp
 Environment=PM2_HOME=/var/lib/devmcp/pm2
 Environment=HOME=/var/lib/devmcp
-PIDFile=/var/lib/devmcp/pm2/pm2.pid
 ExecStart=/usr/bin/pm2 resurrect
+ExecStartPost=/usr/bin/pm2 ping
 ExecStop=/usr/bin/pm2 kill
+RemainAfterExit=yes
 Restart=on-failure
 RestartSec=5
 
