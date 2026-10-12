@@ -21,10 +21,24 @@ jobs:
           php -l bin/devmcp-worker
           php -l bin/devmcp-doctor
           php -l bin/devmcp-workspace-sync
+          php -l bin/devmcp-workspace-inspect
           php -l public/index.php
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Lint deployment scripts
         run: |
           sh -n deploy/install-platformio.sh
           sh -n deploy/apply-vm-runtime.sh
+      - name: Smoke-test workspace inspection boundaries
+        run: |
+          mkdir -p /tmp/devmcp-inspect-fixture/sub
+          printf 'hello\\n' > /tmp/devmcp-inspect-fixture/sub/test.txt
+          printf 'secret\\n' > /tmp/devmcp-inspect-fixture/.env
+          ln -s /etc/passwd /tmp/devmcp-inspect-fixture/escape
+          cd /tmp/devmcp-inspect-fixture
+          php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" list . | grep -q 'sub'
+          php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" stat sub/test.txt | grep -q 'file'
+          php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" read sub/test.txt | grep -q 'hello'
+          ! php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" read .env
+          ! php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" read escape
+          ! php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" read ../passwd
       - run: composer test

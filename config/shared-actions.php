@@ -19,6 +19,39 @@ return [
         'sync' => true,
     ],
 
+    'workspace.list' => [
+        'description' => 'Inspection locale en lecture seule (list), bornée au workspace.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-workspace-inspect', 'list', ['param' => 'path']],
+        'cwd' => '.',
+        'timeout' => 10,
+        'sync' => true,
+        'parameters' => [
+            'path' => ['type' => 'relative_path', 'description' => 'Chemin relatif au workspace, ou . pour la racine.'],
+        ],
+    ],
+
+    'workspace.stat' => [
+        'description' => 'Inspection locale en lecture seule (stat), bornée au workspace.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-workspace-inspect', 'stat', ['param' => 'path']],
+        'cwd' => '.',
+        'timeout' => 10,
+        'sync' => true,
+        'parameters' => [
+            'path' => ['type' => 'relative_path', 'description' => 'Chemin relatif au workspace, ou . pour la racine.'],
+        ],
+    ],
+
+    'workspace.read' => [
+        'description' => 'Inspection locale en lecture seule (read), bornée au workspace.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-workspace-inspect', 'read', ['param' => 'path']],
+        'cwd' => '.',
+        'timeout' => 10,
+        'sync' => true,
+        'parameters' => [
+            'path' => ['type' => 'relative_path', 'description' => 'Chemin relatif au workspace, ou . pour la racine.'],
+        ],
+    ],
+
     'workspace.sync' => [
         'description' => 'Synchronise le workspace vers un SHA origin vérifié.',
         'argv' => [
