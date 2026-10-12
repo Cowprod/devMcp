@@ -33,7 +33,7 @@ final class ParameterDefinition
         $type = $data['type'] ?? null;
         if (!is_string($type) || !in_array(
             $type,
-            ['git_sha', 'android_serial', 'serial_device', 'enum', 'integer'],
+            ['git_sha', 'android_serial', 'serial_device', 'relative_path', 'enum', 'integer'],
             true,
         )) {
             throw new InvalidArgumentException("Type de paramètre interdit : {$id}");
@@ -96,6 +96,7 @@ final class ParameterDefinition
             'git_sha' => $this->normalizeGitSha($value),
             'android_serial' => $this->normalizeAndroidSerial($value),
             'serial_device' => $this->normalizeSerialDevice($value),
+            'relative_path' => $this->normalizeRelativePath($value),
             'enum' => $this->normalizeEnum($value),
             'integer' => $this->normalizeInteger($value),
             default => throw new InvalidArgumentException("Type inconnu : {$this->type}"),
@@ -162,6 +163,19 @@ final class ParameterDefinition
             );
         }
 
+        return $value;
+    }
+
+    private function normalizeRelativePath(mixed $value): string
+    {
+        if (!is_string($value) || strlen($value) > 512 || $value === '' || str_contains($value, "\\0")
+            || str_starts_with($value, '/') || str_contains($value, '\\\\')
+            || ($value !== '.' && preg_match('~^(?!/)[A-Za-z0-9._/-]+$~D', $value) !== 1)
+            || in_array('..', explode('/', $value), true)
+            || in_array('', explode('/', $value), true)
+        ) {
+            throw new InvalidArgumentException("Chemin relatif invalide : {$this->id}");
+        }
         return $value;
     }
 
