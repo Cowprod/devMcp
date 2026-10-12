@@ -7,7 +7,7 @@ Cette extension conserve la séparation GitHub (code) / devMcp (exécution). Auc
 - `workspace.list`, `workspace.stat`, `workspace.read` : déjà présentes ; lecture bornée à 64 KiB et 500 lignes pour read.
 - `workspace.find` : profondeur maximale 5, 200 résultats, 2000 entrées examinées, filtre énuméré `all|php|js|json|md`. Les liens symboliques ne sont jamais parcourus.
 - `node.version` : Node installé, sans dépendance à npm.
-- `node.dependencies` : `npm ci --no-audit --no-fund`, exige `package-lock.json`.
+- `node.dependencies` : `npm ci --no-audit --no-fund` si lockfile présent, sinon `npm install` pour amorcer un lockfile (à versionner ensuite).
 - `node.test`, `node.build` : uniquement les scripts présents dans `package.json`, avec actions explicitement activées par projet.
 - `service.start|stop|restart|reload|status|logs|health` : service PM2 à nom, entrée, cwd et port statiques, dans un PM2_HOME dédié.
 
@@ -22,7 +22,7 @@ Les actions npm exécutent du code du dépôt, y compris les hooks d'installatio
 5. Pour la persistance après reboot, configurer un service systemd PM2 spécifique à l'utilisateur `devmcp` avec `PM2_HOME=/var/lib/devmcp/pm2`, puis activer le service. Ne pas exécuter `pm2 startup` à l'aveugle : il peut cibler une autre instance.
 6. Vérifier le binding loopback : `127.0.0.1:3000` et le healthcheck `/api/health` avant toute exposition réseau.
 
-L'exemple TouchDeck n'active pas `node.build` car le projet ne déclare aucun script build. Le dépôt TouchDeck ne contient pas encore de `server/package-lock.json` sur main au moment de la rédaction : `node.dependencies` refusera donc l'installation tant qu'un lockfile n'aura pas été versionné.
+L'exemple TouchDeck n'active pas `node.build` car le projet ne déclare aucun script build. Le dépôt TouchDeck ne contient pas encore de `server/package-lock.json` sur main au moment de la rédaction : la première installation utilisera `npm install` et produira un lockfile local non versionné ; le faire valider et versionner dans TouchDeck avant de considérer l'installation reproductible.
 
 ## Limites de sécurité
 
