@@ -50,7 +50,9 @@ foreach ($list as $item) {
     $owned = true;
 }
 if ($op === 'status') {
-    echo json_encode(['name'=>$name,'exists'=>$owned,'processes'=>array_values(array_filter($list,static fn($x)=>($x['name']??'')===$name))],JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    $statuses = [];
+    foreach ($list as $item) { if (($item['name'] ?? '') === $name) { $statuses[] = ['pid'=>$item['pid']??null,'status'=>$item['pm2_env']['status']??null,'restarts'=>$item['pm2_env']['restart_time']??null]; } }
+    echo json_encode(['name'=>$name,'exists'=>$owned,'processes'=>$statuses],JSON_UNESCAPED_SLASHES) . PHP_EOL;
     exit(0);
 }
 if ($op === 'logs') {
@@ -65,7 +67,7 @@ if (!$owned && $op !== 'start') { fwrite(STDERR, "Service not started\n"); exit(
 if ($op === 'start' && $owned) { fwrite(STDERR, "Service already registered\n"); exit(5); }
 $cmd = $op === 'start'
     ? [$pm2,'start',$entryReal,'--name',$name,'--cwd',$cwd,'--interpreter','node','--update-env']
-    : [$pm2,$op,$name,'--update-env'];
+    : ($op === 'stop' ? [$pm2,'stop',$name] : [$pm2,$op,$name,'--update-env']);
 $p=$run($cmd,60);
 if (!$p->isSuccessful()) { fwrite(STDERR, substr($p->getErrorOutput(),0,2048)); exit($p->getExitCode()??4); }
 echo json_encode(['operation'=>$op,'name'=>$name,'ok'=>true]) . PHP_EOL;
