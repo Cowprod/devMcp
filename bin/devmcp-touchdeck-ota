@@ -104,7 +104,30 @@ if ($operation === 'update') {
     if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== VERSION) fail('Expected firmware not published');
     [$status, $result] = api('/api/admin/firmware/update', ['clientId' => $id], secret());
     if ($status !== 202 || ($result['ok'] ?? false) !== true || ($result['clientId'] ?? null) !== $id) fail('OTA request rejected');
-    output(['accepted' => true, 'installed' => false, 'device' => $id, 'target_version' => VERSION, 'message' => '202 is not installation proof; check firmware.status after reconnect']);
-    exit(0);
+    // A 202 only confirms delivery of the command. Verify the reported firmware after reconnect.
+    $deadline = time() + 150;
+    $seenOffline = false;
+    while (time() < $deadline) {
+        sleep(3);
+        try { $devices = clients(); } catch (Throwable $ignored) { continue; }
+        $current = null;
+        foreach ($devices as $device) {
+            if (($device['id'] ?? null) === $id) { $current = $device; break; }
+        }
+        if ($current === null || ($current['online'] ?? false) !== true) {
+            $seenOffline = true;
+            continue;
+        }
+        $installed = $current['firmwareVersion'] ?? '';
+        if (is_string($installed) && preg_match('/^' . preg_quote(VERSION, '/') . '(?:\\+|$)/D', $installed)) {
+            output(['accepted' => true, 'installed' => true, 'device' => $id,
+                'installed_version' => $installed, 'reconnected' => $seenOffline,
+                'message' => 'Firmware version verified on an online ESP32-C3']);
+            exit(0);
+        }
+    }
+    output(['accepted' => true, 'installed' => false, 'device' => $id, 'target_version' => VERSION,
+        'message' => 'Timed out waiting for online ESP32-C3 reporting target firmware']);
+    exit(1);
 }
 fail('Unsupported operation');
