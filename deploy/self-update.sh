@@ -19,6 +19,9 @@ new=$(git rev-parse refs/remotes/origin/main)
 git merge-base --is-ancestor "$old" "$new" || { echo "Non fast-forward update: abort" >&2; exit 1; }
 git diff --name-only "$old" "$new" | grep -Eq '^(config/|src/|bin/|public/|vendor/|composer\.(json|lock)|deploy/)' || echo "Documentation-only update"
 git merge --ff-only "$new"
+if [ -f /opt/devmcp/bin/devmcp-touchdeck-ota ]; then
+    /bin/sh /opt/devmcp/deploy/install-touchdeck-ota.sh
+fi
 /usr/bin/php -l /etc/devmcp/global.php
 /usr/bin/php -l /opt/devmcp/config/shared-actions.php
 if [ -f composer.lock ]; then
