@@ -17,7 +17,7 @@ return [
     'firmware.update' => [
         'description' => 'Demande une OTA à un ESP32-C3 connecté connu du serveur; vérifier ensuite firmware.status.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-touchdeck-ota', 'update', ['param' => 'device_id']],
-        'cwd' => '.', 'timeout' => 25, 'sync' => true,
+        'cwd' => '.', 'timeout' => 180,
         'parameters' => [
             'device_id' => ['type' => 'android_serial', 'description' => 'Identifiant du client ESP32-C3 enregistré sur TouchDeck.'],
         ],
