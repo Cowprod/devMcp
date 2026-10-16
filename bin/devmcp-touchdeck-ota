@@ -1,0 +1,110 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+// Fixed-purpose TouchDeck OTA client. Never prints the PM2 environment or token.
+const BASE = 'http://127.0.0.1:3000';
+const ROOT = '/srv/devmcp-workspaces/touchDeck';
+const FIRMWARE = ROOT . '/.pio/build/esp32c3_diagnostic/firmware.bin';
+const VERSION = '0.1.1';
+const PM2 = '/usr/bin/pm2';
+
+function fail(string $message): never { fwrite(STDERR, $message . "\n"); exit(1); }
+function command(array $argv, array $env = []): array {
+    $pipes = [];
+    $process = proc_open($argv, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, ROOT, array_merge(getenv() ?: [], $env));
+    if (!is_resource($process)) fail('Local process unavailable');
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1], 1024 * 1024);
+    $stderr = stream_get_contents($pipes[2], 1024 * 1024);
+    fclose($pipes[1]); fclose($pipes[2]);
+    return [proc_close($process), $stdout, $stderr];
+}
+function api(string $path, ?array $body = null, ?string $token = null): array {
+    $headers = ['Accept: application/json'];
+    if ($body !== null) $headers[] = 'Content-Type: application/json';
+    if ($token !== null) $headers[] = 'Authorization: Bearer ' . $token;
+    $context = stream_context_create(['http' => [
+        'method' => $body === null ? 'GET' : 'POST',
+        'header' => implode("\r\n", $headers),
+        'content' => $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR),
+        'timeout' => 12,
+        'ignore_errors' => true,
+        'follow_location' => 0,
+    ]]);
+    $raw = @file_get_contents(BASE . $path, false, $context);
+    $statusLine = $http_response_header[0] ?? '';
+    $status = preg_match('~^HTTP/\\S+ ([0-9]{3})~', $statusLine, $match) ? (int)$match[1] : 0;
+    if (!is_string($raw) || strlen($raw) > 262144) fail('TouchDeck API unavailable');
+    $data = json_decode($raw, true);
+    if (!is_array($data)) fail('Invalid TouchDeck API response');
+    return [$status, $data];
+}
+function secret(): string {
+    [$code, $output] = command([PM2, 'jlist'], ['PM2_HOME' => '/var/lib/devmcp/pm2']);
+    if ($code !== 0) fail('PM2 metadata unavailable');
+    $apps = json_decode($output, true);
+    if (!is_array($apps)) fail('Invalid PM2 metadata');
+    foreach ($apps as $app) {
+        if (($app['name'] ?? null) !== 'touchdeck-server') continue;
+        $token = $app['pm2_env']['TOUCHDECK_OTA_ADMIN_TOKEN'] ?? null;
+        if (is_string($token) && strlen($token) >= 16) return $token;
+    }
+    fail('OTA token unavailable in PM2 environment');
+}
+function clients(): array {
+    [$status, $body] = api('/api/admin/clients');
+    if ($status !== 200 || !isset($body['clients']) || !is_array($body['clients'])) fail('Client inventory unavailable');
+    return array_values(array_filter($body['clients'], static fn($c) => is_array($c) && ($c['deviceType'] ?? null) === 'esp32c3'));
+}
+function manifest(): array {
+    [$status, $body] = api('/api/firmware/manifest');
+    if ($status !== 200) fail('Firmware manifest unavailable');
+    return $body;
+}
+function output(array $value): void {
+    echo json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n";
+}
+$operation = $argv[1] ?? '';
+if ($operation === 'status') {
+    output(['manifest' => manifest(), 'devices' => clients()]);
+    exit(0);
+}
+if ($operation === 'publish') {
+    // Always compile the approved board environment before publishing.
+    [$exit] = command(['/opt/devmcp-tools/platformio/bin/pio', 'run', '-e', 'esp32c3_diagnostic']);
+    if ($exit !== 0) fail('PlatformIO build failed; publication refused');
+    if (!is_file(FIRMWARE) || is_link(FIRMWARE)) fail('Firmware binary missing or unsafe');
+    $size = filesize(FIRMWARE);
+    $file = fopen(FIRMWARE, 'rb');
+    $magic = $file ? fread($file, 1) : '';
+    if ($file) fclose($file);
+    if ($size < 4096 || $size > 1310720 || $magic !== "\xE9") fail('Invalid ESP32-C3 firmware');
+    $hash = hash_file('sha256', FIRMWARE);
+    [$status, $published] = api('/api/admin/firmware/publish', ['version' => VERSION], secret());
+    if ($status !== 200 || ($published['ok'] ?? false) !== true ||
+        ($published['version'] ?? null) !== VERSION ||
+        ($published['size'] ?? null) !== $size ||
+        ($published['sha256'] ?? null) !== $hash) fail('Published firmware verification failed');
+    $m = manifest();
+    if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== VERSION ||
+        ($m['sha256'] ?? null) !== $hash || ($m['size'] ?? null) !== $size) fail('Manifest verification failed');
+    output(['published' => true, 'version' => VERSION, 'size' => $size, 'sha256' => $hash]);
+    exit(0);
+}
+if ($operation === 'update') {
+    $id = $argv[2] ?? '';
+    if (!preg_match('/^[A-Za-z0-9._:-]{1,100}$/D', $id)) fail('Invalid device identifier');
+    $known = null;
+    foreach (clients() as $client) {
+        if (($client['id'] ?? null) === $id && ($client['online'] ?? false) === true) $known = $client;
+    }
+    if ($known === null) fail('ESP32-C3 not connected or unknown');
+    $m = manifest();
+    if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== VERSION) fail('Expected firmware not published');
+    [$status, $result] = api('/api/admin/firmware/update', ['clientId' => $id], secret());
+    if ($status !== 202 || ($result['ok'] ?? false) !== true || ($result['clientId'] ?? null) !== $id) fail('OTA request rejected');
+    output(['accepted' => true, 'installed' => false, 'device' => $id, 'target_version' => VERSION, 'message' => '202 is not installation proof; check firmware.status after reconnect']);
+    exit(0);
+}
+fail('Unsupported operation');

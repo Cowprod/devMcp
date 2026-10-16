@@ -3,6 +3,26 @@
 declare(strict_types=1);
 
 return [
+    // TouchDeck OTA: all endpoints, board and firmware path are fixed inside the helper.
+    'firmware.status' => [
+        'description' => 'Consulte le manifeste OTA et les ESP32-C3 connectés avec leur version.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-touchdeck-ota', 'status'],
+        'cwd' => '.', 'timeout' => 20, 'sync' => true,
+    ],
+    'firmware.publish' => [
+        'description' => 'Compile et publie exclusivement le firmware TouchDeck ESP32-C3 0.1.1.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-touchdeck-ota', 'publish'],
+        'cwd' => '.', 'timeout' => 1200,
+    ],
+    'firmware.update' => [
+        'description' => 'Demande une OTA à un ESP32-C3 connecté connu du serveur; vérifier ensuite firmware.status.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-touchdeck-ota', 'update', ['param' => 'device_id']],
+        'cwd' => '.', 'timeout' => 25, 'sync' => true,
+        'parameters' => [
+            'device_id' => ['type' => 'android_serial', 'description' => 'Identifiant du client ESP32-C3 enregistré sur TouchDeck.'],
+        ],
+    ],
+
     'devmcp.update' => [
         'description' => 'Demande la mise à jour privilégiée de devMcp via le service systemd dédié.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-update-request'],
