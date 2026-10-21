@@ -10,7 +10,7 @@ return [
         'cwd' => '.', 'timeout' => 20, 'sync' => true,
     ],
     'firmware.publish' => [
-        'description' => 'Compile et publie exclusivement le firmware TouchDeck ESP32-C3 0.1.1.',
+        'description' => 'Compile et publie le firmware TouchDeck ESP32-C3 selon TOUCHDECK_VERSION de platformio.ini.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-touchdeck-ota', 'publish'],
         'cwd' => '.', 'timeout' => 1200,
     ],
