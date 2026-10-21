@@ -6,7 +6,6 @@ declare(strict_types=1);
 const BASE = 'http://127.0.0.1:3000';
 const ROOT = '/srv/devmcp-workspaces/touchDeck';
 const FIRMWARE = ROOT . '/.pio/build/esp32c3_diagnostic/firmware.bin';
-const VERSION = '0.1.1';
 const PM2 = '/usr/bin/pm2';
 
 function fail(string $message): never { fwrite(STDERR, $message . "\n"); exit(1); }
@@ -52,6 +51,28 @@ function secret(): string {
     }
     fail('OTA token unavailable in PM2 environment');
 }
+function projectVersion(): string {
+    $ini = ROOT . '/platformio.ini';
+    if (!is_file($ini) || is_link($ini) || realpath($ini) !== $ini) fail('version: platformio.ini missing or unsafe');
+    $content = file_get_contents($ini);
+    if (!is_string($content)) fail('version: cannot read platformio.ini');
+    if (!preg_match('/^\\[env:esp32c3_diagnostic\\]\\s*$/m', $content, $section, PREG_OFFSET_CAPTURE)) fail('version: target environment absent');
+    $tail = substr($content, $section[0][1] + strlen($section[0][0]));
+    $next = preg_match('/^\\[/m', $tail, $match, PREG_OFFSET_CAPTURE) ? $match[0][1] : strlen($tail);
+    $target = substr($tail, 0, $next);
+    preg_match_all('/^\\s*-D\\s+TOUCHDECK_VERSION\\s*=\\s*\\\\?"(\\d+\\.\\d+\\.\\d+)\\\\?"\\s*$/m', $target, $matches);
+    if (count($matches[1]) !== 1) fail('version: missing, ambiguous or invalid TOUCHDECK_VERSION');
+    return $matches[1][0];
+}
+function verifiedBuild(string $version): array {
+    if (!is_file(FIRMWARE) || is_link(FIRMWARE) || realpath(FIRMWARE) !== FIRMWARE) fail('binary: missing or unsafe firmware');
+    $size = filesize(FIRMWARE);
+    if (!is_int($size) || $size < 4096 || $size > 1310720) fail('binary: invalid firmware size');
+    $bytes = file_get_contents(FIRMWARE);
+    if (!is_string($bytes) || strlen($bytes) !== $size || $bytes[0] !== "\\xE9") fail('binary: invalid ESP32-C3 image');
+    if (!str_contains($bytes, $version)) fail('binary: compiled firmware does not contain project version');
+    return [$size, hash('sha256', $bytes)];
+}
 function clients(): array {
     [$status, $body] = api('/api/admin/clients');
     if ($status !== 200 || !isset($body['clients']) || !is_array($body['clients'])) fail('Client inventory unavailable');
@@ -71,25 +92,25 @@ if ($operation === 'status') {
     exit(0);
 }
 if ($operation === 'publish') {
-    // Always compile the approved board environment before publishing.
+    $version = projectVersion();
+    // Do not allow concurrent publish jobs to race over the same build artifact.
+    $lock = fopen('/tmp/devmcp-touchdeck-ota-publish.lock', 'c');
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) fail('build: another OTA publication is in progress');
     [$exit] = command(['/opt/devmcp-tools/platformio/bin/pio', 'run', '-e', 'esp32c3_diagnostic']);
-    if ($exit !== 0) fail('PlatformIO build failed; publication refused');
-    if (!is_file(FIRMWARE) || is_link(FIRMWARE)) fail('Firmware binary missing or unsafe');
-    $size = filesize(FIRMWARE);
-    $file = fopen(FIRMWARE, 'rb');
-    $magic = $file ? fread($file, 1) : '';
-    if ($file) fclose($file);
-    if ($size < 4096 || $size > 1310720 || $magic !== "\xE9") fail('Invalid ESP32-C3 firmware');
-    $hash = hash_file('sha256', FIRMWARE);
-    [$status, $published] = api('/api/admin/firmware/publish', ['version' => VERSION], secret());
+    if ($exit !== 0) fail('build: PlatformIO compilation failed');
+    if (projectVersion() !== $version) fail('version: project version changed during build');
+    [$size, $hash] = verifiedBuild($version);
+    [$status, $published] = api('/api/admin/firmware/publish', ['version' => $version, 'sha256' => $hash, 'size' => $size], secret());
     if ($status !== 200 || ($published['ok'] ?? false) !== true ||
-        ($published['version'] ?? null) !== VERSION ||
+        ($published['version'] ?? null) !== $version ||
         ($published['size'] ?? null) !== $size ||
-        ($published['sha256'] ?? null) !== $hash) fail('Published firmware verification failed');
+        ($published['sha256'] ?? null) !== $hash) {
+        fail('publish: API rejected or returned mismatched release (HTTP ' . $status . ', reason ' . ($published['error'] ?? 'verification_failed') . ')');
+    }
     $m = manifest();
-    if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== VERSION ||
-        ($m['sha256'] ?? null) !== $hash || ($m['size'] ?? null) !== $size) fail('Manifest verification failed');
-    output(['published' => true, 'version' => VERSION, 'size' => $size, 'sha256' => $hash]);
+    if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== $version ||
+        ($m['sha256'] ?? null) !== $hash || ($m['size'] ?? null) !== $size) fail('manifest: release metadata mismatch');
+    output(['published' => true, 'version' => $version, 'size' => $size, 'sha256' => $hash]);
     exit(0);
 }
 if ($operation === 'update') {
@@ -101,7 +122,8 @@ if ($operation === 'update') {
     }
     if ($known === null) fail('ESP32-C3 not connected or unknown');
     $m = manifest();
-    if (($m['available'] ?? false) !== true || ($m['version'] ?? null) !== VERSION) fail('Expected firmware not published');
+    if (($m['available'] ?? false) !== true || !is_string($m['version'] ?? null) || !preg_match('/^\\d+\\.\\d+\\.\\d+$/D', $m['version'])) fail('Expected firmware not published');
+    $version = $m['version'];
     [$status, $result] = api('/api/admin/firmware/update', ['clientId' => $id], secret());
     if ($status !== 202 || ($result['ok'] ?? false) !== true || ($result['clientId'] ?? null) !== $id) fail('OTA request rejected');
     // A 202 only confirms delivery of the command. Verify the reported firmware after reconnect.
@@ -119,14 +141,14 @@ if ($operation === 'update') {
             continue;
         }
         $installed = $current['firmwareVersion'] ?? '';
-        if (is_string($installed) && preg_match('/^' . preg_quote(VERSION, '/') . '(?:\\+|$)/D', $installed)) {
+        if (is_string($installed) && preg_match('/^' . preg_quote($version, '/') . '(?:\\+|$)/D', $installed)) {
             output(['accepted' => true, 'installed' => true, 'device' => $id,
                 'installed_version' => $installed, 'reconnected' => $seenOffline,
                 'message' => 'Firmware version verified on an online ESP32-C3']);
             exit(0);
         }
     }
-    output(['accepted' => true, 'installed' => false, 'device' => $id, 'target_version' => VERSION,
+    output(['accepted' => true, 'installed' => false, 'device' => $id, 'target_version' => $version,
         'message' => 'Timed out waiting for online ESP32-C3 reporting target firmware']);
     exit(1);
 }
