@@ -69,7 +69,7 @@ function verifiedBuild(string $version): array {
     $size = filesize(FIRMWARE);
     if (!is_int($size) || $size < 4096 || $size > 1310720) fail('binary: invalid firmware size');
     $bytes = file_get_contents(FIRMWARE);
-    if (!is_string($bytes) || strlen($bytes) !== $size || $bytes[0] !== "\\xE9") fail('binary: invalid ESP32-C3 image');
+    if (!is_string($bytes) || strlen($bytes) !== $size || $bytes[0] !== "\xE9") fail('binary: invalid ESP32-C3 image');
     if (!str_contains($bytes, $version)) fail('binary: compiled firmware does not contain project version');
     return [$size, hash('sha256', $bytes)];
 }
