@@ -77,15 +77,27 @@ final class JobQueue
                 }
             }
 
+            $policy = $this->db->prepare(
+                'SELECT id FROM dm_policy_revision WHERE deployment_id = ? '
+                . 'AND approved_at <= UTC_TIMESTAMP(6) '
+                . 'ORDER BY revision_number DESC LIMIT 1 FOR UPDATE'
+            );
+            $policy->execute([$deploymentId]);
+            $policyId = $policy->fetchColumn();
+            if (!is_string($policyId)) {
+                throw new RuntimeException('No approved deployment policy');
+            }
+
             $insert = $this->db->prepare(
                 'INSERT INTO dm_job (id,deployment_id,action_id,action_revision,arguments_json,'
-                . 'expires_at,idempotency_key) VALUES (?,?,?,?,?,?,?)'
+                . 'expires_at,idempotency_key,policy_revision_id) VALUES (?,?,?,?,?,?,?,?)'
             );
             $insert->execute([
                 $id, $deploymentId, $actionId, $revision,
                 json_encode($arguments, JSON_THROW_ON_ERROR),
                 $expiresAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u'),
                 $idempotencyKey,
+                $policyId,
             ]);
             $this->db->commit();
             return $id;
