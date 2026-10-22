@@ -35,6 +35,32 @@ final class RegistryEditor
         return $id;
     }
 
+    public function approveMachine(string $machineId): void
+    {
+        if (preg_match('/^[a-f0-9]{32}$/D', $machineId) !== 1) {
+            throw new InvalidArgumentException('Identifiant machine invalide');
+        }
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare(
+                "UPDATE dm_machine SET status = 'active' WHERE id = ? AND status = 'pending' "
+                . 'AND EXISTS (SELECT 1 FROM dm_agent_identity '
+                . 'WHERE dm_agent_identity.machine_id = dm_machine.id '
+                . 'AND dm_agent_identity.revoked_at IS NULL '
+                . 'AND dm_agent_identity.expires_at > UTC_TIMESTAMP(6))'
+            );
+            $statement->execute([$machineId]);
+            if ($statement->rowCount() !== 1) {
+                throw new InvalidArgumentException('Machine non enrôlée ou déjà approuvée');
+            }
+            $this->audit('machine.approve', 'machine', $machineId);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
     public function createProject(string $id, string $description, string $repositoryUrl): void
     {
         $id = trim($id);
