@@ -63,6 +63,15 @@ final class TrustedJobResolverTest extends TestCase
         $this->resolver()->resolve($job);
     }
 
+    public function testRejectsWrongDeployment(): void
+    {
+        $job = $this->job();
+        $job['deployment_id'] = str_repeat('e', 32);
+        $resolver = $this->resolver();
+        $this->expectException(InvalidArgumentException::class);
+        $resolver->resolve(array_merge($job, ['argv' => ['/bin/sh']]));
+    }
+
     public function testRejectsWrongPolicy(): void
     {
         $job = $this->job();
