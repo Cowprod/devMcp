@@ -17,8 +17,10 @@ final class TrustedJobResolver
     public function __construct(
         private readonly ProjectRegistry $registry,
         private readonly string $policySha256,
+        private readonly ?string $deploymentId = null,
     ) {
-        if (preg_match('/^[a-f0-9]{64}$/D', $policySha256) !== 1) {
+        if (preg_match('/^[a-f0-9]{64}$/D', $policySha256) !== 1
+            || ($deploymentId !== null && preg_match('/^[a-f0-9]{32}$/D', $deploymentId) !== 1)) {
             throw new InvalidArgumentException('Invalid trusted policy digest');
         }
     }
@@ -29,7 +31,7 @@ final class TrustedJobResolver
      */
     public function resolve(array $job): array
     {
-        $allowed = ['id','project','action','arguments','policy_sha256','attempt_id','fencing_token'];
+        $allowed = ['id','project','action','arguments','policy_sha256','attempt_id','fencing_token','deployment_id','action_revision'];
         if (array_diff(array_keys($job), $allowed) !== []) {
             throw new InvalidArgumentException('Remote job contains unauthorized fields');
         }
@@ -42,7 +44,9 @@ final class TrustedJobResolver
             || preg_match('/^[a-f0-9]{32}$/D', $job['attempt_id']) !== 1
             || !hash_equals($this->policySha256, $job['policy_sha256'])
             || ($job['fencing_token'] ?? null) !== 1
-            || !is_array($job['arguments'] ?? null)) {
+            || !is_array($job['arguments'] ?? null)
+            || ($this->deploymentId !== null && ($job['deployment_id'] ?? null) !== $this->deploymentId)
+            || (isset($job['action_revision']) && (!is_int($job['action_revision']) || $job['action_revision'] < 1))) {
             throw new InvalidArgumentException('Untrusted remote job');
         }
         $project = $this->registry->get($job['project']);
