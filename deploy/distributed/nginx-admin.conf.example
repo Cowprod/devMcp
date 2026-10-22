@@ -1,3 +1,5 @@
+# Put in nginx http {} context (outside server {}):
+# limit_req_zone $binary_remote_addr zone=devmcp_enroll:10m rate=2r/m;
 # Replace __ZT_IP__, __CERT__, __KEY__, __HTPASSWD__ and __FPM_SOCKET__.
 # Explicit ZeroTier bind; no public IPv4/IPv6 listener.
 server {
@@ -21,10 +23,20 @@ server {
         fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
         fastcgi_pass unix:__FPM_SOCKET__;
     }
-    # Enrollment is public to ZeroTier peers but requires a one-time token.
-    # Rate limiting and trusted TLS provisioning are required before enabling.
-    # Deliberately disabled until the security gates are satisfied.
-    # location = /v1/enrollment/redeem { ... }
+    # Opt-in only after database migration, TLS trust and isolated-host tests.
+    # This location is disabled in the default template. To enable, remove
+    # the leading '#' on each line after configuring the limit_req_zone above.
+    # location = /v1/enrollment/redeem {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_enroll burst=3 nodelay;
+    #     client_max_body_size 2k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/enrollment.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
     location / {
         return 404;
     }
