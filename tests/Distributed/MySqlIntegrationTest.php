@@ -39,6 +39,10 @@ final class MySqlIntegrationTest extends TestCase
         $this->db->prepare('INSERT INTO dm_deployment (id,machine_id,project_id,workspace_path,enabled) VALUES (?,?,?,?,1)')
             ->execute([$this->deployment, $this->machine, 'integration', '/tmp/integration']);
         $this->db->exec("INSERT INTO dm_action_template (id,revision,description,definition_sha256) VALUES ('inspect',1,'Inspect',REPEAT('a',64)) ON DUPLICATE KEY UPDATE description=VALUES(description)");
+        $this->db->prepare(
+            'INSERT INTO dm_policy_revision (id,deployment_id,revision_number,policy_sha256,approved_at) '
+            . 'VALUES (?,?,1,?,UTC_TIMESTAMP(6))'
+        )->execute([bin2hex(random_bytes(16)), $this->deployment, str_repeat('a', 64)]);
         $this->db->prepare('INSERT INTO dm_deployment_action (deployment_id,action_id,action_revision,enabled) VALUES (?, ?, 1, 1)')
             ->execute([$this->deployment, 'inspect']);
     }
@@ -60,6 +64,8 @@ final class MySqlIntegrationTest extends TestCase
         $claimed = $queue->claim($this->machine);
         self::assertNotNull($claimed);
         self::assertSame($jobId, $claimed['id']);
+        self::assertSame('integration', $claimed['project']);
+        self::assertSame(str_repeat('a', 64), $claimed['policy_sha256']);
         self::assertNull($queue->claim($this->machine));
         $lifecycle = new AttemptLifecycle($this->db);
         $lifecycle->start($claimed['attempt_id'], $this->machine);
