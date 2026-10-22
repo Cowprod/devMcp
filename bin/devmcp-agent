@@ -38,7 +38,9 @@ try {
     $policyFile = $config['policy_file'];
     $policy = require $policyFile;
     if (!is_array($policy) || !is_array($policy['registry'] ?? null)
-        || !is_string($policy['sha256'] ?? null)) {
+        || !is_string($policy['sha256'] ?? null)
+        || !is_string($policy['deployment_id'] ?? null)
+        || !is_array($policy['action_revisions'] ?? null)) {
         throw new RuntimeException('Invalid locally approved policy');
     }
     $credential = trim((string) file_get_contents($config['credential_file']));
@@ -48,7 +50,12 @@ try {
     $client = new AgentHttpClient($agentConfig, $credential, $config['ca_file']);
     $worker = new AgentWorker(
         $client,
-        new TrustedJobResolver(ProjectRegistry::fromConfig($policy['registry']), $policy['sha256']),
+        new TrustedJobResolver(
+            ProjectRegistry::fromConfig($policy['registry']),
+            $policy['sha256'],
+            $policy['deployment_id'],
+            $policy['action_revisions'],
+        ),
         new AgentHeartbeatRunner($client),
         new AgentStateStore($config['state_dir']),
     );
