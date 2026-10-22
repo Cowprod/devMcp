@@ -21,9 +21,9 @@ the endpoint against malformed input and replay. This does not enable jobs.
    requests, expired tokens and repeated redemption. Confirm the admin
    remains Basic Auth protected and the endpoint is bound only to ZeroTier.
 7. Generate invitation in admin; on the remote host use the installer with
-   --server, --ca-file and --enrollment-token. The agent service is NOT
+   --server, --ca-file and --token-stdin (read token without echo). The agent service is NOT
    installed or enabled by this phase. The token is a secret: do not paste
-   it into persistent shell history or shared logs.
+   it into persistent shell history or shared logs. Example:\n   read -rs -p 'Enrollment token: ' TOKEN; echo\n   printf '%s\\n' \"$TOKEN\" | sudo bash install-agent.sh --server https://192.168.194.189 --ca-file /path/to/trusted-ca.pem --token-stdin\n   unset TOKEN
 8. Review local policy, approved deployment binding and security gates
    before enabling the worker. Never enable the timer merely because
    enrollment succeeded.
