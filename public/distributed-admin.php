@@ -80,6 +80,7 @@ function e(mixed $value): string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>devMcp — Administration distribuée</title>
+<link rel="icon" type="image/webp" href="/devmcp-icon-512.webp">
 <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/quartz/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
