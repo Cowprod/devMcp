@@ -9,15 +9,24 @@ Branch: feat/distributed-architecture. This is an opt-in development branch; pro
 - JobEnvelope validator that rejects command fields, validates trusted policy digest, and resolves an existing action through the current ProjectRegistry.
 - PHPUnit tests for accepted envelope, argv injection, wrong policy and unknown action.
 
+## Additional experimental components
+
+- Transactional SQL queue and attempt lifecycle (not yet integration-tested against MySQL).
+- Versioned policy fingerprint and approved revision schema.
+- Agent identity lookup, request decoder, HTTPS outbound client, and authenticated application service.
+- Database connection helper enforcing UTC.
+- GitHub CI has passed on earlier branch commits; each new head must pass separately.
+
 ## Not implemented yet
 
 - Database migration runner and version table.
 - Agent identity enrollment, credential rotation/revocation, TLS termination.
-- Agent-facing HTTP API, leasing, fencing, durable attempt reconciliation.
-- Agent PHP CLI daemon, service unit, local persistence.
+- Agent-facing HTTP adapter with TLS proxy integration; leasing and attempt lifecycle need integration and concurrency tests.
+- Agent PHP CLI daemon, service unit, local persistence, and verified policy synchronization.
 - Administrative authentication, CSRF protection, Web UI.
 - Integration into MCP project/action/job tools.
-- End-to-end tests and production migration.
+- End-to-end tests, full SQL integration tests, and production migration.
+- Binding the dispatched job to an agent-acknowledged policy hash (current claim response is not execution-ready).
 
 **Do not deploy this branch as a distributed server.** No remote job execution is possible yet.
 
