@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+// Explicit, operator-triggered forward-only migration for the enrollment schema.
+// Usage: sudo -u www-data php bin/devmcp-enrollment-migrate --check
+//        sudo -u www-data php bin/devmcp-enrollment-migrate --apply
+// Requires DEVMCP_DISTRIBUTED_CONFIG, a DB account with CREATE privilege,
+// and a database backup taken by the operator.
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$mode = $argv[1] ?? '';
+if (!in_array($mode, ['--check', '--apply'], true) || count($argv) !== 2) {
+    fwrite(STDERR, "Usage: php bin/devmcp-enrollment-migrate --check|--apply\n");
+    exit(2);
+}
+$path = getenv('DEVMCP_DISTRIBUTED_CONFIG');
+if (!is_string($path) || !is_file($path)) {
+    fwrite(STDERR, "DEVMCP_DISTRIBUTED_CONFIG is missing\n");
+    exit(2);
+}
+$config = require $path;
+if (!is_array($config) || !isset($config['migration_username'], $config['migration_password'])) {
+    fwrite(STDERR, "Dedicated migration credentials required\n");
+    exit(2);
+}
+try {
+    $db = DatabaseConnection::connect(
+        (string) ($config['dsn'] ?? ''),
+        (string) $config['migration_username'],
+        (string) $config['migration_password']
+    );
+    $version = $db->query('SELECT VERSION()')->fetchColumn();
+    $existing = $db->query("SELECT COUNT(*) FROM information_schema.tables "
+        . "WHERE table_schema = DATABASE() AND table_name = 'dm_enrollment_invitation'")->fetchColumn();
+    echo 'Server: ', $version, PHP_EOL;
+    echo 'dm_enrollment_invitation: ', ((int) $existing === 1 ? 'present' : 'absent'), PHP_EOL;
+    if ($mode === '--check') {
+        exit(0);
+    }
+    if ((int) $existing === 1) {
+        echo "Already present; no change.\n";
+        exit(0);
+    }
+    $sql = file_get_contents(dirname(__DIR__) . '/database/migrations/003_agent_enrollment.sql');
+    if (!is_string($sql) || $sql === '') {
+        throw new RuntimeException('Migration SQL missing');
+    }
+    $db->exec($sql);
+    echo "Enrollment migration applied.\n";
+} catch (Throwable $error) {
+    fwrite(STDERR, "Migration failed: " . $error->getMessage() . PHP_EOL);
+    exit(1);
+}
