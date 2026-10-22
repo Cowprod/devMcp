@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\DashboardRepository;
 use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
+use Cowprod\DevMcp\Distributed\Enrollment\EnrollmentService;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Registry\RegistryRepository;
 
@@ -26,6 +27,7 @@ if (($_SERVER['HTTPS'] ?? '') !== 'on'
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $error = null;
+$invitation = null;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
         http_response_code(403);
@@ -41,14 +43,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             case 'machine.create':
                 $editor->createMachine((string) ($_POST['name'] ?? ''), (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
                 break;
+            case 'enrollment.issue':
+                $invitation = (new EnrollmentService($writer))->issue((string) ($_POST['machine_id'] ?? ''));
+                break;
             case 'project.create':
                 $editor->createProject((string) ($_POST['id'] ?? ''), (string) ($_POST['description'] ?? ''), (string) ($_POST['repository_url'] ?? ''));
                 break;
             default:
                 throw new InvalidArgumentException('Unknown operation');
         }
-        header('Location: /?created=1', true, 303);
-        exit;
+        if ($invitation === null) {
+            header('Location: /?created=1', true, 303);
+            exit;
+        }
     } catch (Throwable $exception) {
         $error = $exception instanceof InvalidArgumentException ? $exception->getMessage() : 'Enregistrement impossible (doublon ou erreur SQL)';
     }
@@ -94,6 +101,7 @@ function e(mixed $value): string
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projects) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
+<?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><p class="mb-0 mt-2">L'installation automatique n'est pas encore disponible. Ce jeton ne donne aucun droit d'exécution.</p></div><?php endif; ?>
 <?php if ($error !== null): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <?php if (isset($_GET['created'])): ?><div class="alert alert-success">Enregistrement effectué.</div><?php endif; ?>
 <section class="row g-3 mb-4">
@@ -121,9 +129,9 @@ function e(mixed $value): string
 </section>
 <h2 class="h5">Machines</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Dernier contact</th></tr></thead><tbody>
+<thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Dernier contact</th><th>Enrôlement</th></tr></thead><tbody>
 <?php foreach ($machines as $machine): ?>
-<tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?= e($machine['last_seen_at']) ?></td></tr>
+<tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?= e($machine['last_seen_at']) ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 <h2 class="h5">Projets</h2>
