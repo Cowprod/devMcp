@@ -13,7 +13,12 @@ final class AgentHttpAdapterTest extends TestCase
 {
     private function adapter(): AgentHttpAdapter
     {
-        return new AgentHttpAdapter($this->createMock(AgentService::class));
+        $db = new \\PDO('sqlite::memory:');
+        return new AgentHttpAdapter(new AgentService(
+            new \\Cowprod\\DevMcp\\Distributed\\Security\\AgentAuthenticator($db),
+            new \\Cowprod\\DevMcp\\Distributed\\Scheduler\\JobQueue($db),
+            new \\Cowprod\\DevMcp\\Distributed\\Scheduler\\AttemptLifecycle($db),
+        ));
     }
 
     public function testRejectsPlaintextTransport(): void
