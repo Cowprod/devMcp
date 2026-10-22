@@ -21,6 +21,10 @@ server {
         fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
         fastcgi_pass unix:__FPM_SOCKET__;
     }
+    # Enrollment is public to ZeroTier peers but requires a one-time token.
+    # Rate limiting and trusted TLS provisioning are required before enabling.
+    # Deliberately disabled until the security gates are satisfied.
+    # location = /v1/enrollment/redeem { ... }
     location / {
         return 404;
     }
