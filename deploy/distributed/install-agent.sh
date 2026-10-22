@@ -68,7 +68,7 @@ if not isinstance(machine_id, str) or not re.fullmatch(r"[a-f0-9]{32}", machine_
 if not isinstance(credential, str) or not re.fullmatch(r"[a-f0-9]{64}", credential):
     sys.exit("ERROR: invalid credential response")
 with open(sys.argv[2], "w", encoding="ascii") as f:
-    f.write(machine_id + "\\n" + credential + "\\n")
+    f.write(machine_id + "\n" + credential + "\n")
 PY
 # Enrollment only. No agent process is started before local policy approval.
 install -d -m 0700 -o root -g root /etc/devmcp
