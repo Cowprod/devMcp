@@ -17,7 +17,7 @@ final class AgentWorker
     public function __construct(
         private readonly AgentHttpClient $client,
         private readonly TrustedJobResolver $resolver,
-        private readonly AgentExecutor $executor,
+        private readonly AgentHeartbeatRunner $executor,
         private readonly AgentStateStore $state,
     ) {
     }
@@ -40,7 +40,7 @@ final class AgentWorker
         $this->client->post('/v1/agent/start', ['attempt_id' => $attempt]);
         $this->state->save($attempt, ['status' => 'uncertain', 'job_id' => $job['id']]);
         try {
-            $result = $this->executor->execute($resolved);
+            $result = $this->executor->execute($attempt, $resolved);
             $this->state->save($attempt, [
                 'status' => 'result_pending',
                 'job_id' => $job['id'],
