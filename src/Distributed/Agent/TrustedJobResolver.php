@@ -18,6 +18,7 @@ final class TrustedJobResolver
         private readonly ProjectRegistry $registry,
         private readonly string $policySha256,
         private readonly ?string $deploymentId = null,
+        private readonly array $approvedActionRevisions = [],
     ) {
         if (preg_match('/^[a-f0-9]{64}$/D', $policySha256) !== 1
             || ($deploymentId !== null && preg_match('/^[a-f0-9]{32}$/D', $deploymentId) !== 1)) {
@@ -46,8 +47,12 @@ final class TrustedJobResolver
             || ($job['fencing_token'] ?? null) !== 1
             || !is_array($job['arguments'] ?? null)
             || ($this->deploymentId !== null && ($job['deployment_id'] ?? null) !== $this->deploymentId)
-            || (isset($job['action_revision']) && (!is_int($job['action_revision']) || $job['action_revision'] < 1))) {
+            || (isset($job['action_revision']) && (!is_int($job['action_revision']) || $job['action_revision'] < 1))
+            || ($this->approvedActionRevisions !== [] && ($this->approvedActionRevisions[$job['action']] ?? null) !== ($job['action_revision'] ?? null))) {
             throw new InvalidArgumentException('Untrusted remote job');
+        }
+        if ($this->deploymentId === null || $this->approvedActionRevisions === []) {
+            throw new InvalidArgumentException('Explicit local deployment and revisions required');
         }
         $project = $this->registry->get($job['project']);
         $action = $project->getAction($job['action']);
