@@ -114,9 +114,11 @@ final class JobQueue
         try {
             $select = $this->db->prepare(
                 'SELECT dm_job.id,dm_job.deployment_id,dm_job.action_id,dm_job.action_revision,'
-                . 'dm_job.arguments_json FROM dm_job '
+                . 'dm_job.arguments_json,dm_deployment.project_id,dm_policy_revision.policy_sha256 FROM dm_job '
                 . 'INNER JOIN dm_deployment ON dm_deployment.id = dm_job.deployment_id '
                 . 'INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id '
+                . 'INNER JOIN dm_policy_revision ON dm_policy_revision.id = dm_job.policy_revision_id '
+                . 'AND dm_policy_revision.deployment_id = dm_deployment.id '
                 . 'INNER JOIN dm_deployment_action ON dm_deployment_action.deployment_id = dm_deployment.id '
                 . 'AND dm_deployment_action.action_id = dm_job.action_id '
                 . 'AND dm_deployment_action.action_revision = dm_job.action_revision '
@@ -150,6 +152,8 @@ final class JobQueue
             return [
                 'id' => $job['id'],
                 'deployment_id' => $job['deployment_id'],
+                'project' => $job['project_id'],
+                'policy_sha256' => $job['policy_sha256'],
                 'action' => $job['action_id'],
                 'action_revision' => (int) $job['action_revision'],
                 'arguments' => json_decode((string) $job['arguments_json'], true, 512, JSON_THROW_ON_ERROR),
