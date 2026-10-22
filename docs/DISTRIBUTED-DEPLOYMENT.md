@@ -27,3 +27,12 @@ No physical two-machine end-to-end validation has been performed.
 
 The old local worker and its actions are unchanged. No OTA installation,
 firmware flashing or production deployment is authorized by this work.
+
+## Result reconciliation
+
+Run `bin/devmcp-agent-recovery` to list pending local attempts.
+For a journal in `result_pending`, an operator may run
+`bin/devmcp-agent-report <attempt-id>`. This sends only the recorded
+result to the server, without executing the action again. A missing or
+expired server lease may reject the result: preserve the journal and
+investigate centrally. Never reset an `uncertain` journal automatically.
