@@ -49,13 +49,13 @@ function e(mixed $value): string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>devMcp — Administration distribuée</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/quartz/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="bg-light">
+<body>
 <main class="container py-4">
 <header class="d-flex justify-content-between align-items-center mb-4">
 <h1 class="h3 mb-0">devMcp <span class="text-secondary">/ Distribué</span></h1>
-<span class="badge text-bg-secondary">Lecture seule</span>
+<span class="badge bg-secondary ms-2 border border-light">Lecture seule</span>
 </header>
 <section class="row g-3 mb-4">
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) ?></div></div></div></div>
@@ -63,21 +63,21 @@ function e(mixed $value): string
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
 <h2 class="h5">Machines</h2>
-<div class="table-responsive mb-4"><table class="table table-sm table-striped bg-white">
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Dernier contact</th></tr></thead><tbody>
 <?php foreach ($machines as $machine): ?>
 <tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?= e($machine['last_seen_at']) ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 <h2 class="h5">Projets</h2>
-<div class="table-responsive mb-4"><table class="table table-sm table-striped bg-white">
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projects as $project): ?>
 <tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td><td><?= e($project['repository_url']) ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 <h2 class="h5">Derniers jobs</h2>
-<div class="table-responsive"><table class="table table-sm table-striped bg-white">
+<div class="table-responsive"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Création UTC</th><th>Machine</th><th>Projet</th><th>Action</th><th>État</th></tr></thead><tbody>
 <?php foreach ($jobs as $job): ?>
 <tr><td><?= e($job['created_at']) ?></td><td><?= e($job['machine_name']) ?></td><td><?= e($job['project_id']) ?></td><td><?= e($job['action_id']) ?></td><td><span class="badge text-bg-secondary"><?= e($job['status']) ?></span></td></tr>
