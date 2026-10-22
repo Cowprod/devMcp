@@ -46,12 +46,7 @@ final class AgentWorker
                 'job_id' => $job['id'],
                 'result' => $result,
             ]);
-            $this->client->post('/v1/agent/finish', [
-                'attempt_id' => $attempt,
-                'status' => $result['status'],
-                'exit_code' => $result['exit_code'],
-            ]);
-            $this->state->save($attempt, ['status' => 'reported', 'job_id' => $job['id']]);
+            (new PendingResultReporter($this->client, $this->state))->report($attempt);
             return true;
         } catch (Throwable $exception) {
             // A network failure after execution is uncertain; no retry.
