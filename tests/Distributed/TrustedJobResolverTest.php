@@ -34,7 +34,7 @@ final class TrustedJobResolverTest extends TestCase
                 ],
             ],
         ]]);
-        return new TrustedJobResolver($registry, str_repeat('a', 64));
+        return new TrustedJobResolver($registry, str_repeat('a', 64), str_repeat('e', 32), ['inspect' => 1]);
     }
 
     private function job(): array
@@ -47,6 +47,8 @@ final class TrustedJobResolverTest extends TestCase
             'arguments' => [],
             'policy_sha256' => str_repeat('a', 64),
             'fencing_token' => 1,
+            'deployment_id' => str_repeat('e', 32),
+            'action_revision' => 1,
         ];
     }
 
@@ -66,10 +68,18 @@ final class TrustedJobResolverTest extends TestCase
     public function testRejectsWrongDeployment(): void
     {
         $job = $this->job();
-        $job['deployment_id'] = str_repeat('e', 32);
+        $job['deployment_id'] = str_repeat('f', 32);
         $resolver = $this->resolver();
         $this->expectException(InvalidArgumentException::class);
-        $resolver->resolve(array_merge($job, ['argv' => ['/bin/sh']]));
+        $resolver->resolve($job);
+    }
+
+    public function testRejectsWrongActionRevision(): void
+    {
+        $job = $this->job();
+        $job['action_revision'] = 2;
+        $this->expectException(InvalidArgumentException::class);
+        $this->resolver()->resolve($job);
     }
 
     public function testRejectsWrongPolicy(): void
