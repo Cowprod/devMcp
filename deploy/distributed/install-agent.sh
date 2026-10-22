@@ -3,18 +3,19 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP --ca-file /path/to/ca.pem --enrollment-token TOKEN [--check-only]" >&2
+  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP --ca-file /path/to/ca.pem --token-stdin [--check-only]" >&2
   exit 2
 }
 SERVER=""
 CHECK_ONLY=0
 CA_FILE=""
 TOKEN=""
+TOKEN_STDIN=0
 while (($#)); do
   case "$1" in
     --server) (($# >= 2)) || usage; SERVER="$2"; shift 2 ;;
     --ca-file) (($# >= 2)) || usage; CA_FILE="$2"; shift 2 ;;
-    --enrollment-token) (($# >= 2)) || usage; TOKEN="$2"; shift 2 ;;
+    --token-stdin) TOKEN_STDIN=1; shift ;;
     --check-only) CHECK_ONLY=1; shift ;;
     *) usage ;;
   esac
@@ -41,6 +42,8 @@ ip -4 route get "$ZT_IP" | grep -Eq ' dev zt[^ ]+' || {
 }
 echo "Preflight OK: ${PRETTY_NAME:-$ID}, PHP $(php -r 'echo PHP_VERSION;'), ZeroTier route to $ZT_IP"
 if ((CHECK_ONLY)); then exit 0; fi
+if (( ! TOKEN_STDIN )); then echo "ERROR: --token-stdin required" >&2; exit 1; fi
+IFS= read -r TOKEN || true
 [[ "$TOKEN" =~ ^[a-f0-9]{64}$ ]] || { echo "ERROR: valid enrollment token required" >&2; exit 1; }
 [[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
 [[ ! -e /etc/devmcp/agent.php && ! -e /etc/devmcp/agent-token ]] || {
