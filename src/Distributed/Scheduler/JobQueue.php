@@ -124,6 +124,18 @@ final class JobQueue
 
         $this->db->beginTransaction();
         try {
+            $machine = $this->db->prepare("SELECT id FROM dm_machine WHERE id = ? AND status = 'active' FOR UPDATE");
+            $machine->execute([$machineId]);
+            if ($machine->fetchColumn() === false) {
+                $this->db->commit();
+                return null;
+            }
+            $busy = $this->db->prepare("SELECT dm_job.id FROM dm_job INNER JOIN dm_deployment ON dm_deployment.id = dm_job.deployment_id WHERE dm_deployment.machine_id = ? AND dm_job.status IN ('leased','running','uncertain') LIMIT 1");
+            $busy->execute([$machineId]);
+            if ($busy->fetchColumn() !== false) {
+                $this->db->commit();
+                return null;
+            }
             $select = $this->db->prepare(
                 'SELECT dm_job.id,dm_job.deployment_id,dm_job.action_id,dm_job.action_revision,'
                 . 'dm_job.arguments_json,dm_deployment.project_id,dm_policy_revision.policy_sha256 FROM dm_job '
