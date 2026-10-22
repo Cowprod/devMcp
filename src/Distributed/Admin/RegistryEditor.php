@@ -41,7 +41,7 @@ final class RegistryEditor
         $description = trim($description);
         $repositoryUrl = trim($repositoryUrl);
         if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $id) !== 1
-            || $description === '' || mb_strlen($description) > 255
+            || $description === '' || strlen($description) > 255
             || strlen($repositoryUrl) > 1024
             || ($repositoryUrl !== '' && (
                 !filter_var($repositoryUrl, FILTER_VALIDATE_URL)
