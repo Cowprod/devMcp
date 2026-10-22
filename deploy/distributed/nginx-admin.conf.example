@@ -11,7 +11,7 @@ server {
     root /opt/devmcp-admin/public;
     index distributed-admin.php;
     location = / {
-        try_files /distributed-admin.php =404;
+        rewrite ^ /distributed-admin.php last;
     }
     location = /distributed-admin.php {
         include fastcgi_params;
