@@ -37,8 +37,8 @@ final class AgentWorker
         // never run a command from an untrusted payload.
         $this->state->save($attempt, ['status' => 'claimed', 'job_id' => $job['id'] ?? null]);
         $resolved = $this->resolver->resolve($job);
-        $this->client->post('/v1/agent/start', ['attempt_id' => $attempt]);
         $this->state->save($attempt, ['status' => 'uncertain', 'job_id' => $job['id']]);
+        $this->client->post('/v1/agent/start', ['attempt_id' => $attempt]);
         try {
             $result = $this->executor->execute($attempt, $resolved);
             $this->state->save($attempt, [
