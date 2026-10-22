@@ -1,0 +1,27 @@
+# Replace __ZT_IP__, __CERT__, __KEY__, __HTPASSWD__ and __FPM_SOCKET__.
+# Explicit ZeroTier bind; no public IPv4/IPv6 listener.
+server {
+    listen __ZT_IP__:443 ssl;
+    server_name __ZT_IP__;
+    ssl_certificate __CERT__;
+    ssl_certificate_key __KEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    auth_basic "devMcp administration";
+    auth_basic_user_file __HTPASSWD__;
+    root /opt/devmcp-admin/public;
+    index distributed-admin.php;
+    location = / {
+        try_files /distributed-admin.php =404;
+    }
+    location = /distributed-admin.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/distributed-admin.php;
+        fastcgi_param HTTPS on;
+        fastcgi_param REMOTE_USER $remote_user;
+        fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+        fastcgi_pass unix:__FPM_SOCKET__;
+    }
+    location / {
+        return 404;
+    }
+}
