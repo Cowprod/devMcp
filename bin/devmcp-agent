@@ -59,7 +59,7 @@ try {
         new AgentHeartbeatRunner($client),
         new AgentStateStore($config['state_dir']),
     );
-    (new \\Cowprod\\DevMcp\\Distributed\\Agent\\AttemptRecoveryGuard($config['state_dir']))->assertSafeToClaim();
+    (new \Cowprod\DevMcp\Distributed\Agent\AttemptRecoveryGuard($config['state_dir']))->assertSafeToClaim();
     $worker->runOnce();
 } catch (Throwable $exception) {
     fwrite(STDERR, "Agent iteration failed: " . $exception->getMessage() . "\n");
