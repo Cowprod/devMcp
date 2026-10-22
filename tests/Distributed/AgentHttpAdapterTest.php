@@ -16,11 +16,11 @@ final class AgentHttpAdapterTest extends TestCase
         if (!extension_loaded('pdo_sqlite')) {
             self::markTestSkipped('pdo_sqlite unavailable');
         }
-        $db = new \\PDO('sqlite::memory:');
+        $db = new \PDO('sqlite::memory:');
         return new AgentHttpAdapter(new AgentService(
-            new \\Cowprod\\DevMcp\\Distributed\\Security\\AgentAuthenticator($db),
-            new \\Cowprod\\DevMcp\\Distributed\\Scheduler\\JobQueue($db),
-            new \\Cowprod\\DevMcp\\Distributed\\Scheduler\\AttemptLifecycle($db),
+            new \Cowprod\DevMcp\Distributed\Security\AgentAuthenticator($db),
+            new \Cowprod\DevMcp\Distributed\Scheduler\JobQueue($db),
+            new \Cowprod\DevMcp\Distributed\Scheduler\AttemptLifecycle($db),
         ));
     }
 
