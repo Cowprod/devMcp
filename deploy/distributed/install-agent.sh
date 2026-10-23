@@ -65,6 +65,7 @@ if [[ -n "$CERT_SHA256" || -n "$CERT_URL" ]]; then
   [[ "${ACTUAL_SHA256,,}" == "${CERT_SHA256,,}" ]] || {
     echo "ERROR: certificate SHA-256 mismatch" >&2; exit 1;
   }
+  openssl x509 -in "$CERT_TMP" -noout >/dev/null || { echo "ERROR: invalid X509 certificate" >&2; exit 1; }
   CA_FILE="$CERT_TMP"
 else
   [[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
@@ -72,10 +73,11 @@ fi
 [[ ! -e /etc/devmcp/agent.php && ! -e /etc/devmcp/agent-token ]] || {
   echo "ERROR: agent identity already exists; refusing overwrite" >&2; exit 1;
 }
+command -v openssl >/dev/null || { echo "ERROR: openssl required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 required" >&2; exit 1; }
 umask 077
 TMPDIR_AGENT="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_AGENT"' EXIT
+trap 'rm -rf "$TMPDIR_AGENT"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
 printf '{"token":"%s"}' "$TOKEN" > "$TMPDIR_AGENT/request.json"
 unset TOKEN
 HTTP_CODE="$(curl --silent --show-error --output "$TMPDIR_AGENT/response.json" \
@@ -97,12 +99,18 @@ with open(sys.argv[2], "w", encoding="ascii") as f:
     f.write(machine_id + "\n" + credential + "\n")
 PY
 # Enrollment only. No agent process is started before local policy approval.
-install -d -m 0700 -o root -g root /etc/devmcp
-install -m 0600 -o root -g root "$CA_FILE" /etc/devmcp/central-ca.pem
+if ! getent passwd devmcp-agent >/dev/null; then
+  useradd --system --home-dir /var/lib/devmcp-agent --shell /usr/sbin/nologin --user-group devmcp-agent
+fi
+install -d -m 0750 -o root -g devmcp-agent /etc/devmcp
+install -d -m 0700 -o devmcp-agent -g devmcp-agent /var/lib/devmcp-agent
+install -m 0640 -o root -g devmcp-agent "$CA_FILE" /etc/devmcp/central-ca.pem
 machine_id="$(sed -n '1p' "$TMPDIR_AGENT/identity")"
 sed -n '2p' "$TMPDIR_AGENT/identity" > /etc/devmcp/agent-token
-chmod 0600 /etc/devmcp/agent-token
+chown root:devmcp-agent /etc/devmcp/agent-token
+chmod 0640 /etc/devmcp/agent-token
 printf "<?php\\nreturn ['machine_id' => '%s', 'central_url' => '%s', 'policy_file' => '/etc/devmcp/agent-policy.php', 'credential_file' => '/etc/devmcp/agent-token', 'ca_file' => '/etc/devmcp/central-ca.pem', 'state_dir' => '/var/lib/devmcp-agent'];\\n" "$machine_id" "$SERVER" > /etc/devmcp/agent.php
-chmod 0600 /etc/devmcp/agent.php
-echo "Enrollment completed: machine $machine_id. Agent execution remains disabled pending local policy approval."
+chown root:devmcp-agent /etc/devmcp/agent.php
+chmod 0640 /etc/devmcp/agent.php
+echo "Enrollment completed: machine $machine_id. Agent account and state directory staged; service intentionally not enabled pending trusted policy and deployment approval."
 
