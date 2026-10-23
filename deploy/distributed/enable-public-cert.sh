@@ -6,6 +6,10 @@ CONF=/etc/nginx/sites-available/devmcp-admin.conf
 CERT=/etc/devmcp-admin/tls/admin.crt
 [[ -f "$CONF" && ! -L "$CONF" && -f "$CERT" && ! -L "$CERT" ]] || exit 2
 /usr/bin/openssl x509 -in "$CERT" -noout >/dev/null
+BACKUP="$(mktemp /etc/nginx/sites-available/.devmcp-admin-backup.XXXXXXXX)"
+cp -p "$CONF" "$BACKUP"
+restore() { cp -p "$BACKUP" "$CONF"; /usr/sbin/nginx -t >&2 || true; }
+trap 'restore; rm -f "$BACKUP"' ERR
 /usr/bin/python3 - "$CONF" <<'PY'
 import os, pathlib, sys, tempfile
 p = pathlib.Path(sys.argv[1])
@@ -39,4 +43,6 @@ finally:
 PY
 /usr/sbin/nginx -t
 /bin/systemctl reload nginx
+trap - ERR
+rm -f "$BACKUP"
 echo "Public certificate endpoint configured."
