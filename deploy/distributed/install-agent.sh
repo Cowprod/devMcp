@@ -3,18 +3,22 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP --ca-file /path/to/ca.pem --token-stdin [--check-only]" >&2
+  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP (--ca-file /path/to/ca.pem | --cert-sha256 HEX --cert-url HTTPS_URL) --token-stdin [--check-only]" >&2
   exit 2
 }
 SERVER=""
 CHECK_ONLY=0
 CA_FILE=""
+CERT_SHA256=""
+CERT_URL=""
 TOKEN=""
 TOKEN_STDIN=0
 while (($#)); do
   case "$1" in
     --server) (($# >= 2)) || usage; SERVER="$2"; shift 2 ;;
     --ca-file) (($# >= 2)) || usage; CA_FILE="$2"; shift 2 ;;
+    --cert-sha256) (($# >= 2)) || usage; CERT_SHA256="$2"; shift 2 ;;
+    --cert-url) (($# >= 2)) || usage; CERT_URL="$2"; shift 2 ;;
     --token-stdin) TOKEN_STDIN=1; shift ;;
     --check-only) CHECK_ONLY=1; shift ;;
     *) usage ;;
@@ -45,7 +49,26 @@ if ((CHECK_ONLY)); then exit 0; fi
 if (( ! TOKEN_STDIN )); then echo "ERROR: --token-stdin required" >&2; exit 1; fi
 IFS= read -r TOKEN || true
 [[ "$TOKEN" =~ ^[a-f0-9]{64}$ ]] || { echo "ERROR: valid enrollment token required" >&2; exit 1; }
-[[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
+if [[ -n "$CERT_SHA256" || -n "$CERT_URL" ]]; then
+  [[ -z "$CA_FILE" && "$CERT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]] || {
+    echo "ERROR: provide a valid --cert-sha256 without --ca-file" >&2; exit 1;
+  }
+  [[ "$CERT_URL" == "$SERVER/devmcp-ca.crt" ]] || {
+    echo "ERROR: certificate URL must be the fixed central certificate endpoint" >&2; exit 1;
+  }
+  CERT_TMP="$(mktemp)"
+  trap 'rm -f "$CERT_TMP"' EXIT
+  curl --silent --show-error --fail --max-time 20 --output "$CERT_TMP" "$CERT_URL" || {
+    echo "ERROR: cannot retrieve certificate" >&2; exit 1;
+  }
+  ACTUAL_SHA256="$(sha256sum "$CERT_TMP" | cut -d' ' -f1)"
+  [[ "${ACTUAL_SHA256,,}" == "${CERT_SHA256,,}" ]] || {
+    echo "ERROR: certificate SHA-256 mismatch" >&2; exit 1;
+  }
+  CA_FILE="$CERT_TMP"
+else
+  [[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
+fi
 [[ ! -e /etc/devmcp/agent.php && ! -e /etc/devmcp/agent-token ]] || {
   echo "ERROR: agent identity already exists; refusing overwrite" >&2; exit 1;
 }
