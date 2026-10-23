@@ -28,6 +28,9 @@ session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_sames
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $error = null;
 $invitation = null;
+$bootstrapCert = '/etc/devmcp-admin/tls/admin.crt';
+$bootstrapCertHash = is_readable($bootstrapCert) ? hash_file('sha256', $bootstrapCert) : false;
+$bootstrapServer = 'https://192.168.194.189';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
         http_response_code(403);
@@ -107,7 +110,7 @@ function e(mixed $value): string
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projects) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
-<?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><p class="mb-0 mt-2">L'installation automatique n'est pas encore disponible. Ce jeton ne donne aucun droit d'exécution.</p></div><?php endif; ?>
+<?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Commande d'enrôlement à lancer sur la machine après installation du script <code>install-agent.sh</code> :</p><pre class="user-select-all text-wrap p-2 bg-dark text-light">sudo bash install-agent.sh --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin</pre><small>Le script lit le jeton sur l'entrée standard ; ne le passez pas en argument. L'endpoint public du certificat doit être configuré. Le service agent n'est pas encore activé.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
 <?php if ($error !== null): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <?php if (isset($_GET['created'])): ?><div class="alert alert-success">Enregistrement effectué.</div><?php endif; ?>
 <section class="row g-3 mb-4">
