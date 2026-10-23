@@ -37,6 +37,13 @@ server {
     #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
     #     fastcgi_pass unix:__FPM_SOCKET__;
     # }
+    # Public certificate only, never expose the private key.
+    location = /devmcp-ca.crt {
+        auth_basic off;
+        default_type application/x-pem-file;
+        alias __CERT__;
+        add_header Cache-Control "no-store" always;
+    }
     location / {
         return 404;
     }
