@@ -50,6 +50,12 @@ final class RegistryRepository
         return $statement->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** @return list<array<string,mixed>> */
+    public function deployments(): array
+    {
+        return $this->db->query('SELECT dm_deployment.id, dm_deployment.project_id, dm_deployment.machine_id, dm_machine.name AS machine_name, dm_deployment.workspace_path, dm_deployment.enabled FROM dm_deployment INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id ORDER BY dm_deployment.project_id, dm_machine.name')->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     private static function assertId(string $id): void
     {
         if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $id) !== 1) {
