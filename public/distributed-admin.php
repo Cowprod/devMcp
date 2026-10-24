@@ -58,6 +58,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             case 'project.create':
                 $editor->createProject((string) ($_POST['id'] ?? ''), (string) ($_POST['description'] ?? ''), (string) ($_POST['repository_url'] ?? ''));
                 break;
+            case 'deployment.create':
+                $editor->assignDeployment((string) ($_POST['project_id'] ?? ''), (string) ($_POST['machine_id'] ?? ''), (string) ($_POST['workspace_path'] ?? ''));
+                break;
             default:
                 throw new InvalidArgumentException('Unknown operation');
         }
@@ -79,6 +82,7 @@ try {
     $dashboard = new DashboardRepository($db);
     $machines = $registry->machines();
     $projects = $registry->projects();
+    $deployments = $registry->deployments();
     $jobs = $dashboard->recentJobs();
     $counts = $dashboard->jobCounts();
 } catch (Throwable $exception) {
@@ -154,6 +158,17 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="btn-group"><button class="btn btn-success" type="submit">Ajouter</button></div>
 </form></div></div></div>
 </section>
+<section class="card mb-4"><div class="card-body">
+<h2 class="h5">Affecter un projet à une machine</h2>
+<form method="post" action="/">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="deployment.create">
+<div class="input-group mb-2"><span class="input-group-text">Projet</span><select class="form-select" name="project_id" required><?php foreach ($projects as $project): ?><option value="<?= e($project['id']) ?>"><?= e($project['id']) ?></option><?php endforeach; ?></select></div>
+<div class="input-group mb-2"><span class="input-group-text">Machine</span><select class="form-select" name="machine_id" required><?php foreach ($machines as $machine): ?><option value="<?= e($machine['id']) ?>"><?= e($machine['name']) ?></option><?php endforeach; ?></select></div>
+<div class="input-group mb-3"><span class="input-group-text">Répertoire absolu</span><input class="form-control" name="workspace_path" placeholder="/home/user/project" maxlength="1024" required></div>
+<div class="btn-group"><button class="btn btn-success" type="submit" <?= !$projects || !$machines ? 'disabled' : '' ?>>Associer (exécution désactivée)</button></div>
+</form><small class="text-secondary">Association enregistrée sans démarrage de jobs. Le répertoire sera vérifié sur l'agent avant toute activation.</small>
+</div></section>
 <h2 class="h5">Machines</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
@@ -167,6 +182,10 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <?php foreach ($projects as $project): ?>
 <tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td><td><?= e($project['repository_url']) ?></td></tr>
 <?php endforeach; ?>
+</tbody></table></div>
+<h2 class="h5">Affectations</h2>
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th></tr></thead><tbody>
+<?php foreach ($deployments as $deployment): ?><tr><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td></tr><?php endforeach; ?>
 </tbody></table></div>
 <h2 class="h5">Derniers jobs</h2>
 <div class="table-responsive"><table class="table table-sm table-striped table-hover">
