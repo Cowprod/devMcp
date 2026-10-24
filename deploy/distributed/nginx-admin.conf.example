@@ -1,5 +1,6 @@
 # Put in nginx http {} context (outside server {}):
 # limit_req_zone $binary_remote_addr zone=devmcp_enroll:10m rate=2r/m;
+# limit_req_zone $binary_remote_addr zone=devmcp_agent:10m rate=30r/m;
 # Replace __ZT_IP__, __CERT__, __KEY__, __HTPASSWD__ and __FPM_SOCKET__.
 # Explicit ZeroTier bind; no public IPv4/IPv6 listener.
 server {
@@ -33,6 +34,20 @@ server {
     #     client_max_body_size 2k;
     #     include fastcgi_params;
     #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/enrollment.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
+    # Enable only after explicit deployment approval and isolated tests.
+    # Agents authenticate using a machine-scoped bearer token; HTTP Basic
+    # must be disabled for this endpoint only.
+    # location ~ ^/v1/agent/(claim|start|heartbeat|finish)$ {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_agent burst=10 nodelay;
+    #     client_max_body_size 64k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/agent.php;
     #     fastcgi_param HTTPS on;
     #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
     #     fastcgi_pass unix:__FPM_SOCKET__;
