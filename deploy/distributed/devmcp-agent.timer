@@ -1,0 +1,13 @@
+[Unit]
+Description=devMcp distributed agent periodic secure connectivity
+After=network-online.target
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=10s
+Persistent=false
+Unit=devmcp-agent.service
+
+[Install]
+WantedBy=timers.target
