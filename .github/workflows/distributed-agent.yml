@@ -1,0 +1,48 @@
+name: Distributed agent bootstrap checks
+on:
+  push:
+    branches: [feat/distributed-architecture]
+    paths:
+      - 'deploy/distributed/**'
+      - 'bin/distributed-agent.php'
+      - 'public/distributed-admin.php'
+      - '.github/workflows/distributed-agent.yml'
+  pull_request:
+    paths:
+      - 'deploy/distributed/**'
+      - 'bin/distributed-agent.php'
+      - 'public/distributed-admin.php'
+      - '.github/workflows/distributed-agent.yml'
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PHP CLI and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y php8.3-cli shellcheck
+      - name: PHP syntax
+        run: |
+          php -l bin/distributed-agent.php
+          php -l public/distributed-admin.php
+      - name: Bash syntax and static analysis
+        run: |
+          bash -n deploy/distributed/install-agent.sh
+          shellcheck --severity=error deploy/distributed/install-agent.sh
+      - name: Systemd unit validation
+        run: |
+          systemd-analyze verify deploy/distributed/devmcp-agent.service deploy/distributed/devmcp-agent.timer
+      - name: Fail-closed agent test
+        run: |
+          set +e
+          php bin/distributed-agent.php > /tmp/agent.out 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+          grep -q 'agent configuration missing' /tmp/agent.out
+      - name: Installer preflight rejects missing root privileges
+        run: |
+          set +e
+          bash deploy/distributed/install-agent.sh --server https://192.168.194.189 --check-only > /tmp/preflight.out 2>&1
+          rc=$?
+          set -e
+          test "$rc" -ne 0
