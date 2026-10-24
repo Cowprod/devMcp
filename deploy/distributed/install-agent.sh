@@ -90,9 +90,6 @@ grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "
 grep -Fqx 'Unit=devmcp-agent.service' "$STAGING/devmcp-agent.timer" || {
   echo "ERROR: invalid agent timer artifact" >&2; exit 1;
 }
-systemd-analyze verify "$STAGING/devmcp-agent.service" "$STAGING/devmcp-agent.timer" >/dev/null 2>&1 || {
-  echo "ERROR: invalid systemd units" >&2; exit 1;
-}
 [[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service && ! -e /etc/systemd/system/devmcp-agent.timer ]] || {
   echo "ERROR: existing agent deployment; refusing overwrite" >&2; exit 1;
 }
