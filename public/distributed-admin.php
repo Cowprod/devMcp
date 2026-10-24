@@ -114,13 +114,21 @@ function e(mixed $value): string
 <?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Installation du client (commande unique, jeton à usage unique) :</p>
 <div class="position-relative">
 <button type="button" id="copy-enrollment-command" class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" title="Copier la commande" aria-label="Copier la commande"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
-<pre id="enrollment-command" class="user-select-all text-wrap p-3 pe-5 bg-dark text-light">Installation complète non encore disponible : agent systemd et distribution vérifiée en cours de préparation.</pre>
+<pre id="enrollment-command" class="user-select-all text-wrap p-3 pe-5 bg-dark text-light">tmp=$(mktemp); curl --proto '=https' --tlsv1.2 -fsSL 'https://raw.githubusercontent.com/Cowprod/devMcp/093b23c11ac8d45acfa4066938b2999494cac32d/deploy/distributed/install-agent.sh' -o "$tmp" &amp;&amp; printf '%s\n' '<?= e($invitation['token']) ?>' | sudo bash "$tmp" --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin; rc=$?; rm -f "$tmp"; test "$rc" -eq 0</pre>
 </div>
-<div id="copy-enrollment-feedback" class="small" role="status" aria-live="polite">Commande désactivée tant que l'installation n'est pas complète.</div>
+<div id="copy-enrollment-feedback" class="small" role="status" aria-live="polite">Commande avec jeton à usage unique.</div>
 <script>
-document.getElementById('copy-enrollment-command').disabled = true;
+document.getElementById('copy-enrollment-command').addEventListener('click', async function () {
+    const feedback = document.getElementById('copy-enrollment-feedback');
+    try {
+        await navigator.clipboard.writeText(document.getElementById('enrollment-command').textContent.trim());
+        feedback.textContent = 'Commande copiée : elle contient un jeton secret.';
+    } catch (error) {
+        feedback.textContent = 'Copie impossible : sélectionnez la commande.';
+    }
+});
 </script>
-<small>Le jeton ne doit pas être utilisé avant la publication de l'installateur complet.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
+<small>Attention : le jeton intégré peut être conservé dans l'historique shell. Exécution distante désactivée avant approbation.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
 <?php if ($error !== null): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <?php if (isset($_GET['created'])): ?><div class="alert alert-success">Enregistrement effectué.</div><?php endif; ?>
 <section class="row g-3 mb-4">
