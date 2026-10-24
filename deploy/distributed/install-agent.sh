@@ -25,7 +25,6 @@ while (($#)); do
   esac
 done
 [[ "$EUID" -eq 0 ]] || { echo "ERROR: root required" >&2; exit 1; }
-command -v ip >/dev/null || { echo "ERROR: iproute2 required" >&2; exit 1; }
 [[ "$SERVER" =~ ^https://([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?$ ]] || {
   echo "ERROR: --server must be a literal ZeroTier IPv4 HTTPS URL" >&2; exit 1;
 }
@@ -34,14 +33,15 @@ command -v ip >/dev/null || { echo "ERROR: iproute2 required" >&2; exit 1; }
 source /etc/os-release
 case "${ID:-}" in ubuntu|debian) ;; *) echo "ERROR: unsupported OS: ${ID:-unknown}" >&2; exit 1;; esac
 command -v systemctl >/dev/null || { echo "ERROR: systemd required" >&2; exit 1; }
-command -v curl >/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 # Install only missing OS packages before the enrollment token is read.
 # Never replace an existing PHP version or modify ZeroTier membership.
 missing=()
 command -v php >/dev/null || missing+=(php8.3-cli)
+command -v ip >/dev/null || missing+=(iproute2)
 command -v curl >/dev/null || missing+=(curl)
 command -v openssl >/dev/null || missing+=(openssl)
 command -v python3 >/dev/null || missing+=(python3)
+command -v sha256sum >/dev/null || missing+=(coreutils)
 if command -v php >/dev/null; then
   php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' || {
     echo "ERROR: existing PHP is older than 8.3; refusing automatic replacement" >&2; exit 1;
