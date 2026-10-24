@@ -57,6 +57,8 @@ try {
     }
     echo '{"protocol_version":1,"ok":true}';
 } catch (Throwable $exception) {
+    // Never expose internal details to the agent; record a bounded server-side diagnostic.
+    error_log('devmcp-agent-ping: ' . get_class($exception) . ': ' . substr($exception->getMessage(), 0, 300));
     http_response_code(400);
     echo '{"error":"invalid_agent_request"}';
 }
