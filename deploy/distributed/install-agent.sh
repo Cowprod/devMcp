@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# devMcp agent bootstrap preflight. Does not enroll or start an agent.
+# devMcp agent enrollment bootstrap. Does not start an execution agent.
 set -euo pipefail
 
 usage() {
@@ -58,7 +58,7 @@ if [[ -n "$CERT_SHA256" || -n "$CERT_URL" ]]; then
   }
   CERT_TMP="$(mktemp)"
   trap 'rm -f "$CERT_TMP"' EXIT
-  curl --silent --show-error --fail --max-time 20 --output "$CERT_TMP" "$CERT_URL" || {
+  curl --insecure --proto '=https' --silent --show-error --fail --max-time 20 --output "$CERT_TMP" "$CERT_URL" || {
     echo "ERROR: cannot retrieve certificate" >&2; exit 1;
   }
   ACTUAL_SHA256="$(sha256sum "$CERT_TMP" | cut -d' ' -f1)"
