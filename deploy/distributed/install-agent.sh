@@ -72,7 +72,7 @@ else
 fi
 # Fetch agent code before consuming the one-time enrollment token.
 # The release ref is an immutable commit, not a moving branch.
-AGENT_RELEASE="825c46a35558173cbf518fccd25343af3979a213"
+AGENT_RELEASE="d9776df4fc1ee718ad2b677284abf805b919cd0f"
 AGENT_BASE="https://raw.githubusercontent.com/Cowprod/devMcp/$AGENT_RELEASE"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
@@ -80,6 +80,8 @@ curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-ti
   --output "$STAGING/distributed-agent.php" "$AGENT_BASE/bin/distributed-agent.php"
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
   --output "$STAGING/devmcp-agent.service" "$AGENT_BASE/deploy/distributed/devmcp-agent.service"
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
+  --output "$STAGING/devmcp-agent.timer" "$AGENT_BASE/deploy/distributed/devmcp-agent.timer"
 php -l "$STAGING/distributed-agent.php" >/dev/null
 grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "$STAGING/devmcp-agent.service" || {
   echo "ERROR: invalid agent service artifact" >&2; exit 1;
@@ -134,9 +136,10 @@ chmod 0640 /etc/devmcp/agent.php
 install -d -m 0755 -o root -g root /opt/devmcp-agent/bin
 install -m 0755 -o root -g root "$STAGING/distributed-agent.php" /opt/devmcp-agent/bin/distributed-agent.php
 install -m 0644 -o root -g root "$STAGING/devmcp-agent.service" /etc/systemd/system/devmcp-agent.service
+install -m 0644 -o root -g root "$STAGING/devmcp-agent.timer" /etc/systemd/system/devmcp-agent.timer
 systemctl daemon-reload
-systemctl enable devmcp-agent.service
+systemctl enable --now devmcp-agent.timer
 systemctl start devmcp-agent.service
-echo "Installed and enrolled: machine $machine_id; devmcp-agent.service enabled (remote execution disabled until explicitly approved)."
+echo "Installed and enrolled: machine $machine_id; devmcp-agent.timer enabled (remote execution disabled until explicitly approved)."
 systemctl --no-pager --full status devmcp-agent.service || true
 
