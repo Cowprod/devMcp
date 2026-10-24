@@ -38,6 +38,19 @@ server {
     #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
     #     fastcgi_pass unix:__FPM_SOCKET__;
     # }
+    # Authenticated connectivity check for pending agents: NO job access.
+    # Activate after applying database migration and writer credentials.
+    # location = /v1/agent/ping {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_agent burst=10 nodelay;
+    #     client_max_body_size 1k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/agent-ping.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
     # Enable only after explicit deployment approval and isolated tests.
     # Agents authenticate using a machine-scoped bearer token; HTTP Basic
     # must be disabled for this endpoint only.
