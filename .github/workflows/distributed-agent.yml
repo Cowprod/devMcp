@@ -6,6 +6,8 @@ on:
       - 'deploy/distributed/**'
       - 'bin/distributed-agent.php'
       - 'public/distributed-admin.php'
+      - 'public/agent-ping.php'
+      - 'src/Distributed/Security/AgentAuthenticator.php'
       - '.github/workflows/distributed-agent.yml'
   pull_request:
     paths:
@@ -24,6 +26,8 @@ jobs:
         run: |
           php -l bin/distributed-agent.php
           php -l public/distributed-admin.php
+          php -l public/agent-ping.php
+          php -l src/Distributed/Security/AgentAuthenticator.php
       - name: Bash syntax and static analysis
         run: |
           bash -n deploy/distributed/install-agent.sh
