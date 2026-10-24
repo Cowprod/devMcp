@@ -97,7 +97,7 @@ function e(mixed $value): string
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>devMcp — Administration distribuée</title>
 <link rel="icon" type="image/webp" href="/devmcp-icon-512.webp">
-<link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/quartz/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/quartz/bootstrap.min.css" rel="stylesheet">\n<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 <main class="container py-4">
@@ -110,18 +110,21 @@ function e(mixed $value): string
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projects) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
-<?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Commande d'enrôlement à lancer sur la machine après installation du script <code>install-agent.sh</code> :</p><pre class="user-select-all text-wrap p-2 bg-dark text-light">sudo bash install-agent.sh --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin</pre><div class="mt-2"><button type="button" class="btn btn-success btn-sm" id="copy-enrollment-command">Copier la commande</button> <span id="copy-enrollment-feedback" class="small" role="status" aria-live="polite"></span></div><script>
+<?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Commande d'enrôlement à lancer sur la machine après installation du script <code>install-agent.sh</code> :</p>
+<div class="position-relative">
+<button type="button" id="copy-enrollment-command" class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" title="Copier la commande" aria-label="Copier la commande"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
+<pre id="enrollment-command" class="user-select-all text-wrap p-3 pe-5 bg-dark text-light">read -r -s -p "Jeton d'enrolement : " DEVMCP_TOKEN; printf '\\n'; printf '%s\\n' "$DEVMCP_TOKEN" | sudo bash install-agent.sh --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin; unset DEVMCP_TOKEN</pre>
+</div>
+<div id="copy-enrollment-feedback" class="small" role="status" aria-live="polite"></div>
+<script>
 document.getElementById('copy-enrollment-command').addEventListener('click', async function () {
-    const button = this;
     const feedback = document.getElementById('copy-enrollment-feedback');
-    const token = <?= json_encode($invitation['token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    const command = 'read -r -s -p "Jeton d\\'enrolement : " DEVMCP_TOKEN; printf "\\n"; printf "%s\\n" "$DEVMCP_TOKEN" | sudo bash install-agent.sh --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin; unset DEVMCP_TOKEN';
-    // Never copy the one-time token to shell history or clipboard.
+    const command = document.getElementById('enrollment-command').textContent.trim();
     try {
         await navigator.clipboard.writeText(command);
-        feedback.textContent = 'Commande copiée (jeton à saisir séparément).';
+        feedback.textContent = 'Commande copiée. Le jeton sera demandé dans le terminal.';
     } catch (error) {
-        feedback.textContent = 'Copie impossible : sélectionnez la commande affichée.';
+        feedback.textContent = 'Copie impossible : sélectionnez manuellement le texte.';
     }
 });
 </script><small>Le script lit le jeton sur l'entrée standard ; ne le passez pas en argument. L'endpoint public du certificat doit être configuré. Le service agent n'est pas encore activé.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
