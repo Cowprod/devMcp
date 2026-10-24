@@ -76,7 +76,7 @@ else
 fi
 # Fetch agent code before consuming the one-time enrollment token.
 # The release ref is an immutable commit, not a moving branch.
-AGENT_RELEASE="d9776df4fc1ee718ad2b677284abf805b919cd0f"
+AGENT_RELEASE="166f287e5d8bea4a885b4b9d55509b6848c5f5f7"
 AGENT_BASE="https://raw.githubusercontent.com/Cowprod/devMcp/$AGENT_RELEASE"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
