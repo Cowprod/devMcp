@@ -19,7 +19,7 @@ final class AgentAuthenticator
         $this->db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
     }
 
-    public function authenticate(string $machineId, string $credential): void
+    public function authenticate(string $machineId, string $credential, bool $allowPending = false): void
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $machineId) !== 1
             || strlen($credential) < 32 || strlen($credential) > 512) {
@@ -33,7 +33,7 @@ final class AgentAuthenticator
             . 'WHERE dm_agent_identity.machine_id = ? '
             . 'AND dm_agent_identity.revoked_at IS NULL '
             . 'AND dm_agent_identity.expires_at > UTC_TIMESTAMP(6) '
-            . 'AND dm_machine.status = \'active\''
+            . ($allowPending ? "AND dm_machine.status IN ('active','pending')" : "AND dm_machine.status = 'active'")
         );
         $stmt->execute([$machineId]);
         $actual = hash('sha256', $credential);
