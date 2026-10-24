@@ -70,14 +70,32 @@ if [[ -n "$CERT_SHA256" || -n "$CERT_URL" ]]; then
 else
   [[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
 fi
+# Fetch agent code before consuming the one-time enrollment token.
+# The release ref is an immutable commit, not a moving branch.
+AGENT_RELEASE="825c46a35558173cbf518fccd25343af3979a213"
+AGENT_BASE="https://raw.githubusercontent.com/Cowprod/devMcp/$AGENT_RELEASE"
+STAGING="$(mktemp -d)"
+trap 'rm -rf "$STAGING"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
+  --output "$STAGING/distributed-agent.php" "$AGENT_BASE/bin/distributed-agent.php"
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
+  --output "$STAGING/devmcp-agent.service" "$AGENT_BASE/deploy/distributed/devmcp-agent.service"
+php -l "$STAGING/distributed-agent.php" >/dev/null
+grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "$STAGING/devmcp-agent.service" || {
+  echo "ERROR: invalid agent service artifact" >&2; exit 1;
+}
+[[ -x /usr/bin/php ]] || { echo "ERROR: /usr/bin/php unavailable" >&2; exit 1; }
+[[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service ]] || {
+  echo "ERROR: existing agent deployment; refusing overwrite" >&2; exit 1;
+}
 [[ ! -e /etc/devmcp/agent.php && ! -e /etc/devmcp/agent-token ]] || {
   echo "ERROR: agent identity already exists; refusing overwrite" >&2; exit 1;
 }
 command -v openssl >/dev/null || { echo "ERROR: openssl required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 required" >&2; exit 1; }
 umask 077
-TMPDIR_AGENT="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_AGENT"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
+TMPDIR_AGENT="$STAGING/enrollment"\nmkdir -m 0700 "$TMPDIR_AGENT"
+
 printf '{"token":"%s"}' "$TOKEN" > "$TMPDIR_AGENT/request.json"
 unset TOKEN
 HTTP_CODE="$(curl --silent --show-error --output "$TMPDIR_AGENT/response.json" \
@@ -112,5 +130,12 @@ chmod 0640 /etc/devmcp/agent-token
 printf "<?php\nreturn ['machine_id' => '%s', 'central_url' => '%s', 'policy_file' => '/etc/devmcp/agent-policy.php', 'credential_file' => '/etc/devmcp/agent-token', 'ca_file' => '/etc/devmcp/central-ca.pem', 'state_dir' => '/var/lib/devmcp-agent'];\n" "$machine_id" "$SERVER" > /etc/devmcp/agent.php
 chown root:devmcp-agent /etc/devmcp/agent.php
 chmod 0640 /etc/devmcp/agent.php
-echo "Enrollment completed: machine $machine_id. Agent account and state directory staged; service intentionally not enabled pending trusted policy and deployment approval."
+install -d -m 0755 -o root -g root /opt/devmcp-agent/bin
+install -m 0755 -o root -g root "$STAGING/distributed-agent.php" /opt/devmcp-agent/bin/distributed-agent.php
+install -m 0644 -o root -g root "$STAGING/devmcp-agent.service" /etc/systemd/system/devmcp-agent.service
+systemctl daemon-reload
+systemctl enable devmcp-agent.service
+systemctl start devmcp-agent.service
+echo "Installed and enrolled: machine $machine_id; devmcp-agent.service enabled (remote execution disabled until explicitly approved)."
+systemctl --no-pager --full status devmcp-agent.service || true
 
