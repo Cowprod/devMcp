@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# devMcp agent enrollment bootstrap. Does not start an execution agent.
+# devMcp agent bootstrap. Installs a connectivity-only agent, never remote execution.
 set -euo pipefail
 
 usage() {
@@ -87,7 +87,7 @@ grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "
   echo "ERROR: invalid agent service artifact" >&2; exit 1;
 }
 [[ -x /usr/bin/php ]] || { echo "ERROR: /usr/bin/php unavailable" >&2; exit 1; }
-[[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service ]] || {
+[[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service && ! -e /etc/systemd/system/devmcp-agent.timer ]] || {
   echo "ERROR: existing agent deployment; refusing overwrite" >&2; exit 1;
 }
 [[ ! -e /etc/devmcp/agent.php && ! -e /etc/devmcp/agent-token ]] || {
@@ -141,5 +141,6 @@ systemctl daemon-reload
 systemctl enable --now devmcp-agent.timer
 systemctl start devmcp-agent.service
 echo "Installed and enrolled: machine $machine_id; devmcp-agent.timer enabled (remote execution disabled until explicitly approved)."
-systemctl --no-pager --full status devmcp-agent.service || true
+systemctl is-enabled --quiet devmcp-agent.timer || { echo "ERROR: agent timer not enabled" >&2; exit 1; }
+systemctl --no-pager --full status devmcp-agent.timer || true
 
