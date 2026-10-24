@@ -29,7 +29,7 @@ if (!extension_loaded('curl')) {
     fwrite(STDERR, "devMcp: php-curl missing\n");
     exit(1);
 }
-$handle = curl_init($server . '/v1/agent/claim');
+$handle = curl_init($server . '/v1/agent/ping');
 curl_setopt_array($handle, [
     CURLOPT_POST => true,
     CURLOPT_POSTFIELDS => '{"protocol_version":1}',
@@ -55,12 +55,8 @@ if ($result === false || $status !== 200) {
     exit(0);
 }
 $data = json_decode($result, true);
-if (!is_array($data) || !array_key_exists('job', $data)) {
+if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'] ?? null) !== true) {
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
-if ($data['job'] !== null) {
-    fwrite(STDERR, "devMcp: execution disabled until local policy is explicitly approved\n");
-    exit(2);
-}
-fwrite(STDOUT, "devMcp: connected, no authorized jobs\n");
+fwrite(STDOUT, "devMcp: authenticated heartbeat accepted (execution disabled)\n");
