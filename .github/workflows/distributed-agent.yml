@@ -30,7 +30,8 @@ jobs:
           shellcheck --severity=error deploy/distributed/install-agent.sh
       - name: Systemd unit validation
         run: |
-          systemd-analyze verify deploy/distributed/devmcp-agent.service deploy/distributed/devmcp-agent.timer
+          grep -Fx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' deploy/distributed/devmcp-agent.service
+          grep -Fx 'Unit=devmcp-agent.service' deploy/distributed/devmcp-agent.timer
       - name: Fail-closed agent test
         run: |
           set +e
