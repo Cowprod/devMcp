@@ -109,7 +109,7 @@ machine_id="$(sed -n '1p' "$TMPDIR_AGENT/identity")"
 sed -n '2p' "$TMPDIR_AGENT/identity" > /etc/devmcp/agent-token
 chown root:devmcp-agent /etc/devmcp/agent-token
 chmod 0640 /etc/devmcp/agent-token
-printf "<?php\\nreturn ['machine_id' => '%s', 'central_url' => '%s', 'policy_file' => '/etc/devmcp/agent-policy.php', 'credential_file' => '/etc/devmcp/agent-token', 'ca_file' => '/etc/devmcp/central-ca.pem', 'state_dir' => '/var/lib/devmcp-agent'];\\n" "$machine_id" "$SERVER" > /etc/devmcp/agent.php
+printf "<?php\nreturn ['machine_id' => '%s', 'central_url' => '%s', 'policy_file' => '/etc/devmcp/agent-policy.php', 'credential_file' => '/etc/devmcp/agent-token', 'ca_file' => '/etc/devmcp/central-ca.pem', 'state_dir' => '/var/lib/devmcp-agent'];\n" "$machine_id" "$SERVER" > /etc/devmcp/agent.php
 chown root:devmcp-agent /etc/devmcp/agent.php
 chmod 0640 /etc/devmcp/agent.php
 echo "Enrollment completed: machine $machine_id. Agent account and state directory staged; service intentionally not enabled pending trusted policy and deployment approval."
