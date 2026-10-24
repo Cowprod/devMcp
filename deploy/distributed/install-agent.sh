@@ -25,6 +25,7 @@ while (($#)); do
   esac
 done
 [[ "$EUID" -eq 0 ]] || { echo "ERROR: root required" >&2; exit 1; }
+command -v ip >/dev/null || { echo "ERROR: iproute2 required" >&2; exit 1; }
 [[ "$SERVER" =~ ^https://([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?$ ]] || {
   echo "ERROR: --server must be a literal ZeroTier IPv4 HTTPS URL" >&2; exit 1;
 }
@@ -37,6 +38,9 @@ command -v curl >/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
 command -v php >/dev/null || { echo "ERROR: PHP 8.3+ required" >&2; exit 1; }
 php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' || {
   echo "ERROR: PHP 8.3+ required" >&2; exit 1;
+}
+php -r 'exit(extension_loaded("curl") ? 0 : 1);' || {
+  echo "ERROR: PHP curl extension required (install php8.3-curl before enrollment)" >&2; exit 1;
 }
 command -v zerotier-cli >/dev/null || { echo "ERROR: ZeroTier required" >&2; exit 1; }
 ZT_IP="${SERVER#https://}"
