@@ -87,6 +87,12 @@ grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "
   echo "ERROR: invalid agent service artifact" >&2; exit 1;
 }
 [[ -x /usr/bin/php ]] || { echo "ERROR: /usr/bin/php unavailable" >&2; exit 1; }
+grep -Fqx 'Unit=devmcp-agent.service' "$STAGING/devmcp-agent.timer" || {
+  echo "ERROR: invalid agent timer artifact" >&2; exit 1;
+}
+systemd-analyze verify "$STAGING/devmcp-agent.service" "$STAGING/devmcp-agent.timer" >/dev/null 2>&1 || {
+  echo "ERROR: invalid systemd units" >&2; exit 1;
+}
 [[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service && ! -e /etc/systemd/system/devmcp-agent.timer ]] || {
   echo "ERROR: existing agent deployment; refusing overwrite" >&2; exit 1;
 }
@@ -101,7 +107,7 @@ mkdir -m 0700 "$TMPDIR_AGENT"
 
 printf '{"token":"%s"}' "$TOKEN" > "$TMPDIR_AGENT/request.json"
 unset TOKEN
-HTTP_CODE="$(curl --silent --show-error --output "$TMPDIR_AGENT/response.json" \
+HTTP_CODE="$(curl --proto '=https' --silent --show-error --output "$TMPDIR_AGENT/response.json" \
   --write-out '%{http_code}' --cacert "$CA_FILE" \
   --header 'Content-Type: application/json' --max-time 20 \
   --data-binary "@$TMPDIR_AGENT/request.json" \
