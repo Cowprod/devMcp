@@ -35,12 +35,30 @@ source /etc/os-release
 case "${ID:-}" in ubuntu|debian) ;; *) echo "ERROR: unsupported OS: ${ID:-unknown}" >&2; exit 1;; esac
 command -v systemctl >/dev/null || { echo "ERROR: systemd required" >&2; exit 1; }
 command -v curl >/dev/null || { echo "ERROR: curl required" >&2; exit 1; }
-command -v php >/dev/null || { echo "ERROR: PHP 8.3+ required" >&2; exit 1; }
-php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' || {
-  echo "ERROR: PHP 8.3+ required" >&2; exit 1;
-}
-php -r 'exit(extension_loaded("curl") ? 0 : 1);' || {
-  echo "ERROR: PHP curl extension required (install php8.3-curl before enrollment)" >&2; exit 1;
+# Install only missing OS packages before the enrollment token is read.
+# Never replace an existing PHP version or modify ZeroTier membership.
+missing=()
+command -v php >/dev/null || missing+=(php8.3-cli)
+command -v curl >/dev/null || missing+=(curl)
+command -v openssl >/dev/null || missing+=(openssl)
+command -v python3 >/dev/null || missing+=(python3)
+if command -v php >/dev/null; then
+  php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' || {
+    echo "ERROR: existing PHP is older than 8.3; refusing automatic replacement" >&2; exit 1;
+  }
+fi
+if ! command -v php >/dev/null || ! php -r 'exit(extension_loaded("curl") ? 0 : 1);'; then
+  missing+=(php8.3-curl)
+fi
+if (("${#missing[@]}" > 0)); then
+  command -v apt-get >/dev/null || { echo "ERROR: apt-get required to install missing dependencies" >&2; exit 1; }
+  echo "Installing missing dependencies: ${missing[*]}"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+command -v php >/dev/null && php -r 'exit(PHP_VERSION_ID >= 80300 && extension_loaded("curl") ? 0 : 1);' || {
+  echo "ERROR: PHP 8.3+ with curl is required after package installation" >&2; exit 1;
 }
 command -v zerotier-cli >/dev/null || { echo "ERROR: ZeroTier required" >&2; exit 1; }
 ZT_IP="${SERVER#https://}"
