@@ -52,6 +52,10 @@ if ! command -v php >/dev/null || ! php -r 'exit(extension_loaded("curl") ? 0 : 
 fi
 if (("${#missing[@]}" > 0)); then
   command -v apt-get >/dev/null || { echo "ERROR: apt-get required to install missing dependencies" >&2; exit 1; }
+  if ((CHECK_ONLY)); then
+    echo "CHECK ONLY: missing dependencies: ${missing[*]} (nothing installed)" >&2
+    exit 1
+  fi
   echo "Installing missing dependencies: ${missing[*]}"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
