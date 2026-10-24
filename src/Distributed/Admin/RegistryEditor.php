@@ -89,6 +89,28 @@ final class RegistryEditor
         }
     }
 
+    public function assignDeployment(string $projectId, string $machineId, string $workspacePath): void
+    {
+        if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $projectId) !== 1
+            || preg_match('/^[a-f0-9]{32}$/D', $machineId) !== 1
+            || strlen($workspacePath) > 1024
+            || preg_match('~^/[a-zA-Z0-9_./-]+$~D', $workspacePath) !== 1
+            || str_contains($workspacePath, '//')
+            || in_array('..', explode('/', $workspacePath), true)) {
+            throw new InvalidArgumentException('Affectation ou chemin de travail invalide');
+        }
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare('INSERT INTO dm_deployment (project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,0)');
+            $statement->execute([$projectId, $machineId, $workspacePath]);
+            $this->audit('deployment.create', 'deployment', $projectId . '@' . $machineId);
+            $this->db->commit();
+        } catch (\\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
     private function audit(string $event, string $type, string $id): void
     {
         $statement = $this->db->prepare(
