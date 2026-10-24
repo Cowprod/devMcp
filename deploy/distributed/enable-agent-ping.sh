@@ -48,9 +48,10 @@ location = '''    location = /v1/agent/ping {
 '''.replace('SOCKET', socket.group(1))
 # Site files cannot define limit_req_zone (http context). Require operator to
 # provision the zone separately; never silently weaken the intended rate limit.
-global_conf = pathlib.Path('/etc/nginx/nginx.conf').read_text()
-if 'zone=devmcp_agent:' not in global_conf:
-    raise SystemExit('Missing devmcp_agent rate limit zone in nginx.conf; refusing')
+import subprocess
+config_dump = subprocess.run(['/usr/sbin/nginx', '-T'], capture_output=True, text=True, check=True).stdout
+if not re.search(r'^\\s*limit_req_zone\\s+\\$binary_remote_addr\\s+zone=devmcp_agent:10m\\s+rate=30r/m\\s*;', config_dump, re.MULTILINE):
+    raise SystemExit('Missing devmcp_agent rate limit zone in effective Nginx configuration; refusing')
 updated = s.replace(marker, location + marker)
 fd, tmp = tempfile.mkstemp(prefix='.devmcp-ping-', dir=str(p.parent))
 try:
