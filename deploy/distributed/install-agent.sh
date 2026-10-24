@@ -94,7 +94,8 @@ grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "
 command -v openssl >/dev/null || { echo "ERROR: openssl required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "ERROR: python3 required" >&2; exit 1; }
 umask 077
-TMPDIR_AGENT="$STAGING/enrollment"\nmkdir -m 0700 "$TMPDIR_AGENT"
+TMPDIR_AGENT="$STAGING/enrollment"
+mkdir -m 0700 "$TMPDIR_AGENT"
 
 printf '{"token":"%s"}' "$TOKEN" > "$TMPDIR_AGENT/request.json"
 unset TOKEN
