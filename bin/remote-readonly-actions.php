@@ -20,6 +20,18 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         in_array('..', explode('/', $relative), true)) {
         return ['ok' => false, 'error' => 'invalid_path'];
     }
+    // Never expose repository metadata, credentials, or private configuration.
+    $forbidden = ['.git', '.env', '.ssh', '.aws', '.config', '.npmrc', '.pypirc',
+        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519',
+        'credentials', 'secrets', 'secret', 'private'];
+    foreach ($relative === '.' ? [] : explode('/', $relative) as $segment) {
+        $lower = strtolower($segment);
+        if (in_array($lower, $forbidden, true) || str_starts_with($lower, '.env.')
+            || str_contains($lower, 'secret') || str_contains($lower, 'credential')
+            || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', $lower)) {
+            return ['ok' => false, 'error' => 'protected_path'];
+        }
+    }
     $candidate = $root . ($relative === '.' ? '' : '/' . $relative);
     $resolved = realpath($candidate);
     if ($resolved === false || ($resolved !== $root && !str_starts_with($resolved, $root . '/'))) {
@@ -46,7 +58,9 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         }
         $entries = [];
         foreach ($items as $item) {
-            if (in_array($item, ['.', '..', '.git'], true)) {
+            if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
+                || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
+                || str_contains(strtolower($item), 'credential') || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
                 continue;
             }
             if (count($entries) >= 200) {
