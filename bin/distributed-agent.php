@@ -96,4 +96,57 @@ foreach ($deployments as $deployment) {
         fwrite(STDERR, "devMcp: workspace report unavailable for " . $deployment['id'] . "\n");
     }
 }
-fwrite(STDOUT, "devMcp: authenticated heartbeat accepted; workspace inspection complete (execution disabled)\n");
+$policyPath = '/etc/devmcp/remote-readonly-policy.php';
+if (!is_file($policyPath) || is_link($policyPath)) {
+    fwrite(STDOUT, "devMcp: remote actions disabled by local policy\n");
+    exit(0);
+}
+$policy = require $policyPath;
+if (!is_array($policy) || ($policy['enabled'] ?? false) !== true) {
+    exit(0);
+}
+require __DIR__ . '/remote-readonly-actions.php';
+require __DIR__ . '/remote-job-policy.php';
+require __DIR__ . '/remote-local-policy.php';
+$headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
+    'X-DevMcp-Machine: ' . $config['machine_id']];
+$post = static function (string $endpoint, string $body) use ($server, $headers, $config): ?array {
+    $request = curl_init($server . $endpoint);
+    curl_setopt_array($request, [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_CAINFO => $config['ca_file'], CURLOPT_FOLLOWLOCATION => false,
+    ]);
+    $response = curl_exec($request);
+    $code = curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+    curl_close($request);
+    if (!is_string($response) || $code !== 200) {
+        return null;
+    }
+    $decoded = json_decode($response, true, 8);
+    return is_array($decoded) ? $decoded : null;
+};
+$poll = $post('/v1/agent/job-poll', '{"protocol_version":1}');
+if (!is_array($poll) || ($poll['protocol_version'] ?? null) !== 1
+    || !is_array($poll['jobs'] ?? null) || count($poll['jobs']) > 1) {
+    exit(0);
+}
+foreach ($poll['jobs'] as $job) {
+    if (!is_array($job) || !is_string($job['id'] ?? null)
+        || preg_match('/^[a-f0-9]{32}$/D', $job['id']) !== 1) {
+        continue;
+    }
+    $result = remoteLocalPolicyCheck($policy, $job)
+        ? remoteWorkspaceAction($job['workspace_path'], $job['action'], $job['arguments'])
+        : ['ok' => false, 'error' => 'local_policy_denied'];
+    $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
+        'result' => $result], JSON_THROW_ON_ERROR);
+    if (strlen($payload) > 69000) {
+        $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
+            'result' => ['ok' => false, 'error' => 'result_too_large']], JSON_THROW_ON_ERROR);
+    }
+    $post('/v1/agent/job-result', $payload);
+}
+fwrite(STDOUT, "devMcp: remote read-only poll complete\n");
+
