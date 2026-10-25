@@ -106,7 +106,7 @@ final class RegistryEditor
             $statement->execute([$deploymentId, $projectId, $machineId, $workspacePath]);
             $this->audit('deployment.create', 'deployment', $deploymentId);
             $this->db->commit();
-        } catch (\\Throwable $error) {
+        } catch (\Throwable $error) {
             $this->db->rollBack();
             throw $error;
         }
