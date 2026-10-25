@@ -69,7 +69,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             exit;
         }
     } catch (Throwable $exception) {
-        $error = $exception instanceof InvalidArgumentException ? $exception->getMessage() : 'Enregistrement impossible (doublon ou erreur SQL)';
+        $reference = bin2hex(random_bytes(4));
+        error_log('devmcp-admin write [' . $reference . '] ' . get_class($exception) . ': ' . substr($exception->getMessage(), 0, 500));
+        if ($exception instanceof InvalidArgumentException) {
+            $error = $exception->getMessage();
+        } elseif ($exception instanceof PDOException) {
+            $sqlState = (string) ($exception->errorInfo[0] ?? $exception->getCode());
+            $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+            $error = match ($driverCode) {
+                1062 => 'Cet enregistrement existe déjà.',
+                1142, 1143 => 'Droits SQL insuffisants pour cette opération.',
+                1452 => 'Machine ou projet introuvable dans le registre.',
+                default => 'Erreur SQL pendant l’enregistrement.',
+            };
+            $error .= ' Référence : ' . $reference . ' (SQLSTATE ' . $sqlState . ').';
+        } else {
+            $error = 'Enregistrement impossible. Référence : ' . $reference . '.';
+        }
     }
 }
 try {
