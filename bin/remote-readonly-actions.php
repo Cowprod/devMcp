@@ -8,6 +8,12 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
     if ($root === false || !is_dir($root) || is_link($workspace)) {
         return ['ok' => false, 'error' => 'workspace_missing'];
     }
+    if ($action === 'git.head') {
+        require_once __DIR__ . '/inspect-workspace.php';
+        $result = inspectWorkspace($root);
+        return ['ok' => ($result['git'] ?? false) === true, 'branch' => $result['branch'] ?? null,
+            'commit' => $result['commit'] ?? null];
+    }
     $relative = $arguments['path'] ?? '.';
     if (!is_string($relative) || strlen($relative) > 512 ||
         ($relative !== '.' && preg_match('~^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$~D', $relative) !== 1) ||
@@ -99,12 +105,6 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         }
         sort($found, SORT_STRING);
         return ['ok' => true, 'files' => $found, 'truncated' => $pending !== [] || $visited >= 2000];
-    }
-    if ($action === 'git.head') {
-        require_once __DIR__ . '/inspect-workspace.php';
-        $result = inspectWorkspace($root);
-        return ['ok' => ($result['git'] ?? false) === true, 'branch' => $result['branch'] ?? null,
-            'commit' => $result['commit'] ?? null];
     }
     return ['ok' => false, 'error' => 'action_not_allowed'];
 }
