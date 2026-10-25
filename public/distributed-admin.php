@@ -58,6 +58,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             case 'project.create':
                 $editor->createProject((string) ($_POST['id'] ?? ''), (string) ($_POST['description'] ?? ''), (string) ($_POST['repository_url'] ?? ''));
                 break;
+            case 'remote.readonly.enqueue':
+                require dirname(__DIR__) . '/bin/remote-job-enqueue.php';
+                $args = [];
+                if (($_POST['action_name'] ?? '') !== 'git.head') {
+                    $args['path'] = (string) ($_POST['path'] ?? '.');
+                }
+                if (($_POST['action_name'] ?? '') === 'workspace.find') {
+                    $args['filter'] = (string) ($_POST['filter'] ?? 'all');
+                }
+                enqueueRemoteReadonlyJob($writer, (string) ($_POST['deployment_id'] ?? ''),
+                    (string) ($_POST['action_name'] ?? ''), $args);
+                break;
             case 'deployment.create':
                 $editor->assignDeployment((string) ($_POST['project_id'] ?? ''), (string) ($_POST['machine_id'] ?? ''), (string) ($_POST['workspace_path'] ?? ''));
                 break;
@@ -126,6 +138,26 @@ function e(mixed $value): string
 <h1 class="h3 mb-0">devMcp <span class="text-secondary">/ Distribué</span></h1>
 <span class="badge bg-secondary ms-2 border border-light">Registre</span>
 </header>
+<section class="card mb-4"><div class="card-body">
+<h2 class="h5">Action distante en lecture seule</h2>
+<p class="text-secondary">Nécessite une machine active, un déploiement activé et une politique locale correspondante.</p>
+<form method="post" action="/">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="remote.readonly.enqueue">
+<div class="input-group mb-2"><span class="input-group-text">Déploiement</span><select class="form-select" name="deployment_id" required>
+<?php foreach ($deployments as $deployment): ?>
+<option value="<?= e($deployment['id']) ?>"><?= e($deployment['project_id'] . ' / ' . $deployment['machine_name']) ?></option>
+<?php endforeach; ?></select></div>
+<div class="input-group mb-2"><span class="input-group-text">Action</span><select class="form-select" name="action_name">
+<?php foreach (['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'] as $action): ?>
+<option value="<?= e($action) ?>"><?= e($action) ?></option>
+<?php endforeach; ?></select></div>
+<div class="input-group mb-2"><span class="input-group-text">Chemin</span><input class="form-control" name="path" value="."></div>
+<div class="input-group mb-3"><span class="input-group-text">Filtre</span><select class="form-select" name="filter">
+<?php foreach (['all','php','js','json','md'] as $filter): ?><option value="<?= e($filter) ?>"><?= e($filter) ?></option><?php endforeach; ?>
+</select></div>
+<div class="btn-group"><button type="submit" class="btn btn-success">Mettre en file</button></div>
+</form></div></section>
 <section class="row g-3 mb-4">
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projects) ?></div></div></div></div>
