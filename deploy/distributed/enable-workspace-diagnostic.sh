@@ -13,9 +13,7 @@ php tests/distributed/workspace-inspector-smoke.php
 mariadb devmcp_distributed < database/migrations/004_workspace_diagnostic.sql
 mariadb < deploy/distributed/grant-workspace-diagnostic.sql
 # The dashboard uses the configured reader identity, not a hardcoded SQL user.
-php -r '\''$c=require "/etc/devmcp-admin/distributed.php"; $u=$c["username"]??""; if (!is_string($u)||!preg_match("/^[A-Za-z0-9_]+$/D",$u)) exit(2); echo $u;'\'' > /tmp/devmcp-diagnostic-reader-user
-READER_USER="$(cat /tmp/devmcp-diagnostic-reader-user)"
-rm -f /tmp/devmcp-diagnostic-reader-user
+READER_USER="$(php -r '$c=require "/etc/devmcp-admin/distributed.php"; $u=$c["username"]??""; if (!is_string($u)||!preg_match("/^[A-Za-z0-9_]+$/D",$u)) exit(2); echo $u;')" 
 mariadb --batch --skip-column-names -e "SELECT COUNT(*) FROM mysql.user WHERE User = '${READER_USER}' AND Host = 'localhost'" | grep -qx 1 || { echo "Configured SQL reader account not found: $READER_USER@localhost" >&2; exit 1; }
 mariadb -e "GRANT SELECT (deployment_id,status,branch,commit_sha,inspected_at) ON devmcp_distributed.dm_workspace_diagnostic TO '${READER_USER}'@'localhost'"
 CONF=/etc/nginx/sites-available/devmcp-admin.conf
