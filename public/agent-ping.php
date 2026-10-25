@@ -55,7 +55,15 @@ try {
     if ($statement->rowCount() !== 1) {
         throw new RuntimeException('Machine not found');
     }
-    echo '{"protocol_version":1,"ok":true}';
+    $deployments = [];
+    // Reporting is read-only and independent from remote execution approval.
+    // Only deployments assigned to this authenticated machine are returned.
+    $query = $db->prepare('SELECT id, workspace_path FROM dm_deployment WHERE machine_id = ? ORDER BY id LIMIT 32');
+    $query->execute([$machineId]);
+    while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
+        $deployments[] = ['id' => $row['id'], 'workspace_path' => $row['workspace_path']];
+    }
+    echo json_encode(['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments], JSON_THROW_ON_ERROR);
 } catch (Throwable $exception) {
     // Never expose internal details to the agent; record a bounded server-side diagnostic.
     error_log('devmcp-agent-ping: ' . get_class($exception) . ': ' . substr($exception->getMessage(), 0, 300));
