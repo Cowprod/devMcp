@@ -99,10 +99,11 @@ final class RegistryEditor
             || in_array('..', explode('/', $workspacePath), true)) {
             throw new InvalidArgumentException('Affectation ou chemin de travail invalide');
         }
+        $deploymentId = bin2hex(random_bytes(16));
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare('INSERT INTO dm_deployment (project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,0)');
-            $statement->execute([$projectId, $machineId, $workspacePath]);
+            $statement = $this->db->prepare('INSERT INTO dm_deployment (id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,0)');
+            $statement->execute([$deploymentId, $projectId, $machineId, $workspacePath]);
             $this->audit('deployment.create', 'deployment', $projectId . '@' . $machineId);
             $this->db->commit();
         } catch (\\Throwable $error) {
