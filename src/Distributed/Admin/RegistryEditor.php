@@ -104,7 +104,7 @@ final class RegistryEditor
         try {
             $statement = $this->db->prepare('INSERT INTO dm_deployment (id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,0)');
             $statement->execute([$deploymentId, $projectId, $machineId, $workspacePath]);
-            $this->audit('deployment.create', 'deployment', $projectId . '@' . $machineId);
+            $this->audit('deployment.create', 'deployment', $deploymentId);
             $this->db->commit();
         } catch (\\Throwable $error) {
             $this->db->rollBack();
