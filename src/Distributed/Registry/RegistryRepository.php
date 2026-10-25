@@ -53,7 +53,7 @@ final class RegistryRepository
     /** @return list<array<string,mixed>> */
     public function deployments(): array
     {
-        return $this->db->query('SELECT dm_deployment.id, dm_deployment.project_id, dm_deployment.machine_id, dm_machine.name AS machine_name, dm_deployment.workspace_path, dm_deployment.enabled FROM dm_deployment INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id ORDER BY dm_deployment.project_id, dm_machine.name')->fetchAll(PDO::FETCH_ASSOC);
+        return $this->db->query('SELECT dm_deployment.id, dm_deployment.project_id, dm_deployment.machine_id, dm_machine.name AS machine_name, dm_deployment.workspace_path, dm_deployment.enabled, dm_workspace_diagnostic.status AS diagnostic_status, dm_workspace_diagnostic.branch AS diagnostic_branch, dm_workspace_diagnostic.commit_sha AS diagnostic_commit, dm_workspace_diagnostic.inspected_at AS diagnostic_at FROM dm_deployment LEFT JOIN dm_workspace_diagnostic ON dm_workspace_diagnostic.deployment_id = dm_deployment.id INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id ORDER BY dm_deployment.project_id, dm_machine.name')->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private static function assertId(string $id): void
