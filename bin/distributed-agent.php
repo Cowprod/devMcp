@@ -63,7 +63,7 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];
 if (!is_array($deployments) || count($deployments) > 32) {
-    fwrite(STDERR, "devMcp: invalid workspace list\\n");
+    fwrite(STDERR, "devMcp: invalid workspace list\n");
     exit(1);
 }
 foreach ($deployments as $deployment) {
@@ -93,7 +93,7 @@ foreach ($deployments as $deployment) {
     $reportStatus = curl_getinfo($reportHandle, CURLINFO_RESPONSE_CODE);
     curl_close($reportHandle);
     if ($reportResult === false || $reportStatus !== 200) {
-        fwrite(STDERR, "devMcp: workspace report unavailable for " . $deployment['id'] . "\\n");
+        fwrite(STDERR, "devMcp: workspace report unavailable for " . $deployment['id'] . "\n");
     }
 }
-fwrite(STDOUT, "devMcp: authenticated heartbeat accepted; workspace inspection complete (execution disabled)\\n");
+fwrite(STDOUT, "devMcp: authenticated heartbeat accepted; workspace inspection complete (execution disabled)\n");
