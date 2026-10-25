@@ -1,18 +1,27 @@
 <?php
 declare(strict_types=1);
 
-/** Actions allowed by the initial read-only protocol. */
+/** Initial read-only allowlist. */
 function remoteJobAllowed(string $action, array $args): bool
 {
-    $actions = ['workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find', 'git.head'];
-    if (!in_array($action, $actions, true)) {
+    $noArgs = ['git.head'];
+    $pathActions = ['workspace.list', 'workspace.read', 'workspace.stat'];
+    if (in_array($action, $noArgs, true)) {
+        return $args === [];
+    }
+    if (!in_array($action, [...$pathActions, 'workspace.find'], true)) {
         return false;
     }
-    if (array_diff(array_keys($args), ['path', 'filter']) !== []) {
+    $allowedKeys = $action === 'workspace.find' ? ['path', 'filter'] : ['path'];
+    if (array_diff(array_keys($args), $allowedKeys) !== []) {
         return false;
     }
-    if (isset($args['path']) && (!is_string($args['path']) || strlen($args['path']) > 512)) {
+    $path = $args['path'] ?? '.';
+    if (!is_string($path) || strlen($path) > 512
+        || ($path !== '.' && preg_match('~^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$~D', $path) !== 1)
+        || in_array('..', explode('/', $path), true)) {
         return false;
     }
-    return !isset($args['filter']) || in_array($args['filter'], ['all', 'php', 'js', 'json', 'md'], true);
+    return !isset($args['filter']) || ($action === 'workspace.find'
+        && in_array($args['filter'], ['all', 'php', 'js', 'json', 'md'], true));
 }
