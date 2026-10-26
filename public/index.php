@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Mcp\ServerFactory;
+use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Runtime\RuntimeFactory;
 use Http\Discovery\Psr17Factory;
 use Laminas\HttpHandlerRunner\Emitter\SapiEmitter;
@@ -60,6 +61,8 @@ $request = (new Psr17Factory())->createServerRequestFromGlobals();
 $server = (new ServerFactory())->build(
     $runtime->tools,
     new FileSessionStore($runtime->sessionsDirectory),
+    null,
+    RemoteTools::fromConfig($config),
 );
 
 $transport = new StreamableHttpTransport(
