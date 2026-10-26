@@ -34,6 +34,100 @@ final class RemoteTools
         ));
     }
 
+    private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
+
+    public function projects(): array
+    {
+        $rows = $this->remoteProjectList()['deployments'];
+        $projects = [];
+        foreach ($rows as $row) {
+            $id = $row['project'];
+            $projects[$id] ??= [
+                'id' => $id,
+                'description' => 'Projet distant gere par devMcp',
+                'target' => 'remote',
+                'action_count' => count(self::ACTIONS),
+            ];
+        }
+        return array_values($projects);
+    }
+
+    public function hasProject(string $project): bool
+    {
+        foreach ($this->projects() as $row) {
+            if ($row['id'] === $project) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function describe(string $project): array
+    {
+        foreach ($this->projects() as $row) {
+            if ($row['id'] === $project) {
+                return $row;
+            }
+        }
+        throw new InvalidArgumentException('Unknown remote project');
+    }
+
+    public function actions(string $project): array
+    {
+        $this->describe($project);
+        return ['project' => $project, 'actions' => array_map(
+            static fn(string $name): array => ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote', 'sync' => false],
+            self::ACTIONS
+        )];
+    }
+
+    public function action(string $project, string $action): array
+    {
+        foreach ($this->actions($project)['actions'] as $entry) {
+            if ($entry['id'] === $action) {
+                return $entry;
+            }
+        }
+        throw new InvalidArgumentException('Remote action not allowed');
+    }
+
+    public function start(string $project, string $action, array $arguments = []): array
+    {
+        $this->action($project, $action);
+        $query = $this->db->prepare(
+            "SELECT dm_deployment.id FROM dm_deployment "
+            . "INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id "
+            . "WHERE dm_deployment.project_id = ? AND dm_deployment.enabled = 1 "
+            . "AND dm_machine.status = 'active' ORDER BY dm_deployment.id LIMIT 2"
+        );
+        $query->execute([$project]);
+        $ids = $query->fetchAll(PDO::FETCH_COLUMN);
+        if (count($ids) !== 1) {
+            throw new RuntimeException(count($ids) === 0 ? 'No active deployment' : 'Ambiguous remote deployment');
+        }
+        $job = $this->remoteActionStart($ids[0], $action, $arguments);
+        return ['job_id' => $job['job_id'], 'project' => $project, 'action' => $action, 'target' => 'remote', 'status' => 'queued'];
+    }
+
+    public function status(string $jobId): array
+    {
+        $row = $this->remoteJobStatus($jobId);
+        return ['job_id' => $row['id'], 'action' => $row['action_name'], 'target' => 'remote',
+            'status' => $row['state'], 'created_at' => $row['created_at'],
+            'started_at' => $row['claimed_at'], 'finished_at' => $row['finished_at'],
+            'result' => $row['result']];
+    }
+
+    public function isRemoteJob(string $jobId): bool
+    {
+        if (preg_match('/^[a-f0-9]{32}$/D', $jobId) !== 1) {
+            return false;
+        }
+        $query = $this->db->prepare('SELECT id FROM dm_remote_readonly_job WHERE id = ?');
+        $query->execute([$jobId]);
+        return $query->fetchColumn() !== false;
+    }
+
     public function remoteProjectList(): array
     {
         $query = $this->db->query(
