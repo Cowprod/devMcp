@@ -24,11 +24,12 @@ $c = require $argv[1];
 foreach (["dsn", "writer_username", "writer_password"] as $key) {
     if (!isset($c[$key]) || !is_string($c[$key])) { exit(2); }
 }
-echo "<?php\\nreturn ", var_export(array_intersect_key($c, array_flip(["dsn", "writer_username", "writer_password"])), true), ";\\n";
+echo "<?php", PHP_EOL, "return ", var_export(array_intersect_key($c, array_flip(["dsn", "writer_username", "writer_password"])), true), ";", PHP_EOL;
 ' "$SOURCE" > "$TMP"
 php -l "$TMP"
+php -r '$c = require $argv[1]; if (!is_array($c) || empty($c["dsn"])) exit(2);' "$TMP" >/dev/null
 chown root:devmcp "$TMP"
 chmod 640 "$TMP"
 mv -f "$TMP" "$DEST"
-sudo -u devmcp php -r '$c = require $argv[1]; if (!is_array($c) || empty($c["dsn"])) exit(2);' "$DEST"
+sudo -u devmcp php -r '$c = require $argv[1]; if (!is_array($c) || empty($c["dsn"])) exit(2);' "$DEST" >/dev/null
 echo "PASS: remote MCP read-only queue integration configured. Restart MCP tunnel/client to reload tools."
