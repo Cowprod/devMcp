@@ -19,7 +19,7 @@ final class RemoteTools
 
     public static function fromConfig(array $config): ?self
     {
-        $path = $config['distributed']['config_path'] ?? getenv('DEVMCP_DISTRIBUTED_CONFIG');
+        $path = $config['distributed']['config_path'] ?? (getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php');
         if (!is_string($path) || $path === '' || !is_readable($path)) {
             return null;
         }
