@@ -10,6 +10,7 @@ use Cowprod\DevMcp\Execution\ActionRunner;
 use Cowprod\DevMcp\Execution\FileJobStore;
 use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Mcp\ProjectTools;
+use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use RuntimeException;
 
@@ -73,7 +74,7 @@ final class RuntimeFactory
         $artifacts = new ArtifactService($maxArtifactChunk);
         $store = new FileJobStore($jobsDirectory, $maxJobLog);
         $jobs = new JobManager($projects, $store, $artifacts, $audit, $maxOutput);
-        $tools = new ProjectTools($projects, $runner, $jobs, $audit);
+        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), RemoteTools::fromConfig($config));
 
         return new Runtime(
             $projects,
