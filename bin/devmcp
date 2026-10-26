@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Mcp\ServerFactory;
+use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Runtime\RuntimeFactory;
 use Mcp\Server\Transport\StdioTransport;
 
@@ -23,6 +24,6 @@ if (!is_array($config)) {
 }
 
 $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
-$server = (new ServerFactory())->build($runtime->tools);
+$server = (new ServerFactory())->build($runtime->tools, null, null, RemoteTools::fromConfig($config));
 
 exit($server->run(new StdioTransport()));
