@@ -1,9 +1,12 @@
-name: Remote write primitive tests
+name: Remote write integration checks
 on:
   pull_request:
     paths:
-      - 'bin/remote-workspace-write-text.php'
-      - 'tests/integration/remote-write-text-test.php'
+      - 'bin/remote-*.php'
+      - 'bin/distributed-agent.php'
+      - 'src/Mcp/RemoteTools.php'
+      - 'public/agent-job-poll.php'
+      - 'tests/integration/remote-write-*.php'
       - '.github/workflows/remote-write-tests.yml'
   push:
     branches:
@@ -16,9 +19,13 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
+          extensions: pdo_sqlite
       - name: PHP syntax
         run: |
-          php -l bin/remote-workspace-write-text.php
-          php -l tests/integration/remote-write-text-test.php
-      - name: Security integration tests
+          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php tests/integration/remote-write-*.php; do
+            php -l "$file"
+          done
+      - name: Primitive security tests
         run: php tests/integration/remote-write-text-test.php
+      - name: Server, queue and agent gate tests
+        run: php tests/integration/remote-write-gates-test.php
