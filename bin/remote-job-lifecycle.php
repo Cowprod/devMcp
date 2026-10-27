@@ -17,20 +17,27 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
     }
     $db->beginTransaction();
     try {
+        // Only lock the queue row: MySQL FOR UPDATE across joined tables would
+        // require write privilege on dm_deployment and dm_machine, violating
+        // the agent's column-level least-privilege grants. Subqueries remain
+        // non-locking reads; local agent approval is a second independent gate.
         $query = $db->prepare(
             "SELECT dm_remote_readonly_job.id, dm_remote_readonly_job.deployment_id, "
             . "dm_remote_readonly_job.action_name, dm_remote_readonly_job.arguments_json, "
-            . "dm_deployment.workspace_path, "
+            . "(SELECT dm_deployment.workspace_path FROM dm_deployment "
+            . "WHERE dm_deployment.id = dm_remote_readonly_job.deployment_id) AS workspace_path, "
             . "(dm_remote_readonly_job.created_at < DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 10 MINUTE)) AS stale "
             . "FROM dm_remote_readonly_job "
-            . "INNER JOIN dm_deployment ON dm_deployment.id = dm_remote_readonly_job.deployment_id "
-            . "INNER JOIN dm_machine ON dm_machine.id = dm_remote_readonly_job.machine_id "
             . "WHERE dm_remote_readonly_job.machine_id = ? AND dm_remote_readonly_job.state = 'queued' "
-            . "AND dm_deployment.machine_id = ? AND dm_deployment.enabled = 1 "
-            . "AND dm_machine.status = 'active' "
-            . "ORDER BY dm_remote_readonly_job.created_at, dm_remote_readonly_job.id LIMIT 1 FOR UPDATE"
+            . "AND EXISTS (SELECT 1 FROM dm_deployment "
+            . "INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id "
+            . "WHERE dm_deployment.id = dm_remote_readonly_job.deployment_id "
+            . "AND dm_deployment.machine_id = dm_remote_readonly_job.machine_id "
+            . "AND dm_deployment.enabled = 1 AND dm_machine.status = 'active') "
+            . "ORDER BY dm_remote_readonly_job.created_at, dm_remote_readonly_job.id "
+            . "LIMIT 1 FOR UPDATE"
         );
-        $query->execute([$machineId, $machineId]);
+        $query->execute([$machineId]);
         $job = $query->fetch(PDO::FETCH_ASSOC);
         if (!is_array($job)) {
             $db->commit();
