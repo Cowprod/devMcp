@@ -92,6 +92,32 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
 }
 
 /**
+ * Limit persistent write results to protocol metadata. The agent response is
+ * authenticated but must not be able to retain plaintext from a write job
+ * indefinitely in result_json after arguments_json has been scrubbed.
+ *
+ * Unknown fields (including content) are always dropped. A malformed result
+ * cannot be reported as verified success.
+ */
+function remoteNormalizeWriteResult(array $result): array
+{
+    if (($result['ok'] ?? null) === true) {
+        if (is_string($result['sha256'] ?? null)
+            && preg_match('/^[a-f0-9]{64}$/D', $result['sha256']) === 1
+            && is_int($result['size'] ?? null)
+            && $result['size'] >= 0 && $result['size'] <= 16384) {
+            return ['ok' => true, 'sha256' => $result['sha256'], 'size' => $result['size']];
+        }
+    } elseif (($result['ok'] ?? null) === false) {
+        if (is_string($result['error'] ?? null)
+            && preg_match('/^[a-z][a-z0-9_]{0,63}$/D', $result['error']) === 1) {
+            return ['ok' => false, 'error' => $result['error']];
+        }
+    }
+    return ['ok' => false, 'error' => 'invalid_write_result'];
+}
+
+/**
  * Persist a result once, and atomically record the outcome of every write.
  * A second result for the same claimed job is rejected, never re-executed.
  */
@@ -101,10 +127,6 @@ function remoteCompleteClaimedJob(PDO $db, string $machineId, string $jobId, arr
         || preg_match('/^[a-f0-9]{32}$/D', $jobId) !== 1) {
         throw new InvalidArgumentException('Invalid remote job identity');
     }
-    $encoded = json_encode($result, JSON_THROW_ON_ERROR);
-    if (strlen($encoded) > 65536) {
-        throw new InvalidArgumentException('Remote result too large');
-    }
     $db->beginTransaction();
     try {
         $lookup = $db->prepare("SELECT action_name, deployment_id FROM dm_remote_readonly_job WHERE id=? AND machine_id=? AND state='claimed' FOR UPDATE");
@@ -112,6 +134,13 @@ function remoteCompleteClaimedJob(PDO $db, string $machineId, string $jobId, arr
         $claimed = $lookup->fetch(PDO::FETCH_ASSOC);
         if (!is_array($claimed)) {
             throw new RuntimeException('job_not_claimed');
+        }
+        if ($claimed['action_name'] === 'workspace.write_text') {
+            $result = remoteNormalizeWriteResult($result);
+        }
+        $encoded = json_encode($result, JSON_THROW_ON_ERROR);
+        if (strlen($encoded) > 65536) {
+            throw new InvalidArgumentException('Remote result too large');
         }
         $outcome = ($result['ok'] ?? false) === true ? 'succeeded' : 'failed';
         $clearArguments = $claimed['action_name'] === 'workspace.write_text' ? ", arguments_json='{}'" : '';
