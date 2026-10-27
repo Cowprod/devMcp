@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__, 2) . '/bin/remote-server-write-policy.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-enqueue.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-dispatch.php';
+require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 
 $checks = [];
 $check = static function (string $name, bool $pass) use (&$checks): void {
@@ -82,6 +83,19 @@ try {
     $check('write invalid utf8 deny', !remoteJobAllowed('workspace.write_text', [...$args, 'content' => chr(255)], true));
     $check('write NUL deny', !remoteJobAllowed('workspace.write_text', [...$args, 'content' => "x\0y"], true));
     $check('write invalid sha deny', !remoteJobAllowed('workspace.write_text', [...$args, 'expected_sha256' => 'abc'], true));
+    $check('successful write result drops agent-supplied content',
+        remoteNormalizeWriteResult(['ok' => true, 'sha256' => hash('sha256', "after\n"),
+            'size' => 6, 'content' => 'sensitive']) ===
+        ['ok' => true, 'sha256' => hash('sha256', "after\n"), 'size' => 6]);
+    $check('failed write result drops agent-supplied content',
+        remoteNormalizeWriteResult(['ok' => false, 'error' => 'sha256_conflict',
+            'content' => 'sensitive']) === ['ok' => false, 'error' => 'sha256_conflict']);
+    $check('malformed success is not treated as verified',
+        remoteNormalizeWriteResult(['ok' => true, 'content' => 'sensitive']) ===
+        ['ok' => false, 'error' => 'invalid_write_result']);
+    $check('invalid error text is not stored',
+        remoteNormalizeWriteResult(['ok' => false, 'error' => "failed\nsecret"]) ===
+        ['ok' => false, 'error' => 'invalid_write_result']);
     $check('read-only legacy action unchanged', remoteJobAllowed('workspace.read', ['path' => 'docs/smoke.md']));
     $check('locally approved write accepted', remoteLocalPolicyCheck($local, $job));
     $protectedLocal = $local;
