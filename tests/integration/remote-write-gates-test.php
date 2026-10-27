@@ -81,7 +81,7 @@ try {
     $auditDetails = is_array($auditRow) ? json_decode($auditRow['details_json'], true) : null;
     $check('write enqueue audited with digest and no content', is_array($auditRow)
         && $auditRow['event_type'] === 'remote.write.queued'
-        && ($auditDetails['new_sha256'] ?? null) === hash('sha256', "after\\n")
+        && ($auditDetails['new_sha256'] ?? null) === hash('sha256', "after\n")
         && !str_contains($auditRow['details_json'], '"content"'));
     $query = $db->prepare('SELECT * FROM dm_remote_readonly_job WHERE id = ?');
     $query->execute([$id]);
