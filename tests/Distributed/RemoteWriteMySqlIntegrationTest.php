@@ -151,6 +151,47 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, $result);
     }
 
+    public function testWriteResultStoresOnlyProtocolMetadataNotAgentContent(): void
+    {
+        $id = $this->enqueueWrite();
+        $claimed = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
+        self::assertIsArray($claimed);
+        // The result boundary must never persist arbitrary agent-supplied
+        // plaintext, even if the claimed job has a valid write approval.
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, [
+            'ok' => true,
+            'sha256' => hash('sha256', "after\n"),
+            'size' => 6,
+            'content' => 'SENSITIVE_AGENT_RESULT_MUST_NOT_PERSIST',
+        ]);
+        $row = $this->db->prepare('SELECT state, result_json, arguments_json FROM dm_remote_readonly_job WHERE id=?');
+        $row->execute([$id]);
+        $stored = $row->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('succeeded', $stored['state']);
+        self::assertSame('{}', $stored['arguments_json']);
+        self::assertSame(['ok' => true, 'sha256' => hash('sha256', "after\n"), 'size' => 6],
+            json_decode($stored['result_json'], true, 8, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString('SENSITIVE_AGENT_RESULT', $stored['result_json']);
+        $audit = $this->db->prepare("SELECT details_json FROM dm_audit_event WHERE object_id=? AND event_type='remote.write.result'");
+        $audit->execute([$id]);
+        self::assertStringNotContainsString('SENSITIVE_AGENT_RESULT', (string) $audit->fetchColumn());
+    }
+
+    public function testMalformedWriteSuccessCannotBePersistedAsVerified(): void
+    {
+        $id = $this->enqueueWrite();
+        self::assertIsArray(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, [
+            'ok' => true, 'content' => 'SENSITIVE_AGENT_RESULT_MUST_NOT_PERSIST',
+        ]);
+        self::assertSame('failed', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
+        $row = $this->db->prepare('SELECT result_json FROM dm_remote_readonly_job WHERE id=?');
+        $row->execute([$id]);
+        self::assertSame(['ok' => false, 'error' => 'invalid_write_result'],
+            json_decode((string) $row->fetchColumn(), true, 8, JSON_THROW_ON_ERROR));
+    }
+
     public function testProtectedWritePathNeverPersistsPayloadWithRuntimeGrants(): void
     {
         $protected = [...$this->arguments, 'path' => 'docs/API-Token.md'];
@@ -248,7 +289,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
         // A late result remains legal: the sweep cannot know whether execution occurred.
-        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, ['ok' => true]);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, ['ok' => true, 'sha256' => hash('sha256', "after\n"), 'size' => 6]);
         self::assertSame('succeeded', $this->stateOf($id));
         $audit = $this->db->prepare("SELECT outcome FROM dm_audit_event WHERE object_id=? AND event_type='remote.write.payload_scrubbed'");
         $audit->execute([$id]);
