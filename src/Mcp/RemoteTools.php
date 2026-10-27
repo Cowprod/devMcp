@@ -10,12 +10,15 @@ use PDO;
 use RuntimeException;
 
 /**
- * MCP access to approved remote read-only deployments.
- * Uses the existing bounded queue; no shell, SSH or remote write access.
+ * MCP access to approved remote deployments.
+ * Writes are never advertised or queued without a separate server-side
+ * deployment and exact-path opt-in; the agent still enforces local policy.
  */
 final class RemoteTools
 {
-    public function __construct(private readonly PDO $db) {}
+    private const WRITE_ACTION = 'workspace.write_text';
+
+    public function __construct(private readonly PDO $db, private readonly array $writePolicy = []) {}
 
     public static function fromConfig(array $config): ?self
     {
@@ -31,7 +34,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ));
+        ), is_array($settings['remote_write'] ?? null) ? $settings['remote_write'] : []);
     }
 
     private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
@@ -39,9 +42,12 @@ final class RemoteTools
     public function projects(): array
     {
         $rows = $this->remoteProjectList()['deployments'];
+        require_once dirname(__DIR__, 2) . '/bin/remote-server-write-policy.php';
         $projects = [];
+        $projectDeployments = [];
         foreach ($rows as $row) {
             $id = $row['project'];
+            $projectDeployments[$id][] = $row['deployment_id'];
             $projects[$id] ??= [
                 'id' => $id,
                 'description' => 'Projet distant gere par devMcp',
@@ -49,6 +55,13 @@ final class RemoteTools
                 'action_count' => count(self::ACTIONS),
             ];
         }
+        foreach ($projects as $id => &$project) {
+            if (count($projectDeployments[$id]) === 1
+                && \remoteServerWriteEnabledForDeployment($this->writePolicy, $projectDeployments[$id][0])) {
+                ++$project['action_count'];
+            }
+        }
+        unset($project);
         return array_values($projects);
     }
 
@@ -75,9 +88,28 @@ final class RemoteTools
     public function actions(string $project): array
     {
         $this->describe($project);
+        $actions = self::ACTIONS;
+        if ($this->writeDeploymentForProject($project) !== null) {
+            $actions[] = self::WRITE_ACTION;
+        }
         return ['project' => $project, 'actions' => array_map(
-            static fn(string $name): array => ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote', 'sync_allowed' => false, 'parameters' => $name === 'git.head' ? [] : ($name === 'workspace.find' ? [['id' => 'path', 'type' => 'relative_path', 'required' => false], ['id' => 'filter', 'type' => 'enum', 'required' => false, 'values' => ['all', 'php', 'js', 'json', 'md']]] : [['id' => 'path', 'type' => 'relative_path', 'required' => false]])],
-            self::ACTIONS
+            static function (string $name): array {
+                if ($name === self::WRITE_ACTION) {
+                    return ['id' => $name, 'description' => 'Opt-in SHA-guarded text replacement (approved files only)',
+                        'target' => 'remote', 'sync_allowed' => false, 'parameters' => [
+                            ['id' => 'path', 'type' => 'relative_path', 'required' => true],
+                            ['id' => 'content', 'type' => 'string', 'required' => true],
+                            ['id' => 'expected_sha256', 'type' => 'string', 'required' => true],
+                        ]];
+                }
+                return ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote',
+                    'sync_allowed' => false, 'parameters' => $name === 'git.head' ? [] :
+                        ($name === 'workspace.find' ? [
+                            ['id' => 'path', 'type' => 'relative_path', 'required' => false],
+                            ['id' => 'filter', 'type' => 'enum', 'required' => false, 'values' => ['all', 'php', 'js', 'json', 'md']],
+                        ] : [['id' => 'path', 'type' => 'relative_path', 'required' => false]])];
+            },
+            $actions
         )];
     }
 
@@ -142,9 +174,31 @@ final class RemoteTools
 
     public function remoteActionStart(string $deployment_id, string $action, array $arguments = []): array
     {
+        require_once dirname(__DIR__, 2) . '/bin/remote-server-write-policy.php';
         require_once dirname(__DIR__, 2) . '/bin/remote-job-enqueue.php';
-        $jobId = \enqueueRemoteReadonlyJob($this->db, $deployment_id, $action, $arguments);
+        $isWrite = $action === self::WRITE_ACTION;
+        $approvedWrite = $isWrite && \remoteServerWriteApproved(
+            $this->writePolicy, $deployment_id, $arguments['path'] ?? null
+        );
+        if ($isWrite && !$approvedWrite) {
+            throw new InvalidArgumentException('Remote write not approved for this deployment and path');
+        }
+        $jobId = \enqueueRemoteReadonlyJob($this->db, $deployment_id, $action, $arguments, $approvedWrite);
         return ['job_id' => $jobId, 'state' => 'queued', 'deployment_id' => $deployment_id, 'action' => $action];
+    }
+
+    /** Exact server-approved single deployment; never guess between machines. */
+    private function writeDeploymentForProject(string $project): ?string
+    {
+        require_once dirname(__DIR__, 2) . '/bin/remote-server-write-policy.php';
+        $matches = array_values(array_filter($this->remoteProjectList()['deployments'],
+            static fn(array $row): bool => $row['project'] === $project));
+        if (count($matches) !== 1) {
+            return null;
+        }
+        $deploymentId = $matches[0]['deployment_id'];
+        return \remoteServerWriteEnabledForDeployment($this->writePolicy, $deploymentId)
+            ? $deploymentId : null;
     }
 
     public function remoteJobStatus(string $job_id): array
