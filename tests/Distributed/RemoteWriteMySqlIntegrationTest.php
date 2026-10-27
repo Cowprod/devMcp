@@ -173,6 +173,18 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         $this->assertClaimRejectionAudit($id, 'expired', 'write_job_expired');
     }
 
+    public function testMalformedQueuedWriteIsRejectedAndAudited(): void
+    {
+        $id = $this->enqueueWrite();
+        $this->db->prepare('UPDATE dm_remote_readonly_job SET arguments_json=? WHERE id=?')
+            ->execute(['{"path":123}', $id]);
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
+        self::assertSame('failed', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
+        self::assertSame("before\\n", file_get_contents($this->root . '/docs/smoke.md'));
+        $this->assertClaimRejectionAudit($id, 'denied', 'invalid_arguments');
+    }
+
     public function testLocalRevocationMakesClaimedWriteFail(): void
     {
         $id = $this->enqueueWrite();
