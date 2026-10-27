@@ -32,11 +32,26 @@ jobs:
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/001_distributed_registry.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/002_policy_revision.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/005_remote_readonly_jobs.sql
+      - name: Provision least-privilege queue runtime
+        env:
+          MYSQL_PWD: testroot
+        run: |
+          mysql -h 127.0.0.1 -u root <<'SQL'
+          CREATE USER 'remote_pilot_runtime'@'%' IDENTIFIED BY 'pilotpass';
+          GRANT SELECT (id,status) ON devmcp_test.dm_machine TO 'remote_pilot_runtime'@'%';
+          GRANT SELECT (id,machine_id,workspace_path,enabled) ON devmcp_test.dm_deployment TO 'remote_pilot_runtime'@'%';
+          GRANT SELECT (id,deployment_id,machine_id,action_name,arguments_json,state,created_at,claimed_at,finished_at,result_json) ON devmcp_test.dm_remote_readonly_job TO 'remote_pilot_runtime'@'%';
+          GRANT INSERT (id,deployment_id,machine_id,action_name,arguments_json,state) ON devmcp_test.dm_remote_readonly_job TO 'remote_pilot_runtime'@'%';
+          GRANT UPDATE (id,state,claimed_at,finished_at,result_json,arguments_json) ON devmcp_test.dm_remote_readonly_job TO 'remote_pilot_runtime'@'%';
+          GRANT INSERT (actor,event_type,object_type,object_id,outcome,details_json) ON devmcp_test.dm_audit_event TO 'remote_pilot_runtime'@'%';
+          SQL
       - name: SQL integration tests
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
           DEVMCP_TEST_MYSQL_USER: devmcp_test
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
+          DEVMCP_TEST_MYSQL_RUNTIME_USER: remote_pilot_runtime
+          DEVMCP_TEST_MYSQL_RUNTIME_PASSWORD: pilotpass
         run: |
           vendor/bin/phpunit tests/Distributed/MySqlIntegrationTest.php
           vendor/bin/phpunit tests/Distributed/RemoteWriteMySqlIntegrationTest.php
