@@ -53,12 +53,28 @@ try {
     $check('server deny by default', !remoteServerWriteApproved([], $deployment, 'docs/smoke.md'));
     $check('server opt-in exact path', remoteServerWriteApproved($server, $deployment, 'docs/smoke.md'));
     $check('server rejects other path', !remoteServerWriteApproved($server, $deployment, 'docs/other.md'));
+    $protectedServer = $server;
+    $protectedServer['deployments'][$deployment]['paths'] = ['docs/Private-notes.md'];
+    $check('protected-only server allowlist cannot advertise writes',
+        !remoteServerWriteEnabledForDeployment($protectedServer, $deployment));
+    $check('protected server path rejected even when explicitly listed',
+        !remoteServerWriteApproved($protectedServer, $deployment, 'docs/Private-notes.md'));
+    $mixedServer = $server;
+    $mixedServer['deployments'][$deployment]['paths'][] = 'docs/credentials.txt';
+    $check('mixed safe and protected server allowlist fails closed',
+        !remoteServerWriteEnabledForDeployment($mixedServer, $deployment));
     $check('server rejects other deployment', !remoteServerWriteApproved($server, str_repeat('c', 32), 'docs/smoke.md'));
     $check('server requires global switch', !remoteServerWriteApproved(['deployments' => $server['deployments']], $deployment, 'docs/smoke.md'));
     $check('server requires deployment switch', !remoteServerWriteApproved(['enabled' => true,
         'deployments' => [$deployment => ['paths' => ['docs/smoke.md']]]], $deployment, 'docs/smoke.md'));
     $check('job write denied by default', !remoteJobAllowed('workspace.write_text', $args));
     $check('job accepted with explicit capability', remoteJobAllowed('workspace.write_text', $args, true));
+    foreach (['docs/secret-notes.md', 'docs/CREDENTIALS.txt', 'private/notes.md', 'docs/apiToken.md'] as $unsafePath) {
+        $check('job denies protected path ' . $unsafePath,
+            !remoteJobAllowed('workspace.write_text', [...$args, 'path' => $unsafePath], true));
+    }
+    $check('similarly named safe path remains eligible',
+        remoteJobAllowed('workspace.write_text', [...$args, 'path' => 'docs/notes.md'], true));
     $check('write extension deny', !remoteJobAllowed('workspace.write_text', [...$args, 'path' => 'docs/smoke.php'], true));
     $check('write traversal deny', !remoteJobAllowed('workspace.write_text', [...$args, 'path' => '../smoke.md'], true));
     $check('write extra key deny', !remoteJobAllowed('workspace.write_text', [...$args, 'argv' => 'sh'], true));
@@ -68,6 +84,12 @@ try {
     $check('write invalid sha deny', !remoteJobAllowed('workspace.write_text', [...$args, 'expected_sha256' => 'abc'], true));
     $check('read-only legacy action unchanged', remoteJobAllowed('workspace.read', ['path' => 'docs/smoke.md']));
     $check('locally approved write accepted', remoteLocalPolicyCheck($local, $job));
+    $protectedLocal = $local;
+    $protectedLocal['deployments'][$deployment]['write_paths'][] = 'docs/secret-notes.md';
+    $protectedJob = $job;
+    $protectedJob['arguments']['path'] = 'docs/secret-notes.md';
+    $check('local policy denies protected path despite allowlist',
+        !remoteLocalPolicyCheck($protectedLocal, $protectedJob));
     $check('local denies by default', !remoteLocalPolicyCheck([], $job));
     $localNoWrite = $local;
     $localNoWrite['deployments'][$deployment]['allow_write'] = false;
@@ -100,6 +122,16 @@ try {
         $notEnqueued = true;
     }
     $check('queue rejects missing write approval', $notEnqueued);
+    $protectedNotEnqueued = false;
+    try {
+        enqueueRemoteReadonlyJob($db, $deployment, 'workspace.write_text',
+            [...$args, 'path' => 'docs/secret-notes.md'], true);
+    } catch (InvalidArgumentException $error) {
+        $protectedNotEnqueued = true;
+    }
+    $check('queue rejects protected content even with write opt-in', $protectedNotEnqueued);
+    $check('rejected content left no write rows in SQL queue',
+        (int) $db->query("SELECT COUNT(*) FROM dm_remote_readonly_job WHERE action_name='workspace.write_text'")->fetchColumn() === 0);
     $id = enqueueRemoteReadonlyJob($db, $deployment, 'workspace.write_text', $args, true);
     $audit = $db->prepare('SELECT actor,event_type,details_json FROM dm_audit_event WHERE object_id = ?');
     $audit->execute([$id]);
