@@ -85,8 +85,17 @@ try {
     $check('write invalid sha deny', !remoteJobAllowed('workspace.write_text', [...$args, 'expected_sha256' => 'abc'], true));
     $check('successful write result drops agent-supplied content',
         remoteNormalizeWriteResult(['ok' => true, 'sha256' => hash('sha256', "after\n"),
-            'size' => 6, 'content' => 'sensitive']) ===
+            'size' => 6, 'content' => 'sensitive'], "after\n") ===
         ['ok' => true, 'sha256' => hash('sha256', "after\n"), 'size' => 6]);
+    $check('reported write SHA must match queued content',
+        remoteNormalizeWriteResult(['ok' => true, 'sha256' => str_repeat('a', 64),
+            'size' => 6], "after\n") === ['ok' => false, 'error' => 'write_result_mismatch']);
+    $check('reported write size must match queued byte count',
+        remoteNormalizeWriteResult(['ok' => true, 'sha256' => hash('sha256', "after\n"),
+            'size' => 5], "after\n") === ['ok' => false, 'error' => 'write_result_mismatch']);
+    $check('scrubbed write payload makes reported success unverifiable',
+        remoteNormalizeWriteResult(['ok' => true, 'sha256' => hash('sha256', "after\n"),
+            'size' => 6]) === ['ok' => false, 'error' => 'write_result_unverifiable']);
     $check('failed write result drops agent-supplied content',
         remoteNormalizeWriteResult(['ok' => false, 'error' => 'sha256_conflict',
             'content' => 'sensitive']) === ['ok' => false, 'error' => 'sha256_conflict']);
