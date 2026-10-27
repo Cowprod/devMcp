@@ -54,6 +54,18 @@ jobs:
           sudo chmod 0755 "$fixture"
           sudo ln -s "$fixture/agent.php" "$fixture/link.php"
           php -r 'require "bin/remote-local-policy.php"; if (remoteLocalPolicyFileTrusted("/etc/devmcp-ci-root-policy/link.php")) exit(1);'
+      - name: Retention CLI refuses untrusted executable PHP config
+        run: |
+          set -euo pipefail
+          config="$(mktemp /tmp/devmcp-retention-untrusted-XXXXXX.php)"
+          trap 'rm -f "$config"' EXIT
+          printf '%s\n' '<?php echo "UNTRUSTED_CONFIG_LOADED\\n"; return [];' > "$config"
+          set +e
+          output="$(DEVMCP_DISTRIBUTED_CONFIG="$config" php bin/devmcp-remote-write-retention 2>&1)"
+          status=$?
+          set -e
+          test "$status" -eq 2
+          test "$output" = 'Remote-write retention: configuration unavailable'
       - name: Primitive security tests
         run: php tests/integration/remote-write-text-test.php
       - name: Server, queue and agent gate tests
