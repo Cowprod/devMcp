@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-// A deliberately non-executing enrollment agent. No remote jobs are accepted
-// until an approved, locally pinned policy and a deployment are installed.
+// Enrollment and bounded remote-action agent. Jobs require an approved,
+// locally pinned policy; writes additionally require two independent opt-ins.
 $configPath = '/etc/devmcp/agent.php';
 if (!is_readable($configPath)) {
     fwrite(STDERR, "devMcp: agent configuration missing\n");
@@ -59,7 +59,7 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
-// No remote jobs: only bounded, read-only inspection of registered workspaces.
+// Report bounded, read-only inspection of registered workspaces before polling.
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];
 if (!is_array($deployments) || count($deployments) > 32) {
