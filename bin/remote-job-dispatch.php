@@ -10,13 +10,13 @@ require_once __DIR__ . '/remote-workspace-write-text.php';
  * Single dispatch point for both read-only and opt-in write jobs.
  * A server-claimed job is still untrusted until the local policy approves it.
  */
-function remoteAuthorizedJobDispatch(array $policy, array $job, bool $writePolicyFileTrusted = false): array
+function remoteAuthorizedJobDispatch(array $policy, array $job, bool $writePolicyFileTrusted = false, string $lockDirectory = ''): array
 {
     if (($job['action'] ?? null) === 'workspace.write_text') {
         if (!$writePolicyFileTrusted || !remoteLocalPolicyCheck($policy, $job)) {
             return ['ok' => false, 'error' => 'local_policy_denied'];
         }
-        return remoteWorkspaceWriteText($job['workspace_path'], $job['arguments']);
+        return remoteWorkspaceWriteText($job['workspace_path'], $job['arguments'], $lockDirectory);
     }
     if (!remoteLocalPolicyCheck($policy, $job)) {
         return ['ok' => false, 'error' => 'local_policy_denied'];
