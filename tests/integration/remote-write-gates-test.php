@@ -26,6 +26,16 @@ $local = ['enabled' => true, 'deployments' => [$deployment => [
     'allow_write' => true, 'write_paths' => ['docs/smoke.md'],
 ]]];
 try {
+    // Guard the executable bootstrap config, not only the per-job policy.
+    // Validate the security-critical ordering without requiring a root-owned
+    // /etc/devmcp fixture on the unprivileged CI runner.
+    $agentSource = file_get_contents(dirname(__DIR__, 2) . '/bin/distributed-agent.php');
+    $configGuard = is_string($agentSource)
+        ? strpos($agentSource, 'if (!remoteLocalPolicyFileTrusted($configPath))') : false;
+    $configRequire = is_string($agentSource)
+        ? strpos($agentSource, '$config = require $configPath;') : false;
+    $check('agent bootstrap PHP trust guard precedes require',
+        $configGuard !== false && $configRequire !== false && $configGuard < $configRequire);
     // PHP policy files must be validated before require, even for read-only jobs.
     $policyFixture = $root . '/local-policy.php';
     file_put_contents($policyFixture, '<?php return [];');
