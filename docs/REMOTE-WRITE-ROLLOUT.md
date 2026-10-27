@@ -25,6 +25,9 @@ explicitly gated `workspace.write_text` action.
   executable targets and protected paths are forbidden.
 - The server rechecks approval when claiming, not just when enqueuing.
   Queued write jobs older than 10 minutes expire without execution.
+  Revoked, malformed, and expired write jobs are rejected and audited in the
+  same SQL transaction, including only reason codes and deployment/job IDs;
+  their queued content is scrubbed.
   A claimed job is not replayed if the result acknowledgement is lost.
 - The SQL queue stores the **full requested content** until separately
   purged. Audit rows record deployment, file path, old/new SHA-256, size,
