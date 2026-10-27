@@ -106,6 +106,7 @@ if (!is_array($policy) || ($policy['enabled'] ?? false) !== true) {
     exit(0);
 }
 require __DIR__ . '/remote-readonly-actions.php';
+require __DIR__ . '/remote-workspace-write-text.php';
 require __DIR__ . '/remote-job-policy.php';
 require __DIR__ . '/remote-local-policy.php';
 $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
@@ -137,9 +138,19 @@ foreach ($poll['jobs'] as $job) {
         || preg_match('/^[a-f0-9]{32}$/D', $job['id']) !== 1) {
         continue;
     }
-    $result = remoteLocalPolicyCheck($policy, $job)
-        ? remoteWorkspaceAction($job['workspace_path'], $job['action'], $job['arguments'])
-        : ['ok' => false, 'error' => 'local_policy_denied'];
+    $isWrite = $job['action'] === 'workspace.write_text';
+    // Local write opt-in is valid only when this policy file is root-owned
+    // and neither group- nor world-writable. Read-only behavior is unchanged.
+    $policyStat = $isWrite ? @stat($policyPath) : null;
+    $policyTrusted = !$isWrite || (is_array($policyStat)
+        && $policyStat['uid'] === 0 && ($policyStat['mode'] & 0022) === 0);
+    if (!$policyTrusted || !remoteLocalPolicyCheck($policy, $job)) {
+        $result = ['ok' => false, 'error' => 'local_policy_denied'];
+    } elseif ($isWrite) {
+        $result = remoteWorkspaceWriteText($job['workspace_path'], $job['arguments']);
+    } else {
+        $result = remoteWorkspaceAction($job['workspace_path'], $job['action'], $job['arguments']);
+    }
     $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
         'result' => $result], JSON_THROW_ON_ERROR);
     if (strlen($payload) > 69000) {
@@ -148,5 +159,5 @@ foreach ($poll['jobs'] as $job) {
     }
     $post('/v1/agent/job-result', $payload);
 }
-fwrite(STDOUT, "devMcp: remote read-only poll complete\n");
+fwrite(STDOUT, "devMcp: remote poll complete\n");
 
