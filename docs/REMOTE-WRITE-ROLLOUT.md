@@ -15,6 +15,10 @@ explicitly gated `workspace.write_text` action.
 - Exact, separately maintained server and agent path allowlists. Default deny
   even after upgrading the code. A remote project is offered the write action
   only if exactly one active deployment is visible and server-opted in.
+- Paths containing `secret`, `credential`, `private`, or `token` in any
+  case-insensitive path segment are also rejected by the server policy and
+  queue validator **before content is stored in SQL**, even if explicitly
+  allowlisted. The agent independently enforces the same protected-name deny.
 - Arguments: `path` (relative), `content` (valid UTF-8, maximum 16 KiB),
   `expected_sha256` (current file content, 64 lowercase hex digits).
 - Compare-and-swap with SHA-256, then replace through a temporary file and
