@@ -99,6 +99,9 @@ final class ProjectTools
         array $arguments = [],
     ): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            throw new InvalidArgumentException('Remote actions require action_start');
+        }
         $projectDefinition = $this->projects->get($project);
         $actionDefinition = $projectDefinition->getAction($action);
 
