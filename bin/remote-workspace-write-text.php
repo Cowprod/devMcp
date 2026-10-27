@@ -2,11 +2,12 @@
 declare(strict_types=1);
 
 /**
- * Opt-in, bounded atomic text replacement for a disposable workspace.
- * The caller must independently authorize this capability in the local agent policy.
- * This function does not modify the remote job allowlist.
+ * Bounded replacement of an existing UTF-8 text file.
+ *
+ * Caller must independently approve the deployment, exact path and operation.
+ * Locks live in the agent's private state directory, never in a Git workspace.
  */
-function remoteWorkspaceWriteText(string $workspace, array $arguments): array
+function remoteWorkspaceWriteText(string $workspace, array $arguments, string $lockDirectory): array
 {
     if (array_diff(array_keys($arguments), ['path', 'content', 'expected_sha256']) !== []
         || !is_string($arguments['path'] ?? null)
@@ -17,15 +18,30 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments): array
     $path = $arguments['path'];
     $content = $arguments['content'];
     $expected = $arguments['expected_sha256'];
-    if (strlen($path) > 512 || strlen($content) > 65536 || str_contains($content, "\0")
+    if (strlen($path) > 512 || strlen($content) > 16384 || str_contains($content, chr(0))
         || preg_match('//u', $content) !== 1
         || preg_match('/^[a-f0-9]{64}$/D', $expected) !== 1
-        || preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\\.(?:txt|md)$~D', $path) !== 1) {
+        || preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.(?:txt|md)$~D', $path) !== 1) {
         return ['ok' => false, 'error' => 'invalid_content_or_path'];
     }
     $root = realpath($workspace);
-    if ($root === false || is_link($workspace) || !is_dir($root)) {
-        return ['ok' => false, 'error' => 'workspace_missing'];
+    if ($root === false || !is_dir($root) || is_link($workspace)
+        || $root !== rtrim($workspace, '/')) {
+        return ['ok' => false, 'error' => 'noncanonical_workspace'];
+    }
+    if (!function_exists('posix_geteuid')) {
+        return ['ok' => false, 'error' => 'unsupported_platform'];
+    }
+    $uid = posix_geteuid();
+    $lockRoot = realpath($lockDirectory);
+    if ($lockRoot === false || !is_dir($lockRoot) || is_link($lockDirectory)
+        || $lockRoot !== rtrim($lockDirectory, '/')) {
+        return ['ok' => false, 'error' => 'private_lock_directory_required'];
+    }
+    $lockStat = @stat($lockRoot);
+    if (!is_array($lockStat) || $lockStat['uid'] !== $uid
+        || ($lockStat['mode'] & 0022) !== 0) {
+        return ['ok' => false, 'error' => 'untrusted_lock_directory'];
     }
     $segments = explode('/', $path);
     foreach ($segments as $segment) {
@@ -41,15 +57,29 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments): array
     if ($realParent === false || ($realParent !== $root && !str_starts_with($realParent, $root . '/'))) {
         return ['ok' => false, 'error' => 'invalid_parent'];
     }
+
+    // All ancestor directories must be owned by the execution account and
+    // not group/world-writable, avoiding external path swaps during the write.
     $cursor = $root;
-    foreach (array_slice($segments, 0, -1) as $segment) {
-        $cursor .= '/' . $segment;
-        if (is_link($cursor)) {
-            return ['ok' => false, 'error' => 'symlink_forbidden'];
+    foreach (['', ...array_slice($segments, 0, -1)] as $segment) {
+        $cursor .= ($segment === '' ? '' : '/' . $segment);
+        $stat = @stat($cursor);
+        if (is_link($cursor) || !is_array($stat) || !is_dir($cursor)
+            || $stat['uid'] !== $uid || ($stat['mode'] & 0022) !== 0) {
+            return ['ok' => false, 'error' => 'untrusted_parent'];
         }
     }
-    $lock = @fopen($root . '/.devmcp-write.lock', 'c');
-    if ($lock === false || !flock($lock, LOCK_EX)) {
+
+    $lockPath = $lockRoot . '/remote-write-' . hash('sha256', $root) . '.lock';
+    if (is_link($lockPath)) {
+        return ['ok' => false, 'error' => 'lock_symlink_forbidden'];
+    }
+    $lock = @fopen($lockPath, 'c');
+    if ($lock === false) {
+        return ['ok' => false, 'error' => 'lock_failed'];
+    }
+    if (!flock($lock, LOCK_EX)) {
+        fclose($lock);
         return ['ok' => false, 'error' => 'lock_failed'];
     }
     $tmp = null;
@@ -57,11 +87,18 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments): array
         if (is_link($target) || !is_file($target) || !is_readable($target) || !is_writable($target)) {
             return ['ok' => false, 'error' => 'target_not_regular_file'];
         }
-        $current = @file_get_contents($target);
+        $targetStat = @stat($target);
+        if (!is_array($targetStat) || $targetStat['uid'] !== $uid
+            || ($targetStat['mode'] & 0111) !== 0) {
+            return ['ok' => false, 'error' => 'untrusted_target'];
+        }
+        if (filesize($target) > 65536) {
+            return ['ok' => false, 'error' => 'target_too_large'];
+        }
+        $current = @file_get_contents($target, false, null, 0, 65537);
         if (!is_string($current) || !hash_equals($expected, hash('sha256', $current))) {
             return ['ok' => false, 'error' => 'sha256_conflict'];
         }
-        // Recheck canonical parent after taking the lock to reduce path substitution risk.
         if (realpath($parent) !== $realParent || is_link($target)) {
             return ['ok' => false, 'error' => 'path_changed'];
         }
@@ -70,7 +107,7 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments): array
             return ['ok' => false, 'error' => 'temporary_file_failed'];
         }
         if (@file_put_contents($tmp, $content, LOCK_EX) !== strlen($content)
-            || !@chmod($tmp, fileperms($target) & 0777)
+            || !@chmod($tmp, $targetStat['mode'] & 0777)
             || !@rename($tmp, $target)) {
             return ['ok' => false, 'error' => 'atomic_replace_failed'];
         }
