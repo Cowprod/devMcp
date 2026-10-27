@@ -52,6 +52,14 @@ explicitly gated `workspace.write_text` action.
   purged. Audit rows record deployment, file path, old/new SHA-256, size,
   job ID, and result outcome, **not content**. Do not use this pilot for
   confidential files until a retention policy and access review are complete.
+- The result endpoint normalizes **write** results before database storage.
+  Verified success must include a lowercase SHA-256 and a size in 0..16384;
+  failure includes a bounded error code. Arbitrary agent fields (notably
+  `content`) are discarded, so completed jobs cannot accidentally retain
+  plaintext in `result_json` after their queued input is scrubbed. A
+  malformed success is stored as `invalid_write_result` / failed; because
+  the remote filesystem may already have changed, operators must verify the
+  target file before retrying. Read-only result formats are unchanged.
 
 ## Payload retention maintenance — implemented but NOT scheduled
 
