@@ -192,6 +192,27 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
             json_decode((string) $row->fetchColumn(), true, 8, JSON_THROW_ON_ERROR));
     }
 
+    public function testAgentCannotClaimSuccessWithWrongPayloadHashOrSize(): void
+    {
+        foreach ([
+            ['sha256' => str_repeat('a', 64), 'size' => 6],
+            ['sha256' => hash('sha256', "after\n"), 'size' => 5],
+        ] as $wrongMetadata) {
+            $id = $this->enqueueWrite();
+            self::assertIsArray(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
+            \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, [
+                'ok' => true, ...$wrongMetadata, 'content' => 'MUST_NOT_PERSIST',
+            ]);
+            self::assertSame('failed', $this->stateOf($id));
+            self::assertSame('{}', $this->argumentsOf($id));
+            $query = $this->db->prepare('SELECT result_json FROM dm_remote_readonly_job WHERE id=?');
+            $query->execute([$id]);
+            self::assertSame(['ok' => false, 'error' => 'write_result_mismatch'],
+                json_decode((string) $query->fetchColumn(), true, 8, JSON_THROW_ON_ERROR));
+            self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+        }
+    }
+
     public function testProtectedWritePathNeverPersistsPayloadWithRuntimeGrants(): void
     {
         $protected = [...$this->arguments, 'path' => 'docs/API-Token.md'];
@@ -288,9 +309,14 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('claimed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
-        // A late result remains legal: the sweep cannot know whether execution occurred.
+        // A late result is accepted once, but cannot prove a successful write
+        // after retention has removed the original requested content.
         \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, ['ok' => true, 'sha256' => hash('sha256', "after\n"), 'size' => 6]);
-        self::assertSame('succeeded', $this->stateOf($id));
+        self::assertSame('failed', $this->stateOf($id));
+        $query = $this->db->prepare('SELECT result_json FROM dm_remote_readonly_job WHERE id=?');
+        $query->execute([$id]);
+        self::assertSame(['ok' => false, 'error' => 'write_result_unverifiable'],
+            json_decode((string) $query->fetchColumn(), true, 8, JSON_THROW_ON_ERROR));
         $audit = $this->db->prepare("SELECT outcome FROM dm_audit_event WHERE object_id=? AND event_type='remote.write.payload_scrubbed'");
         $audit->execute([$id]);
         self::assertSame('outcome_unknown', $audit->fetchColumn());
