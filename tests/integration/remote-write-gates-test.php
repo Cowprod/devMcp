@@ -26,6 +26,20 @@ $local = ['enabled' => true, 'deployments' => [$deployment => [
     'allow_write' => true, 'write_paths' => ['docs/smoke.md'],
 ]]];
 try {
+    // PHP policy files must be validated before require, even for read-only jobs.
+    $policyFixture = $root . '/local-policy.php';
+    file_put_contents($policyFixture, '<?php return [];');
+    $check('untrusted agent PHP policy rejected before require',
+        !remoteLocalPolicyFileTrusted($policyFixture));
+    $policyLink = $root . '/policy-link.php';
+    symlink($policyFixture, $policyLink);
+    $check('agent policy symlink rejected', !remoteLocalPolicyFileTrusted($policyLink));
+    chmod($root, 0777);
+    $check('agent policy in writable ancestor rejected', !remoteLocalPolicyFileTrusted($policyFixture));
+    chmod($root, 0700);
+    chmod($policyFixture, 0666);
+    $check('writable agent policy file rejected', !remoteLocalPolicyFileTrusted($policyFixture));
+    chmod($policyFixture, 0600);
     $check('server deny by default', !remoteServerWriteApproved([], $deployment, 'docs/smoke.md'));
     $check('server opt-in exact path', remoteServerWriteApproved($server, $deployment, 'docs/smoke.md'));
     $check('server rejects other path', !remoteServerWriteApproved($server, $deployment, 'docs/other.md'));
@@ -110,6 +124,8 @@ try {
     $localSymlink['deployments'][$deployment]['write_paths'][] = 'docs/link.md';
     $check('symlink target rejected', !(remoteAuthorizedJobDispatch($localSymlink, $symlinkJob, true, $state)['ok'] ?? false));
 } finally {
+    @unlink($root . '/policy-link.php');
+    @unlink($root . '/local-policy.php');
     @unlink($root . '/docs/link.md');
     @unlink($root . '/docs/smoke.md');
     @unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
