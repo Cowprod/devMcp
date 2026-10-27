@@ -1,0 +1,32 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+
+if (PHP_SAPI !== 'cli') {
+    fwrite(STDERR, "CLI only\n");
+    exit(2);
+}
+require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/remote-write-retention.php';
+$configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php';
+if (!is_string($configPath) || !is_file($configPath) || is_link($configPath) || !is_readable($configPath)) {
+    fwrite(STDERR, "Remote-write retention: configuration unavailable\n");
+    exit(2);
+}
+try {
+    $config = require $configPath;
+    if (!is_array($config) || !is_string($config['dsn'] ?? null)
+        || !is_string($config['writer_username'] ?? null)
+        || !is_string($config['writer_password'] ?? null)) {
+        throw new RuntimeException('Invalid distributed configuration');
+    }
+    $db = DatabaseConnection::connect($config['dsn'], $config['writer_username'], $config['writer_password']);
+    $counts = remoteScrubStaleWritePayloads($db);
+    echo json_encode(['ok' => true] + $counts, JSON_THROW_ON_ERROR) . PHP_EOL;
+} catch (Throwable $error) {
+    // Do not print details: connection errors may include private configuration.
+    fwrite(STDERR, "Remote-write retention failed; inspect service logs\n");
+    exit(1);
+}
