@@ -2,10 +2,6 @@
 declare(strict_types=1);
 
 /**
- * Remote job argument validation. Writes require explicit approval at every
- * caller (MCP enqueue, server poll, agent); the default remains read-only.
- */
-/**
  * Reject sensitive names before write payloads enter the SQL queue, not
  * merely when an agent finally attempts the filesystem replacement.
  * Keep the same conservative segment markers as the agent-side guard.
@@ -26,6 +22,10 @@ function remoteWriteSafeRelativePath(string $path): bool
     return true;
 }
 
+/**
+ * Remote job argument validation. Writes require explicit approval at every
+ * caller (MCP enqueue, server poll, agent); the default remains read-only.
+ */
 function remoteJobAllowed(string $action, array $args, bool $allowWrite = false): bool
 {
     if ($action === 'workspace.write_text') {
