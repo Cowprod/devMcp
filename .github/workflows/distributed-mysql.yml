@@ -1,0 +1,39 @@
+name: Distributed MySQL integration
+on: [push, pull_request]
+jobs:
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testroot
+          MYSQL_DATABASE: devmcp_test
+          MYSQL_USER: devmcp_test
+          MYSQL_PASSWORD: testpass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -ptestroot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql
+      - run: composer install --no-interaction --prefer-dist
+      - name: Apply migrations
+        env:
+          MYSQL_PWD: testpass
+        run: |
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/001_distributed_registry.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/002_policy_revision.sql
+      - name: SQL integration tests
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/MySqlIntegrationTest.php

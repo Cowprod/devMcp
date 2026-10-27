@@ -1,0 +1,42 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$id = $argv[1] ?? '';
+if (!is_string($id) || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1) {
+    fwrite(STDERR, "Usage: devmcp-agent-report <attempt-id>\n");
+    exit(2);
+}
+$file = getenv('DEVMCP_AGENT_CONFIG');
+if (!is_string($file) || !is_file($file)) {
+    fwrite(STDERR, "Agent configuration missing\n");
+    exit(2);
+}
+try {
+    $config = require $file;
+    $lock = fopen($config['state_dir'] . '/agent.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        throw new RuntimeException('Agent lock unavailable');
+    }
+    $client = new Cowprod\DevMcp\Distributed\Agent\AgentHttpClient(
+        new Cowprod\DevMcp\Distributed\Agent\AgentConfiguration(
+            $config['machine_id'], $config['central_url'], $config['policy_file']
+        ),
+        trim((string) file_get_contents($config['credential_file'])),
+        $config['ca_file']
+    );
+    $reporter = new Cowprod\DevMcp\Distributed\Agent\PendingResultReporter(
+        $client,
+        new Cowprod\DevMcp\Distributed\Agent\AgentStateStore($config['state_dir'])
+    );
+    if (!$reporter->report($id)) {
+        throw new RuntimeException('Attempt has no pending durable result');
+    }
+    echo "Result acknowledged\n";
+} catch (Throwable $exception) {
+    fwrite(STDERR, "Result reconciliation failed\n");
+    exit(1);
+}

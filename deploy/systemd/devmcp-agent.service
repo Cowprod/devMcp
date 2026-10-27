@@ -1,0 +1,29 @@
+[Unit]
+Description=devMcp distributed agent (one iteration)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=devmcp-agent
+Group=devmcp-agent
+Environment=DEVMCP_AGENT_CONFIG=/etc/devmcp/agent.php
+WorkingDirectory=/opt/devmcp
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-agent
+StateDirectory=devmcp-agent
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/devmcp-agent
+TimeoutStartSec=2h
+
+[Install]
+WantedBy=multi-user.target

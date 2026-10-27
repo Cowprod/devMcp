@@ -1,0 +1,12 @@
+[Unit]
+Description=devMcp distributed agent polling
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=10s
+AccuracySec=1s
+Unit=devmcp-agent.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

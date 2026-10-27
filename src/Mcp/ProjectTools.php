@@ -18,6 +18,7 @@ final class ProjectTools
         private readonly JobManager $jobs,
         private readonly AuditLogger $audit,
         private readonly HostTools $hostTools = new HostTools(),
+        private readonly ?RemoteTools $remoteTools = null,
     ) {
     }
 
@@ -31,6 +32,13 @@ final class ProjectTools
             $projects[] = $project->toPublicArray();
         }
 
+        if ($this->remoteTools !== null) {
+            foreach ($this->remoteTools->projects() as $remote) {
+                if (!isset($this->projects->all()[$remote['id']])) {
+                    $projects[] = $remote;
+                }
+            }
+        }
         return [
             'projects' => $projects,
             'host' => $this->hostTools->capabilities(),
@@ -42,6 +50,9 @@ final class ProjectTools
      */
     public function projectDescribe(string $project): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            return $this->remoteTools->describe($project);
+        }
         return $this->projects->get($project)->toPublicArray();
     }
 
@@ -50,6 +61,9 @@ final class ProjectTools
      */
     public function actionList(string $project): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            return $this->remoteTools->actions($project);
+        }
         $definition = $this->projects->get($project);
         $actions = [];
 
@@ -68,6 +82,9 @@ final class ProjectTools
      */
     public function actionDescribe(string $project, string $action): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            return $this->remoteTools->action($project, $action);
+        }
         return $this->projects->get($project)->getAction($action)->toPublicArray();
     }
 
@@ -82,6 +99,9 @@ final class ProjectTools
         array $arguments = [],
     ): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            throw new InvalidArgumentException('Remote actions require action_start');
+        }
         $projectDefinition = $this->projects->get($project);
         $actionDefinition = $projectDefinition->getAction($action);
 
@@ -110,6 +130,9 @@ final class ProjectTools
         string $action,
         array $arguments = [],
     ): array {
+        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+            return $this->remoteTools->start($project, $action, $arguments);
+        }
         return $this->jobs->start($project, $action, $arguments);
     }
 
@@ -118,6 +141,9 @@ final class ProjectTools
      */
     public function jobStatus(string $job_id): array
     {
+        if ($this->remoteTools !== null && $this->remoteTools->isRemoteJob($job_id)) {
+            return $this->remoteTools->status($job_id);
+        }
         return $this->jobs->status($job_id);
     }
 
@@ -130,6 +156,13 @@ final class ProjectTools
         int $stderr_offset = 0,
         ?int $length = null,
     ): array {
+        if ($this->remoteTools !== null && $this->remoteTools->isRemoteJob($job_id)) {
+            if ($stdout_offset !== 0 || $stderr_offset !== 0 || ($length !== null && $length < 1)) {
+                throw new InvalidArgumentException('Remote output does not support offsets or custom chunk sizes');
+            }
+            $job = $this->remoteTools->status($job_id);
+            return [...$job, 'stdout' => ['data' => '', 'next_offset' => 0, 'eof' => true], 'stderr' => ['data' => '', 'next_offset' => 0, 'eof' => true]];
+        }
         return $this->jobs->output(
             $job_id,
             $stdout_offset,

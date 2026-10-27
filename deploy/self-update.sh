@@ -4,7 +4,10 @@ set -eu
 [ "$(id -u)" -eq 0 ] || { echo "Run as root" >&2; exit 1; }
 exec 9>/run/lock/devmcp-update.lock
 flock -n 9 || { echo "devMcp update already running" >&2; exit 1; }
-# Clear any pending MCP request after acquiring the exclusive update lock.\nrm -f /var/lib/devmcp/update-request\ncd /opt/devmcp\n# Git runs as root while the checkout belongs to the deployment user.
+# Clear any pending MCP request after acquiring the exclusive update lock.
+rm -f /var/lib/devmcp/update-request
+cd /opt/devmcp
+# Git runs as root while the checkout belongs to the deployment user.
 # Scope trust to this invocation; do not modify root's global git config.
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory

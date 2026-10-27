@@ -1,0 +1,91 @@
+# Put in nginx http {} context (outside server {}):
+# limit_req_zone $binary_remote_addr zone=devmcp_enroll:10m rate=2r/m;
+# limit_req_zone $binary_remote_addr zone=devmcp_agent:10m rate=30r/m;
+# Replace __ZT_IP__, __CERT__, __KEY__, __HTPASSWD__ and __FPM_SOCKET__.
+# Explicit ZeroTier bind; no public IPv4/IPv6 listener.
+server {
+    listen __ZT_IP__:443 ssl;
+    server_name __ZT_IP__;
+    ssl_certificate __CERT__;
+    ssl_certificate_key __KEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    auth_basic "devMcp administration";
+    auth_basic_user_file __HTPASSWD__;
+    root /opt/devmcp-admin/public;
+    index distributed-admin.php;
+    location = / {
+        rewrite ^ /distributed-admin.php last;
+    }
+    location = /distributed-admin.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/distributed-admin.php;
+        fastcgi_param HTTPS on;
+        fastcgi_param REMOTE_USER $remote_user;
+        fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+        fastcgi_pass unix:__FPM_SOCKET__;
+    }
+    # Opt-in only after database migration, TLS trust and isolated-host tests.
+    # This location is disabled in the default template. To enable, remove
+    # the leading '#' on each line after configuring the limit_req_zone above.
+    # location = /v1/enrollment/redeem {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_enroll burst=3 nodelay;
+    #     client_max_body_size 2k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/enrollment.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
+    # Authenticated connectivity check for pending agents: NO job access.
+    # Activate after applying database migration and writer credentials.
+    # location = /v1/agent/ping {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_agent burst=10 nodelay;
+    #     client_max_body_size 1k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/agent-ping.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
+    # Optional read-only diagnostic ingestion; enable only after migration 004,
+    # writer grants, and an agent update with locally pinned workspace paths.
+    # location = /v1/agent/workspace-report {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_agent burst=10 nodelay;
+    #     client_max_body_size 2k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/agent-workspace-report.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
+    # Enable only after explicit deployment approval and isolated tests.
+    # Agents authenticate using a machine-scoped bearer token; HTTP Basic
+    # must be disabled for this endpoint only.
+    # location ~ ^/v1/agent/(claim|start|heartbeat|finish)$ {
+    #     auth_basic off;
+    #     limit_except POST { deny all; }
+    #     limit_req zone=devmcp_agent burst=10 nodelay;
+    #     client_max_body_size 64k;
+    #     include fastcgi_params;
+    #     fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/agent.php;
+    #     fastcgi_param HTTPS on;
+    #     fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+    #     fastcgi_pass unix:__FPM_SOCKET__;
+    # }
+    # Public certificate only, never expose the private key.
+    location = /devmcp-ca.crt {
+        auth_basic off;
+        default_type application/x-pem-file;
+        alias __CERT__;
+        add_header Cache-Control "no-store" always;
+    }
+    location / {
+        return 404;
+    }
+}

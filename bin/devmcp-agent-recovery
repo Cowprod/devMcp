@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$file = getenv('DEVMCP_AGENT_CONFIG');
+if (!is_string($file) || !is_file($file)) {
+    fwrite(STDERR, "Missing agent configuration\n");
+    exit(2);
+}
+$config = require $file;
+if (!is_array($config) || !is_string($config['state_dir'] ?? null)) {
+    fwrite(STDERR, "Invalid agent configuration\n");
+    exit(2);
+}
+try {
+    $inventory = new Cowprod\DevMcp\Distributed\Agent\RecoveryInventory($config['state_dir']);
+    echo json_encode($inventory->pending(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR), PHP_EOL;
+} catch (Throwable $exception) {
+    fwrite(STDERR, "Recovery inventory unavailable\n");
+    exit(1);
+}

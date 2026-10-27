@@ -1,0 +1,70 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Agent\AgentConfiguration;
+use Cowprod\DevMcp\Distributed\Agent\AgentHeartbeatRunner;
+use Cowprod\DevMcp\Distributed\Agent\AgentHttpClient;
+use Cowprod\DevMcp\Distributed\Agent\AgentStateStore;
+use Cowprod\DevMcp\Distributed\Agent\AgentWorker;
+use Cowprod\DevMcp\Distributed\Agent\TrustedJobResolver;
+use Cowprod\DevMcp\Project\ProjectRegistry;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$configFile = getenv('DEVMCP_AGENT_CONFIG');
+if (!is_string($configFile) || !is_file($configFile)) {
+    fwrite(STDERR, "Agent configuration unavailable\n");
+    exit(2);
+}
+$config = require $configFile;
+if (!is_array($config)) {
+    fwrite(STDERR, "Agent configuration must return an array\n");
+    exit(2);
+}
+foreach (['machine_id','central_url','policy_file','credential_file','ca_file','state_dir'] as $key) {
+    if (!is_string($config[$key] ?? null) || $config[$key] === '') {
+        fwrite(STDERR, "Missing agent configuration: {$key}\n");
+        exit(2);
+    }
+}
+$lock = fopen($config['state_dir'] . '/agent.lock', 'c');
+if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "Agent already running or lock unavailable\n");
+    exit(3);
+}
+try {
+    $policyFile = $config['policy_file'];
+    $policy = require $policyFile;
+    if (!is_array($policy) || !is_array($policy['registry'] ?? null)
+        || !is_string($policy['sha256'] ?? null)
+        || !is_string($policy['deployment_id'] ?? null)
+        || !is_array($policy['action_revisions'] ?? null)) {
+        throw new RuntimeException('Invalid locally approved policy');
+    }
+    $credential = trim((string) file_get_contents($config['credential_file']));
+    $agentConfig = new AgentConfiguration(
+        $config['machine_id'], $config['central_url'], $policyFile
+    );
+    $client = new AgentHttpClient($agentConfig, $credential, $config['ca_file']);
+    $worker = new AgentWorker(
+        $client,
+        new TrustedJobResolver(
+            ProjectRegistry::fromConfig($policy['registry']),
+            $policy['sha256'],
+            $policy['deployment_id'],
+            $policy['action_revisions'],
+        ),
+        new AgentHeartbeatRunner($client),
+        new AgentStateStore($config['state_dir']),
+    );
+    (new \Cowprod\DevMcp\Distributed\Agent\AttemptRecoveryGuard($config['state_dir']))->assertSafeToClaim();
+    $worker->runOnce();
+} catch (Throwable $exception) {
+    fwrite(STDERR, "Agent iteration failed: " . $exception->getMessage() . "\n");
+    exit(1);
+} finally {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+}
