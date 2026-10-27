@@ -13,6 +13,8 @@ done
 mariadb -e "
 GRANT INSERT (actor, event_type, object_type, object_id, outcome, details_json)
 ON devmcp_distributed.dm_audit_event TO 'devmcp_writer'@'localhost';
+GRANT UPDATE (arguments_json)
+ON devmcp_distributed.dm_remote_readonly_job TO 'devmcp_writer'@'localhost';
 "
 echo "PASS: remote write PHP syntax and audit INSERT grant verified."
 echo "Remote writes remain disabled until BOTH the server allowlist and the"
