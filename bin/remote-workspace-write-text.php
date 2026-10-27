@@ -108,7 +108,11 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         if ($tmp === false) {
             return ['ok' => false, 'error' => 'temporary_file_failed'];
         }
+        // tempnam creates a new inode. Preserve the original group as well
+        // as mode, or fail closed; otherwise a 0640 file could silently lose
+        // access for its intended group after the atomic rename.
         if (@file_put_contents($tmp, $content, LOCK_EX) !== strlen($content)
+            || !@chgrp($tmp, (int) $targetStat['gid'])
             || !@chmod($tmp, $targetStat['mode'] & 0777)
             || !@rename($tmp, $target)) {
             return ['ok' => false, 'error' => 'atomic_replace_failed'];
