@@ -64,6 +64,7 @@ try {
     $db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, status TEXT NOT NULL)');
     $db->exec('CREATE TABLE dm_deployment (id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, enabled INTEGER NOT NULL)');
     $db->exec('CREATE TABLE dm_remote_readonly_job (id TEXT PRIMARY KEY, deployment_id TEXT, machine_id TEXT, action_name TEXT, arguments_json TEXT, state TEXT)');
+    $db->exec('CREATE TABLE dm_audit_event (id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, event_type TEXT, object_type TEXT, object_id TEXT, outcome TEXT, details_json TEXT)');
     $db->prepare('INSERT INTO dm_machine (id,status) VALUES (?,?)')->execute([$machine, 'active']);
     $db->prepare('INSERT INTO dm_deployment (id,machine_id,enabled) VALUES (?,?,?)')->execute([$deployment, $machine, 1]);
     $notEnqueued = false;
@@ -74,6 +75,14 @@ try {
     }
     $check('queue rejects missing write approval', $notEnqueued);
     $id = enqueueRemoteReadonlyJob($db, $deployment, 'workspace.write_text', $args, true);
+    $audit = $db->prepare('SELECT actor,event_type,details_json FROM dm_audit_event WHERE object_id = ?');
+    $audit->execute([$id]);
+    $auditRow = $audit->fetch(PDO::FETCH_ASSOC);
+    $auditDetails = is_array($auditRow) ? json_decode($auditRow['details_json'], true) : null;
+    $check('write enqueue audited with digest and no content', is_array($auditRow)
+        && $auditRow['event_type'] === 'remote.write.queued'
+        && ($auditDetails['new_sha256'] ?? null) === hash('sha256', "after\\n")
+        && !str_contains($auditRow['details_json'], '"content"'));
     $query = $db->prepare('SELECT * FROM dm_remote_readonly_job WHERE id = ?');
     $query->execute([$id]);
     $row = $query->fetch(PDO::FETCH_ASSOC);
