@@ -6,6 +6,10 @@ on:
       - 'bin/distributed-agent.php'
       - 'src/Mcp/RemoteTools.php'
       - 'public/agent-job-poll.php'
+      - 'public/agent-job-result.php'
+      - 'deploy/distributed/prepare-remote-write-pilot.sh'
+      - 'deploy/distributed/upgrade-agent-readonly.sh'
+      - 'deploy/distributed/enable-remote-mcp.sh'
       - 'tests/integration/remote-write-*.php'
       - '.github/workflows/remote-write-tests.yml'
   push:
@@ -22,9 +26,14 @@ jobs:
           extensions: pdo_sqlite
       - name: PHP syntax
         run: |
-          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php tests/integration/remote-write-*.php; do
+          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
             php -l "$file"
           done
+      - name: Deployment script syntax
+        run: |
+          bash -n deploy/distributed/prepare-remote-write-pilot.sh
+          bash -n deploy/distributed/upgrade-agent-readonly.sh
+          bash -n deploy/distributed/enable-remote-mcp.sh
       - name: Primitive security tests
         run: php tests/integration/remote-write-text-test.php
       - name: Server, queue and agent gate tests
