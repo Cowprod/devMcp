@@ -31,6 +31,32 @@ explicitly gated `workspace.write_text` action.
   job ID, and result outcome, **not content**. Do not use this pilot for
   confidential files until a retention policy and access review are complete.
 
+## Payload retention maintenance — implemented but NOT scheduled
+
+`bin/remote-write-retention.php` provides a bounded, transactional
+maintenance operation. It marks queued writes older than 10 minutes as
+expired, and scrubs the full SQL `arguments_json` from **claimed** writes
+older than one hour. Claimed writes keep their original `claimed` state:
+the agent may already have executed them, so their outcome is **unknown**.
+This process must never requeue or replay such a job. A late agent result
+can still update its status. Both scrub types produce audit entries without
+file content; repeated sweeps are idempotent.
+
+An explicit operator can invoke the one-shot CLI with the existing
+least-privilege database identity:
+
+```sh
+DEVMCP_DISTRIBUTED_CONFIG=/etc/devmcp/mcp-distributed.php php /opt/devmcp-admin/bin/devmcp-remote-write-retention
+```
+
+This is deliberately **not installed as a timer or enabled by merging the
+PR**. A dedicated scheduler, account/permissions verification, and a real
+sandbox run remain rollout tasks. `prepare-remote-write-pilot.sh` grants
+the runtime identity the additional `UPDATE (arguments_json)` permission
+needed for expiry and acknowledgements; the MySQL CI suite now executes
+queue operations through an independently restricted user with these
+column-level grants.
+
 ## Approval — both sides are mandatory
 
 For a disposable deployment (never `caseRouter` first), create a sandbox
@@ -103,7 +129,7 @@ authorized by this document.
 This v1 assumes the unprivileged agent account and its private files remain
 trustworthy. Full multi-user filesystem race resistance would require
 platform-specific file-descriptor-based operations (`openat` + no-follow);
-do not allow writes to shared/group-writable workspaces. No automatic
-cleanup/retention of queued content is implemented yet. Actor identity is
+do not allow writes to shared/group-writable workspaces. Retention cleanup is available as an opt-in CLI but no schedule is installed;
+without a scheduler, orphaned write payloads remain until maintenance is run. Actor identity is
 currently the MCP action endpoint at enqueue, and the machine ID at result;
 per-human identity is not carried by the existing MCP session.
