@@ -32,6 +32,22 @@ $checks['oversize_rejected'] = ($call('docs/test.md', hash('sha256', "after\n"),
 symlink($root . '/docs/test.md', $root . '/docs/link.md');
 $checks['symlink_rejected'] = ($call('docs/link.md', hash('sha256', "after\n"), 'x')['ok'] ?? false) === false;
 unlink($root . '/docs/link.md');
+$binarySource = "source\\0binary";
+file_put_contents($root . '/docs/test.md', $binarySource);
+$checks['existing_binary_target_rejected'] =
+    ($call('docs/test.md', hash('sha256', $binarySource), "replacement\\n")['error'] ?? '') === 'target_not_utf8_text';
+$checks['existing_binary_target_unchanged'] = file_get_contents($root . '/docs/test.md') === $binarySource;
+$invalidUtf8Source = chr(255) . 'bad';
+file_put_contents($root . '/docs/test.md', $invalidUtf8Source);
+$checks['existing_invalid_utf8_rejected'] =
+    ($call('docs/test.md', hash('sha256', $invalidUtf8Source), "replacement\\n")['error'] ?? '') === 'target_not_utf8_text';
+$checks['existing_invalid_utf8_unchanged'] = file_get_contents($root . '/docs/test.md') === $invalidUtf8Source;
+$tooLargeSource = str_repeat('x', 65537);
+file_put_contents($root . '/docs/test.md', $tooLargeSource);
+clearstatcache(true, $root . '/docs/test.md');
+$checks['existing_oversized_target_rejected'] =
+    ($call('docs/test.md', hash('sha256', $tooLargeSource), "replacement\\n")['error'] ?? '') === 'target_too_large';
+$checks['existing_oversized_target_unchanged'] = file_get_contents($root . '/docs/test.md') === $tooLargeSource;
 unlink($root . '/docs/test.md');
 @unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
 rmdir($state);
