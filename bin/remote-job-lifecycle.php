@@ -52,6 +52,7 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
         if ($isWrite && (int) $job['stale'] === 1) {
             $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='expired', arguments_json='{}', finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
             $update->execute(['{"ok":false,"error":"write_job_expired"}', $job['id']]);
+            remoteAuditRejectedWrite($db, $job['id'], $job['deployment_id'], 'expired', 'write_job_expired');
             $db->commit();
             return null;
         }
@@ -61,6 +62,10 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
             $clearArguments = $isWrite ? ", arguments_json='{}'" : '';
             $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='failed'" . $clearArguments . ", finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
             $update->execute(['{"ok":false,"error":"invalid_action"}', $job['id']]);
+            if ($isWrite) {
+                remoteAuditRejectedWrite($db, $job['id'], $job['deployment_id'], 'denied',
+                    !$approvedWrite ? 'server_write_not_approved' : 'invalid_arguments');
+            }
             $db->commit();
             return null;
         }
@@ -128,4 +133,20 @@ function remoteCompleteClaimedJob(PDO $db, string $machineId, string $jobId, arr
         }
         throw $error;
     }
+}
+
+/**
+ * Persist denied/expired write jobs in the same transaction as the state change.
+ * Never include the queued content in security audit rows.
+ */
+function remoteAuditRejectedWrite(PDO $db, string $jobId, string $deploymentId, string $outcome, string $reason): void
+{
+    $audit = $db->prepare(
+        "INSERT INTO dm_audit_event (actor,event_type,object_type,object_id,outcome,details_json) "
+        . "VALUES ('system:write-claim','remote.write.rejected','remote-job',?,?,?)"
+    );
+    $audit->execute([$jobId, $outcome, json_encode([
+        'deployment_id' => $deploymentId,
+        'reason' => $reason,
+    ], JSON_THROW_ON_ERROR)]);
 }
