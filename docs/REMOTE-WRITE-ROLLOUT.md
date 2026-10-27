@@ -32,6 +32,9 @@ explicitly gated `workspace.write_text` action.
   The private lock state directory and writable workspace paths must be
   agent-owned and non-group/world-writable. Symlinks, traversal, executable
   targets and protected paths are forbidden.
+- Before replacing a file, the agent checks that the existing target is
+  at most 64 KiB, valid UTF-8 and contains no NUL bytes. A binary file named
+  .md or .txt is rejected even when its expected SHA-256 matches.
 - Atomic file replacement preserves the original group and mode, or fails
   without renaming. POSIX ACLs and extended attributes are not preserved:
   use ordinary disposable files without custom ACLs or xattrs in this pilot.
