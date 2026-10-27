@@ -64,7 +64,8 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
             $update->execute(['{"ok":false,"error":"invalid_action"}', $job['id']]);
             if ($isWrite) {
                 remoteAuditRejectedWrite($db, $job['id'], $job['deployment_id'], 'denied',
-                    !$approvedWrite ? 'server_write_not_approved' : 'invalid_arguments');
+                    !is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments, true)
+                        ? 'invalid_arguments' : 'server_write_not_approved');
             }
             $db->commit();
             return null;
