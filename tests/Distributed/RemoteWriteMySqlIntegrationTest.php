@@ -96,6 +96,13 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         return (string) $query->fetchColumn();
     }
 
+    private function argumentsOf(string $id): string
+    {
+        $query = $this->db->prepare('SELECT arguments_json FROM dm_remote_readonly_job WHERE id=?');
+        $query->execute([$id]);
+        return (string) $query->fetchColumn();
+    }
+
     public function testApprovedWriteClaimsExecutesAndAuditsExactlyOnce(): void
     {
         $id = $this->enqueueWrite();
@@ -108,6 +115,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertTrue($result['ok']);
         \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
         self::assertSame('succeeded', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("after\n", file_get_contents($this->root . '/docs/smoke.md'));
         $audit = $this->db->prepare("SELECT event_type, details_json FROM dm_audit_event WHERE object_type='remote-job' AND object_id=? ORDER BY id");
         $audit->execute([$id]);
@@ -123,6 +131,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         $id = $this->enqueueWrite();
         self::assertNull(\remoteClaimApprovedJob($this->db, $this->machine, []));
         self::assertSame('failed', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
     }
 
@@ -133,6 +142,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
             ->execute([$id]);
         self::assertNull(\remoteClaimApprovedJob($this->db, $this->machine, $this->serverPolicy));
         self::assertSame('expired', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
     }
 
@@ -146,6 +156,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('local_policy_denied', $result['error']);
         \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
         self::assertSame('failed', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
     }
 
