@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           fixture=/etc/devmcp-ci-root-policy
-          sudo install -d -m 0750 -o root -g root "$fixture"
+          sudo install -d -m 0755 -o root -g root "$fixture"
           trap 'sudo rm -f "$fixture/agent.php" "$fixture/link.php"; sudo rmdir "$fixture"' EXIT
           printf '%s\n' '<?php return [];' | sudo tee "$fixture/agent.php" >/dev/null
           sudo chown root:root "$fixture/agent.php"
@@ -51,7 +51,7 @@ jobs:
           sudo chmod 0644 "$fixture/agent.php"
           sudo chmod 0777 "$fixture"
           php -r 'require "bin/remote-local-policy.php"; if (remoteLocalPolicyFileTrusted("/etc/devmcp-ci-root-policy/agent.php")) exit(1);'
-          sudo chmod 0750 "$fixture"
+          sudo chmod 0755 "$fixture"
           sudo ln -s "$fixture/agent.php" "$fixture/link.php"
           php -r 'require "bin/remote-local-policy.php"; if (remoteLocalPolicyFileTrusted("/etc/devmcp-ci-root-policy/link.php")) exit(1);'
       - name: Primitive security tests
