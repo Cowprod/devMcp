@@ -13,6 +13,8 @@ $check = static function (string $name, bool $pass) use (&$checks): void {
 $root = sys_get_temp_dir() . '/devmcp-write-gates-' . bin2hex(random_bytes(8));
 mkdir($root, 0700);
 mkdir($root . '/docs', 0700);
+$state = $root . '-state';
+mkdir($state, 0700);
 file_put_contents($root . '/docs/smoke.md', "before\n");
 $deployment = str_repeat('a', 32);
 $machine = str_repeat('b', 32);
@@ -90,11 +92,15 @@ try {
         && $row['machine_id'] === $machine && $row['action_name'] === 'workspace.write_text');
     $claimedJob = $job;
     $claimedJob['arguments'] = json_decode($row['arguments_json'], true, 8, JSON_THROW_ON_ERROR);
-    $result = remoteAuthorizedJobDispatch($local, $claimedJob, true);
+    $check('private state directory required', (remoteAuthorizedJobDispatch($local, $claimedJob, true)['ok'] ?? false) === false);
+    chmod($state, 0777);
+    $check('writable lock directory rejected', (remoteAuthorizedJobDispatch($local, $claimedJob, true, $state)['ok'] ?? false) === false);
+    chmod($state, 0700);
+    $result = remoteAuthorizedJobDispatch($local, $claimedJob, true, $state);
     $check('queue-to-agent dispatch succeeded', ($result['ok'] ?? false) === true);
     $check('replacement content matches', file_get_contents($root . '/docs/smoke.md') === "after\n");
     $check('new content hash matches', ($result['sha256'] ?? null) === hash('sha256', "after\n"));
-    $again = remoteAuthorizedJobDispatch($local, $claimedJob, true);
+    $again = remoteAuthorizedJobDispatch($local, $claimedJob, true, $state);
     $check('duplicate attempt rejected by CAS', ($again['error'] ?? null) === 'sha256_conflict');
     $check('duplicate preserved content', file_get_contents($root . '/docs/smoke.md') === "after\n");
     symlink($root . '/docs/smoke.md', $root . '/docs/link.md');
@@ -102,11 +108,12 @@ try {
     $symlinkJob['arguments'] = [...$args, 'path' => 'docs/link.md', 'expected_sha256' => hash('sha256', "after\n")];
     $localSymlink = $local;
     $localSymlink['deployments'][$deployment]['write_paths'][] = 'docs/link.md';
-    $check('symlink target rejected', !(remoteAuthorizedJobDispatch($localSymlink, $symlinkJob, true)['ok'] ?? false));
+    $check('symlink target rejected', !(remoteAuthorizedJobDispatch($localSymlink, $symlinkJob, true, $state)['ok'] ?? false));
 } finally {
     @unlink($root . '/docs/link.md');
     @unlink($root . '/docs/smoke.md');
-    @unlink($root . '/.devmcp-write.lock');
+    @unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
+    @rmdir($state);
     @rmdir($root . '/docs');
     @rmdir($root);
 }
