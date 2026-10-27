@@ -6,11 +6,11 @@ set -euo pipefail
 base="https://raw.githubusercontent.com/Cowprod/devMcp/$1/bin"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-for file in distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
+for file in distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php remote-job-dispatch.php remote-workspace-write-text.php; do
     curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 "$base/$file" -o "$tmp/$file"
     php -l "$tmp/$file"
 done
-for file in distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
+for file in distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php remote-job-dispatch.php remote-workspace-write-text.php; do
     install -m 0755 -o root -g root "$tmp/$file" "/opt/devmcp-agent/bin/$file"
 done
 systemctl start devmcp-agent.service
