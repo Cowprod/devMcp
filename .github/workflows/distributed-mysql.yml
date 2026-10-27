@@ -31,9 +31,12 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/001_distributed_registry.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/002_policy_revision.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/005_remote_readonly_jobs.sql
       - name: SQL integration tests
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
           DEVMCP_TEST_MYSQL_USER: devmcp_test
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
-        run: vendor/bin/phpunit tests/Distributed/MySqlIntegrationTest.php
+        run: |
+          vendor/bin/phpunit tests/Distributed/MySqlIntegrationTest.php
+          vendor/bin/phpunit tests/Distributed/RemoteWriteMySqlIntegrationTest.php
