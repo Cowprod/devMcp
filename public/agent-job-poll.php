@@ -4,6 +4,7 @@ use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 require dirname(__DIR__) . '/vendor/autoload.php';
 require dirname(__DIR__) . '/bin/remote-job-policy.php';
+require dirname(__DIR__) . '/bin/remote-server-write-policy.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 try {
@@ -53,7 +54,11 @@ try {
         exit;
     }
     $arguments = json_decode($job['arguments_json'], true, 8, JSON_THROW_ON_ERROR);
-    if (!is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments)) {
+    $writePolicy = is_array($config['remote_write'] ?? null) ? $config['remote_write'] : [];
+    $approvedWrite = $job['action_name'] === 'workspace.write_text'
+        && remoteServerWriteApproved($writePolicy, $job['deployment_id'],
+            is_array($arguments) ? ($arguments['path'] ?? null) : null);
+    if (!is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments, $approvedWrite)) {
         $reject = $db->prepare("UPDATE dm_remote_readonly_job SET state = 'failed', finished_at = UTC_TIMESTAMP(6), result_json = ? WHERE id = ?");
         $reject->execute(['{"ok":false,"error":"invalid_action"}', $job['id']]);
         $db->commit();
