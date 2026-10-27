@@ -181,7 +181,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
-        self::assertSame("before\\n", file_get_contents($this->root . '/docs/smoke.md'));
+        self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
         $this->assertClaimRejectionAudit($id, 'denied', 'invalid_arguments');
     }
 
