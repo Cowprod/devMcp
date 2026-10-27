@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/remote-job-policy.php';
+
 /**
  * Separate server-side, per-deployment and per-file write approval.
  * No setting is enabled by default. This policy does not replace the agent's
@@ -19,8 +21,7 @@ function remoteServerWriteEnabledForDeployment(array $policy, string $deployment
         return false;
     }
     foreach ($entry['paths'] as $path) {
-        if (!is_string($path) || strlen($path) > 512
-            || preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.(?:md|txt)$~D', $path) !== 1) {
+        if (!is_string($path) || !remoteWriteSafeRelativePath($path)) {
             return false;
         }
     }
