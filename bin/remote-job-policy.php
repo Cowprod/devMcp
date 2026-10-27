@@ -5,6 +5,27 @@ declare(strict_types=1);
  * Remote job argument validation. Writes require explicit approval at every
  * caller (MCP enqueue, server poll, agent); the default remains read-only.
  */
+/**
+ * Reject sensitive names before write payloads enter the SQL queue, not
+ * merely when an agent finally attempts the filesystem replacement.
+ * Keep the same conservative segment markers as the agent-side guard.
+ */
+function remoteWriteSafeRelativePath(string $path): bool
+{
+    if (strlen($path) > 512
+        || preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.(?:txt|md)$~D', $path) !== 1) {
+        return false;
+    }
+    foreach (explode('/', strtolower($path)) as $segment) {
+        foreach (['secret', 'credential', 'private', 'token'] as $marker) {
+            if (str_contains($segment, $marker)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 function remoteJobAllowed(string $action, array $args, bool $allowWrite = false): bool
 {
     if ($action === 'workspace.write_text') {
@@ -17,8 +38,7 @@ function remoteJobAllowed(string $action, array $args, bool $allowWrite = false)
         }
         $path = $args['path'];
         $content = $args['content'];
-        return strlen($path) <= 512
-            && preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.(?:txt|md)$~D', $path) === 1
+        return remoteWriteSafeRelativePath($path)
             && strlen($content) <= 16384
             && strpos($content, chr(0)) === false
             && preg_match('//u', $content) === 1
