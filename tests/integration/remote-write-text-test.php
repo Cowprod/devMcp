@@ -8,12 +8,18 @@ $state = $root . '-state';
 mkdir($state, 0700);
 mkdir($root . '/docs');
 file_put_contents($root . '/docs/test.md', "before\n");
+chmod($root . '/docs/test.md', 0640);
+$originalGroup = filegroup($root . '/docs/test.md');
+$originalMode = fileperms($root . '/docs/test.md') & 0777;
 $sha = hash('sha256', "before\n");
 $call = static fn(string $path, string $expected, string $content): array =>
     remoteWorkspaceWriteText($root, ['path' => $path, 'expected_sha256' => $expected, 'content' => $content], $state);
 $checks = [];
 $checks['valid_replace'] = ($call('docs/test.md', $sha, "after\n")['ok'] ?? false) === true;
 $checks['content_changed'] = file_get_contents($root . '/docs/test.md') === "after\n";
+clearstatcache(true, $root . '/docs/test.md');
+$checks['group_preserved'] = filegroup($root . '/docs/test.md') === $originalGroup;
+$checks['mode_preserved'] = (fileperms($root . '/docs/test.md') & 0777) === $originalMode;
 $checks['stale_sha_rejected'] = ($call('docs/test.md', $sha, "oops\n")['error'] ?? '') === 'sha256_conflict';
 chmod($root . '/docs/test.md', 0666);
 $checks['shared_writable_target_rejected'] = ($call('docs/test.md', hash('sha256', "after\n"), "tampered\n")['error'] ?? '') === 'untrusted_target';
