@@ -17,6 +17,8 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-dispatch.php';
 final class RemoteWriteMySqlIntegrationTest extends TestCase
 {
     private PDO $db;
+    /** Uses only the column grants available to the production queue worker. */
+    private PDO $runtimeDb;
     private string $machine;
     private string $deployment;
     private string $project;
@@ -37,6 +39,11 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
             (string) getenv('DEVMCP_TEST_MYSQL_USER'),
             (string) getenv('DEVMCP_TEST_MYSQL_PASSWORD'),
         );
+        $runtimeUser = getenv('DEVMCP_TEST_MYSQL_RUNTIME_USER');
+        $this->runtimeDb = is_string($runtimeUser) && $runtimeUser !== ''
+            ? DatabaseConnection::connect($dsn, $runtimeUser,
+                (string) getenv('DEVMCP_TEST_MYSQL_RUNTIME_PASSWORD'))
+            : $this->db;
         $this->machine = bin2hex(random_bytes(16));
         $this->deployment = bin2hex(random_bytes(16));
         $this->project = 'writepilot-' . bin2hex(random_bytes(5));
@@ -86,7 +93,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
 
     private function enqueueWrite(): string
     {
-        return \enqueueRemoteReadonlyJob($this->db, $this->deployment, 'workspace.write_text', $this->arguments, true);
+        return \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment, 'workspace.write_text', $this->arguments, true);
     }
 
     private function stateOf(string $id): string
@@ -106,14 +113,14 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
     public function testApprovedWriteClaimsExecutesAndAuditsExactlyOnce(): void
     {
         $id = $this->enqueueWrite();
-        $claimed = \remoteClaimApprovedJob($this->db, $this->machine, $this->serverPolicy);
+        $claimed = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
         self::assertIsArray($claimed);
         self::assertSame($id, $claimed['id']);
         self::assertSame('claimed', $this->stateOf($id));
-        self::assertNull(\remoteClaimApprovedJob($this->db, $this->machine, $this->serverPolicy));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
         $result = \remoteAuthorizedJobDispatch($this->localPolicy, $claimed, true, $this->stateDirectory);
         self::assertTrue($result['ok']);
-        \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, $result);
         self::assertSame('succeeded', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("after\n", file_get_contents($this->root . '/docs/smoke.md'));
@@ -123,13 +130,13 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame(['remote.write.queued', 'remote.write.result'], array_column($events, 'event_type'));
         self::assertStringNotContainsString('after', $events[0]['details_json']);
         $this->expectException(RuntimeException::class);
-        \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, $result);
     }
 
     public function testServerRevocationRejectsQueuedWrite(): void
     {
         $id = $this->enqueueWrite();
-        self::assertNull(\remoteClaimApprovedJob($this->db, $this->machine, []));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, []));
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
@@ -140,7 +147,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         $id = $this->enqueueWrite();
         $this->db->prepare('UPDATE dm_remote_readonly_job SET created_at=DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 15 MINUTE) WHERE id=?')
             ->execute([$id]);
-        self::assertNull(\remoteClaimApprovedJob($this->db, $this->machine, $this->serverPolicy));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
         self::assertSame('expired', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
@@ -149,12 +156,12 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
     public function testLocalRevocationMakesClaimedWriteFail(): void
     {
         $id = $this->enqueueWrite();
-        $claimed = \remoteClaimApprovedJob($this->db, $this->machine, $this->serverPolicy);
+        $claimed = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
         $local = $this->localPolicy;
         $local['deployments'][$this->deployment]['allow_write'] = false;
         $result = \remoteAuthorizedJobDispatch($local, $claimed, true, $this->stateDirectory);
         self::assertSame('local_policy_denied', $result['error']);
-        \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, $result);
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
@@ -162,14 +169,14 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
 
     public function testLegacyReadOnlyJobStillWorks(): void
     {
-        $id = \enqueueRemoteReadonlyJob($this->db, $this->deployment, 'workspace.read', ['path' => 'docs/smoke.md']);
-        $claimed = \remoteClaimApprovedJob($this->db, $this->machine, []);
+        $id = \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment, 'workspace.read', ['path' => 'docs/smoke.md']);
+        $claimed = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, []);
         self::assertIsArray($claimed);
         self::assertSame($id, $claimed['id']);
         $result = \remoteAuthorizedJobDispatch($this->localPolicy, $claimed, false);
         self::assertTrue($result['ok']);
         self::assertSame("before\n", $result['content']);
-        \remoteCompleteClaimedJob($this->db, $this->machine, $id, $result);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, $result);
         self::assertSame('succeeded', $this->stateOf($id));
     }
 }
