@@ -97,8 +97,11 @@ foreach ($deployments as $deployment) {
     }
 }
 $policyPath = '/etc/devmcp/remote-readonly-policy.php';
-if (!is_file($policyPath) || is_link($policyPath)) {
-    fwrite(STDOUT, "devMcp: remote actions disabled by local policy\n");
+require_once __DIR__ . '/remote-local-policy.php';
+// A PHP policy is executable. Reject untrusted ownership and any writable
+// ancestor BEFORE require, for read-only as well as write jobs.
+if (!remoteLocalPolicyFileTrusted($policyPath)) {
+    fwrite(STDOUT, "devMcp: remote actions disabled by untrusted local policy\n");
     exit(0);
 }
 $policy = require $policyPath;
@@ -135,13 +138,8 @@ foreach ($poll['jobs'] as $job) {
         || preg_match('/^[a-f0-9]{32}$/D', $job['id']) !== 1) {
         continue;
     }
-    $isWrite = $job['action'] === 'workspace.write_text';
-    // Local write opt-in is valid only when this policy file is root-owned
-    // and neither group- nor world-writable. Read-only behavior is unchanged.
-    $policyStat = $isWrite ? @stat($policyPath) : null;
-    $policyTrusted = !$isWrite || (is_array($policyStat)
-        && $policyStat['uid'] === 0 && ($policyStat['mode'] & 0022) === 0);
-    $result = remoteAuthorizedJobDispatch($policy, $job, $policyTrusted,
+    // Policy trust was established before its PHP content was executed.
+    $result = remoteAuthorizedJobDispatch($policy, $job, true,
         is_string($config['state_dir'] ?? null) ? $config['state_dir'] : '');
     $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
         'result' => $result], JSON_THROW_ON_ERROR);
