@@ -43,7 +43,7 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
         }
         $isWrite = $job['action_name'] === 'workspace.write_text';
         if ($isWrite && (int) $job['stale'] === 1) {
-            $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='expired', finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
+            $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='expired', arguments_json='{}', finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
             $update->execute(['{"ok":false,"error":"write_job_expired"}', $job['id']]);
             $db->commit();
             return null;
@@ -51,7 +51,8 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
         $approvedWrite = $isWrite && remoteServerWriteApproved($writePolicy, $job['deployment_id'],
             is_array($arguments) ? ($arguments['path'] ?? null) : null);
         if (!is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments, $approvedWrite)) {
-            $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='failed', finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
+            $clearArguments = $isWrite ? ", arguments_json='{}'" : '';
+            $update = $db->prepare("UPDATE dm_remote_readonly_job SET state='failed'" . $clearArguments . ", finished_at=UTC_TIMESTAMP(6), result_json=? WHERE id=? AND state='queued'");
             $update->execute(['{"ok":false,"error":"invalid_action"}', $job['id']]);
             $db->commit();
             return null;
@@ -100,7 +101,8 @@ function remoteCompleteClaimedJob(PDO $db, string $machineId, string $jobId, arr
             throw new RuntimeException('job_not_claimed');
         }
         $outcome = ($result['ok'] ?? false) === true ? 'succeeded' : 'failed';
-        $update = $db->prepare("UPDATE dm_remote_readonly_job SET state=?, result_json=?, finished_at=UTC_TIMESTAMP(6) WHERE id=? AND machine_id=? AND state='claimed'");
+        $clearArguments = $claimed['action_name'] === 'workspace.write_text' ? ", arguments_json='{}'" : '';
+        $update = $db->prepare("UPDATE dm_remote_readonly_job SET state=?, result_json=?" . $clearArguments . ", finished_at=UTC_TIMESTAMP(6) WHERE id=? AND machine_id=? AND state='claimed'");
         $update->execute([$outcome, $encoded, $jobId, $machineId]);
         if ($update->rowCount() !== 1) {
             throw new RuntimeException('job_not_claimed');
