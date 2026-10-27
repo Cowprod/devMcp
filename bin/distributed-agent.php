@@ -8,6 +8,14 @@ if (!is_readable($configPath)) {
     fwrite(STDERR, "devMcp: agent configuration missing\n");
     exit(1);
 }
+// The bootstrap configuration is executable PHP, just like the local policy.
+// Refuse unsafe ownership, permissions, ancestors or symlinks BEFORE require.
+// install-agent.sh provisions /etc/devmcp/agent.php as root:devmcp-agent 0640.
+require_once __DIR__ . '/remote-local-policy.php';
+if (!remoteLocalPolicyFileTrusted($configPath)) {
+    fwrite(STDERR, "devMcp: untrusted agent configuration\n");
+    exit(1);
+}
 $config = require $configPath;
 if (!is_array($config) || !preg_match('/^[a-f0-9]{32}$/D', (string) ($config['machine_id'] ?? ''))
     || !is_file((string) ($config['credential_file'] ?? ''))
