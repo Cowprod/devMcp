@@ -16,8 +16,8 @@ $checks['valid_replace'] = ($call('docs/test.md', $sha, "after\n")['ok'] ?? fals
 $checks['content_changed'] = file_get_contents($root . '/docs/test.md') === "after\n";
 $checks['stale_sha_rejected'] = ($call('docs/test.md', $sha, "oops\n")['error'] ?? '') === 'sha256_conflict';
 chmod($root . '/docs/test.md', 0666);
-$checks['shared_writable_target_rejected'] = ($call('docs/test.md', hash('sha256', "after\\n"), "tampered\\n")['error'] ?? '') === 'untrusted_target';
-$checks['shared_writable_target_unchanged'] = file_get_contents($root . '/docs/test.md') === "after\\n";
+$checks['shared_writable_target_rejected'] = ($call('docs/test.md', hash('sha256', "after\n"), "tampered\n")['error'] ?? '') === 'untrusted_target';
+$checks['shared_writable_target_unchanged'] = file_get_contents($root . '/docs/test.md') === "after\n";
 chmod($root . '/docs/test.md', 0600);
 $checks['traversal_rejected'] = ($call('../outside.md', $sha, 'x')['ok'] ?? false) === false;
 $checks['protected_name_rejected'] = ($call('docs/private.md', $sha, 'x')['ok'] ?? false) === false;
