@@ -53,13 +53,18 @@ explicitly gated `workspace.write_text` action.
   job ID, and result outcome, **not content**. Do not use this pilot for
   confidential files until a retention policy and access review are complete.
 - The result endpoint normalizes **write** results before database storage.
-  Verified success must include a lowercase SHA-256 and a size in 0..16384;
-  failure includes a bounded error code. Arbitrary agent fields (notably
+  A reported success must include a lowercase SHA-256 and a size in
+  0..16384 **matching the original queued content** (digest and byte length).
+  Failure includes a bounded error code. Arbitrary agent fields (notably
   `content`) are discarded, so completed jobs cannot accidentally retain
-  plaintext in `result_json` after their queued input is scrubbed. A
-  malformed success is stored as `invalid_write_result` / failed; because
-  the remote filesystem may already have changed, operators must verify the
-  target file before retrying. Read-only result formats are unchanged.
+  plaintext in `result_json` after their queued input is scrubbed.
+  Validly formatted but mismatched success becomes `write_result_mismatch`.
+  A late success received after retention scrubbed the queued payload cannot
+  be independently matched and becomes `write_result_unverifiable`; this is
+  recorded as failed/unverified, **not evidence that the file was unchanged**.
+  A malformed success becomes `invalid_write_result`. Operators must inspect
+  the remote file before retrying any of these states to avoid overwriting a
+  write that may have actually completed. Read-only result formats are unchanged.
 
 ## Payload retention maintenance — implemented but NOT scheduled
 
@@ -69,8 +74,10 @@ expired, and scrubs the full SQL `arguments_json` from **claimed** writes
 older than one hour. Claimed writes keep their original `claimed` state:
 the agent may already have executed them, so their outcome is **unknown**.
 This process must never requeue or replay such a job. A late agent result
-can still update its status. Both scrub types produce audit entries without
-file content; repeated sweeps are idempotent.
+can still update its status once; if it claims success after its queued content
+was scrubbed, the server records `write_result_unverifiable` instead of an
+unchecked success. Both scrub types produce audit entries without file content;
+repeated sweeps are idempotent.
 
 An explicit operator can invoke the one-shot CLI with the existing
 least-privilege database identity:
