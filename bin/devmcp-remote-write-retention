@@ -8,13 +8,16 @@ if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "CLI only\n");
     exit(2);
 }
-require dirname(__DIR__) . '/vendor/autoload.php';
-require __DIR__ . '/remote-write-retention.php';
+// The distributed config is executable PHP. Check its owner, mode, symlinks
+// and every ancestor before loading it, especially when run by a scheduler.
+require __DIR__ . '/remote-local-policy.php';
 $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php';
-if (!is_string($configPath) || !is_file($configPath) || is_link($configPath) || !is_readable($configPath)) {
+if (!is_string($configPath) || !remoteLocalPolicyFileTrusted($configPath)) {
     fwrite(STDERR, "Remote-write retention: configuration unavailable\n");
     exit(2);
 }
+require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/remote-write-retention.php';
 try {
     $config = require $configPath;
     if (!is_array($config) || !is_string($config['dsn'] ?? null)
