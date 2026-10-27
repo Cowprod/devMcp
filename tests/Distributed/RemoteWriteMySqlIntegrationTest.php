@@ -13,6 +13,7 @@ use RuntimeException;
 require_once dirname(__DIR__, 2) . '/bin/remote-job-enqueue.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-dispatch.php';
+require_once dirname(__DIR__, 2) . '/bin/remote-write-retention.php';
 
 final class RemoteWriteMySqlIntegrationTest extends TestCase
 {
@@ -165,6 +166,57 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+    }
+
+    public function testRetentionExpiresWriteWhenMachineNeverPolls(): void
+    {
+        $id = $this->enqueueWrite();
+        $this->db->prepare('UPDATE dm_remote_readonly_job SET created_at=DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 15 MINUTE) WHERE id=?')
+            ->execute([$id]);
+        self::assertSame(['expired_queued' => 1, 'scrubbed_claimed' => 0],
+            \remoteScrubStaleWritePayloads($this->runtimeDb));
+        self::assertSame('expired', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
+        $audit = $this->db->prepare("SELECT outcome FROM dm_audit_event WHERE object_id=? AND event_type='remote.write.payload_scrubbed'");
+        $audit->execute([$id]);
+        self::assertSame('expired', $audit->fetchColumn());
+        self::assertSame(['expired_queued' => 0, 'scrubbed_claimed' => 0],
+            \remoteScrubStaleWritePayloads($this->runtimeDb));
+    }
+
+    public function testRetentionScrubsUnconfirmedClaimWithoutReplayingIt(): void
+    {
+        $id = $this->enqueueWrite();
+        $claimed = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
+        self::assertIsArray($claimed);
+        $this->db->prepare('UPDATE dm_remote_readonly_job SET claimed_at=DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 90 MINUTE) WHERE id=?')
+            ->execute([$id]);
+        self::assertSame(['expired_queued' => 0, 'scrubbed_claimed' => 1],
+            \remoteScrubStaleWritePayloads($this->runtimeDb));
+        self::assertSame('claimed', $this->stateOf($id));
+        self::assertSame('{}', $this->argumentsOf($id));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy));
+        // A late result remains legal: the sweep cannot know whether execution occurred.
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $id, ['ok' => true]);
+        self::assertSame('succeeded', $this->stateOf($id));
+        $audit = $this->db->prepare("SELECT outcome FROM dm_audit_event WHERE object_id=? AND event_type='remote.write.payload_scrubbed'");
+        $audit->execute([$id]);
+        self::assertSame('outcome_unknown', $audit->fetchColumn());
+    }
+
+    public function testRetentionLeavesRecentWriteAndLegacyReadUntouched(): void
+    {
+        $id = $this->enqueueWrite();
+        $read = \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment, 'workspace.read', ['path' => 'docs/smoke.md']);
+        $this->db->prepare('UPDATE dm_remote_readonly_job SET created_at=DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 90 MINUTE) WHERE id=?')
+            ->execute([$read]);
+        self::assertSame(['expired_queued' => 0, 'scrubbed_claimed' => 0],
+            \remoteScrubStaleWritePayloads($this->runtimeDb));
+        self::assertSame('queued', $this->stateOf($id));
+        self::assertNotSame('{}', $this->argumentsOf($id));
+        self::assertSame('queued', $this->stateOf($read));
+        self::assertNotSame('{}', $this->argumentsOf($read));
     }
 
     public function testLegacyReadOnlyJobStillWorks(): void
