@@ -105,10 +105,7 @@ $policy = require $policyPath;
 if (!is_array($policy) || ($policy['enabled'] ?? false) !== true) {
     exit(0);
 }
-require __DIR__ . '/remote-readonly-actions.php';
-require __DIR__ . '/remote-workspace-write-text.php';
-require __DIR__ . '/remote-job-policy.php';
-require __DIR__ . '/remote-local-policy.php';
+require __DIR__ . '/remote-job-dispatch.php';
 $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
     'X-DevMcp-Machine: ' . $config['machine_id']];
 $post = static function (string $endpoint, string $body) use ($server, $headers, $config): ?array {
@@ -144,13 +141,7 @@ foreach ($poll['jobs'] as $job) {
     $policyStat = $isWrite ? @stat($policyPath) : null;
     $policyTrusted = !$isWrite || (is_array($policyStat)
         && $policyStat['uid'] === 0 && ($policyStat['mode'] & 0022) === 0);
-    if (!$policyTrusted || !remoteLocalPolicyCheck($policy, $job)) {
-        $result = ['ok' => false, 'error' => 'local_policy_denied'];
-    } elseif ($isWrite) {
-        $result = remoteWorkspaceWriteText($job['workspace_path'], $job['arguments']);
-    } else {
-        $result = remoteWorkspaceAction($job['workspace_path'], $job['action'], $job['arguments']);
-    }
+    $result = remoteAuthorizedJobDispatch($policy, $job, $policyTrusted);
     $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
         'result' => $result], JSON_THROW_ON_ERROR);
     if (strlen($payload) > 69000) {
