@@ -19,10 +19,16 @@ explicitly gated `workspace.write_text` action.
   `expected_sha256` (current file content, 64 lowercase hex digits).
 - Compare-and-swap with SHA-256, then replace through a temporary file and
   rename under a per-workspace `flock`. Missing files and SHA mismatches fail.
-- The agent requires a root-owned, non-group/world-writable local policy file;
-  an agent-owned, non-group/world-writable private state directory for locks;
-  and agent-owned workspace directories and target. Symlinks, traversal,
-  executable targets and protected paths are forbidden.
+- The agent validates the root-owned, non-group/world-writable PHP policy
+  file **and every ancestor directory before requiring it**, including for
+  read-only actions. A legacy installation with an untrusted policy file
+  will fail closed until ownership and permissions are corrected.
+  The private lock state directory and writable workspace paths must be
+  agent-owned and non-group/world-writable. Symlinks, traversal, executable
+  targets and protected paths are forbidden.
+- Atomic file replacement preserves the original group and mode, or fails
+  without renaming. POSIX ACLs and extended attributes are not preserved:
+  use ordinary disposable files without custom ACLs or xattrs in this pilot.
 - The server rechecks approval when claiming, not just when enqueuing.
   Queued write jobs older than 10 minutes expire without execution.
   Revoked, malformed, and expired write jobs are rejected and audited in the
