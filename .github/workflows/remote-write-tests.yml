@@ -1,0 +1,24 @@
+name: Remote write primitive tests
+on:
+  pull_request:
+    paths:
+      - 'bin/remote-workspace-write-text.php'
+      - 'tests/integration/remote-write-text-test.php'
+      - '.github/workflows/remote-write-tests.yml'
+  push:
+    branches:
+      - feat/remote-write-policy-v1
+jobs:
+  remote-write:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: PHP syntax
+        run: |
+          php -l bin/remote-workspace-write-text.php
+          php -l tests/integration/remote-write-text-test.php
+      - name: Security integration tests
+        run: php tests/integration/remote-write-text-test.php
