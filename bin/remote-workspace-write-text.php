@@ -89,6 +89,8 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         }
         $targetStat = @stat($target);
         if (!is_array($targetStat) || $targetStat['uid'] !== $uid
+            // Writable by another account would break the SHA compare-and-swap guarantee.
+            || ($targetStat['mode'] & 0022) !== 0
             || ($targetStat['mode'] & 0111) !== 0) {
             return ['ok' => false, 'error' => 'untrusted_target'];
         }
