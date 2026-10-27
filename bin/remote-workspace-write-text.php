@@ -98,8 +98,17 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
             return ['ok' => false, 'error' => 'target_too_large'];
         }
         $current = @file_get_contents($target, false, null, 0, 65537);
+        // A changed file can grow after the initial stat; never authorize a
+        // replacement based on a truncated read. A text extension alone does
+        // not mean that the existing file contains UTF-8 text.
+        if (is_string($current) && strlen($current) > 65536) {
+            return ['ok' => false, 'error' => 'target_too_large'];
+        }
         if (!is_string($current) || !hash_equals($expected, hash('sha256', $current))) {
             return ['ok' => false, 'error' => 'sha256_conflict'];
+        }
+        if (str_contains($current, chr(0)) || preg_match('//u', $current) !== 1) {
+            return ['ok' => false, 'error' => 'target_not_utf8_text'];
         }
         if (realpath($parent) !== $realParent || is_link($target)) {
             return ['ok' => false, 'error' => 'path_changed'];
