@@ -54,12 +54,16 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments): array
     }
     $tmp = null;
     try {
-        if (is_link($target) || !is_file($target) || !is_readable($target)) {
+        if (is_link($target) || !is_file($target) || !is_readable($target) || !is_writable($target)) {
             return ['ok' => false, 'error' => 'target_not_regular_file'];
         }
         $current = @file_get_contents($target);
         if (!is_string($current) || !hash_equals($expected, hash('sha256', $current))) {
             return ['ok' => false, 'error' => 'sha256_conflict'];
+        }
+        // Recheck canonical parent after taking the lock to reduce path substitution risk.
+        if (realpath($parent) !== $realParent || is_link($target)) {
+            return ['ok' => false, 'error' => 'path_changed'];
         }
         $tmp = @tempnam($realParent, '.devmcp-');
         if ($tmp === false) {
