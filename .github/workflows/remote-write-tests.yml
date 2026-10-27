@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'bin/remote-*.php'
+      - 'bin/devmcp-remote-write-retention'
       - 'bin/distributed-agent.php'
       - 'src/Mcp/RemoteTools.php'
       - 'public/agent-job-poll.php'
@@ -26,6 +27,7 @@ jobs:
           extensions: pdo_sqlite
       - name: PHP syntax
         run: |
+          php -l bin/devmcp-remote-write-retention
           for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
             php -l "$file"
           done
