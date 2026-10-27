@@ -99,7 +99,10 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
                 continue;
             }
             foreach ($items as $item) {
-                if (in_array($item, ['.', '..', '.git'], true)) {
+                if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
+                    || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
+                    || str_contains(strtolower($item), 'credential')
+                    || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
                     continue;
                 }
                 $file = $directory . '/' . $item;
