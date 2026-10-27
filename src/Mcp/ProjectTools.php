@@ -156,6 +156,13 @@ final class ProjectTools
         int $stderr_offset = 0,
         ?int $length = null,
     ): array {
+        if ($this->remoteTools !== null && $this->remoteTools->isRemoteJob($job_id)) {
+            if ($stdout_offset !== 0 || $stderr_offset !== 0 || ($length !== null && $length < 1)) {
+                throw new InvalidArgumentException('Remote output does not support offsets or custom chunk sizes');
+            }
+            $job = $this->remoteTools->status($job_id);
+            return [...$job, 'stdout' => ['data' => '', 'next_offset' => 0, 'eof' => true], 'stderr' => ['data' => '', 'next_offset' => 0, 'eof' => true]];
+        }
         return $this->jobs->output(
             $job_id,
             $stdout_offset,
