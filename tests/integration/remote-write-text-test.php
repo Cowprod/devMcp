@@ -4,11 +4,13 @@ require_once dirname(__DIR__, 2) . '/bin/remote-workspace-write-text.php';
 
 $root = sys_get_temp_dir() . '/devmcp-write-test-' . bin2hex(random_bytes(8));
 mkdir($root);
+$state = $root . '-state';
+mkdir($state, 0700);
 mkdir($root . '/docs');
 file_put_contents($root . '/docs/test.md', "before\n");
 $sha = hash('sha256', "before\n");
 $call = static fn(string $path, string $expected, string $content): array =>
-    remoteWorkspaceWriteText($root, ['path' => $path, 'expected_sha256' => $expected, 'content' => $content]);
+    remoteWorkspaceWriteText($root, ['path' => $path, 'expected_sha256' => $expected, 'content' => $content], $state);
 $checks = [];
 $checks['valid_replace'] = ($call('docs/test.md', $sha, "after\n")['ok'] ?? false) === true;
 $checks['content_changed'] = file_get_contents($root . '/docs/test.md') === "after\n";
@@ -21,7 +23,8 @@ symlink($root . '/docs/test.md', $root . '/docs/link.md');
 $checks['symlink_rejected'] = ($call('docs/link.md', hash('sha256', "after\n"), 'x')['ok'] ?? false) === false;
 unlink($root . '/docs/link.md');
 unlink($root . '/docs/test.md');
-@unlink($root . '/.devmcp-write.lock');
+@unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
+rmdir($state);
 rmdir($root . '/docs');
 rmdir($root);
 foreach ($checks as $name => $pass) {
