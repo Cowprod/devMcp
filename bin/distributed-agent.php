@@ -141,7 +141,8 @@ foreach ($poll['jobs'] as $job) {
     $policyStat = $isWrite ? @stat($policyPath) : null;
     $policyTrusted = !$isWrite || (is_array($policyStat)
         && $policyStat['uid'] === 0 && ($policyStat['mode'] & 0022) === 0);
-    $result = remoteAuthorizedJobDispatch($policy, $job, $policyTrusted);
+    $result = remoteAuthorizedJobDispatch($policy, $job, $policyTrusted,
+        is_string($config['state_dir'] ?? null) ? $config['state_dir'] : '');
     $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
         'result' => $result], JSON_THROW_ON_ERROR);
     if (strlen($payload) > 69000) {
