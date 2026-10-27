@@ -76,7 +76,7 @@ final class RemoteTools
     {
         $this->describe($project);
         return ['project' => $project, 'actions' => array_map(
-            static fn(string $name): array => ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote', 'sync_allowed' => false, 'parameters' => $name === 'git.head' ? [] : [['id' => 'path', 'type' => 'relative_path', 'required' => false]]],
+            static fn(string $name): array => ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote', 'sync_allowed' => false, 'parameters' => $name === 'git.head' ? [] : ($name === 'workspace.find' ? [['id' => 'path', 'type' => 'relative_path', 'required' => false], ['id' => 'filter', 'type' => 'enum', 'required' => false, 'values' => ['all', 'php', 'js', 'json', 'md']]] : [['id' => 'path', 'type' => 'relative_path', 'required' => false]])],
             self::ACTIONS
         )];
     }
