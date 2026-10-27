@@ -23,6 +23,12 @@ explicitly gated `workspace.write_text` action.
   file **and every ancestor directory before requiring it**, including for
   read-only actions. A legacy installation with an untrusted policy file
   will fail closed until ownership and permissions are corrected.
+  The agent bootstrap `/etc/devmcp/agent.php` is also executable PHP and
+  receives the same ownership, ancestor and symlink validation **before**
+  it is loaded. The stock installer creates it as `root:devmcp-agent 0640`;
+  upgrading a legacy installation with unsafe permissions will now fail
+  closed before any network contact. Check its ownership and ancestors as
+  part of agent upgrade qualification.
   The private lock state directory and writable workspace paths must be
   agent-owned and non-group/world-writable. Symlinks, traversal, executable
   targets and protected paths are forbidden.
