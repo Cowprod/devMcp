@@ -92,6 +92,23 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         }
     }
 
+    /** The rejection audit is atomic and must never disclose submitted file content. */
+    private function assertClaimRejectionAudit(string $id, string $outcome, string $reason): void
+    {
+        $query = $this->db->prepare(
+            "SELECT outcome, details_json FROM dm_audit_event "
+            . "WHERE object_type='remote-job' AND object_id=? AND event_type='remote.write.rejected'"
+        );
+        $query->execute([$id]);
+        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
+        self::assertCount(1, $rows);
+        self::assertSame($outcome, $rows[0]['outcome']);
+        $details = json_decode($rows[0]['details_json'], true, 8, JSON_THROW_ON_ERROR);
+        self::assertSame($this->deployment, $details['deployment_id']);
+        self::assertSame($reason, $details['reason']);
+        self::assertStringNotContainsString('after', $rows[0]['details_json']);
+    }
+
     private function enqueueWrite(): string
     {
         return \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment, 'workspace.write_text', $this->arguments, true);
@@ -141,6 +158,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+        $this->assertClaimRejectionAudit($id, 'denied', 'server_write_not_approved');
     }
 
     public function testStaleWriteExpiresWithoutExecution(): void
@@ -152,6 +170,7 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertSame('expired', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
         self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+        $this->assertClaimRejectionAudit($id, 'expired', 'write_job_expired');
     }
 
     public function testLocalRevocationMakesClaimedWriteFail(): void
