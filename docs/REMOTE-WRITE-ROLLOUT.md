@@ -65,7 +65,11 @@ DEVMCP_DISTRIBUTED_CONFIG=/etc/devmcp/mcp-distributed.php php /opt/devmcp-admin/
 ```
 
 This is deliberately **not installed as a timer or enabled by merging the
-PR**. A dedicated scheduler, account/permissions verification, and a real
+PR**. Before reading the executable PHP configuration, the CLI now enforces
+root ownership, non-group/world-writable mode and non-writable, symlink-free
+ancestor directories (the same pre-require trust rule as the agent). An
+untrusted configuration fails closed, even if an environment override points
+to it. A dedicated scheduler, account/permissions verification, and a real
 sandbox run remain rollout tasks. `prepare-remote-write-pilot.sh` grants
 the runtime identity the additional `UPDATE (arguments_json)` permission
 needed for expiry and acknowledgements; the MySQL CI suite now executes
