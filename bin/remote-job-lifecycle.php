@@ -96,16 +96,25 @@ function remoteClaimApprovedJob(PDO $db, string $machineId, array $writePolicy):
  * authenticated but must not be able to retain plaintext from a write job
  * indefinitely in result_json after arguments_json has been scrubbed.
  *
- * Unknown fields (including content) are always dropped. A malformed result
- * cannot be reported as verified success.
+ * Unknown fields (including content) are always dropped. Successful metadata
+ * must match the queued payload's SHA-256 and byte count, not just its shape.
+ * If retention already scrubbed the payload, success is unverifiable; never
+ * claim it succeeded solely on the agent's assertion.
  */
-function remoteNormalizeWriteResult(array $result): array
+function remoteNormalizeWriteResult(array $result, ?string $requestedContent = null): array
 {
     if (($result['ok'] ?? null) === true) {
         if (is_string($result['sha256'] ?? null)
             && preg_match('/^[a-f0-9]{64}$/D', $result['sha256']) === 1
             && is_int($result['size'] ?? null)
             && $result['size'] >= 0 && $result['size'] <= 16384) {
+            if ($requestedContent === null) {
+                return ['ok' => false, 'error' => 'write_result_unverifiable'];
+            }
+            if (!hash_equals(hash('sha256', $requestedContent), $result['sha256'])
+                || strlen($requestedContent) !== $result['size']) {
+                return ['ok' => false, 'error' => 'write_result_mismatch'];
+            }
             return ['ok' => true, 'sha256' => $result['sha256'], 'size' => $result['size']];
         }
     } elseif (($result['ok'] ?? null) === false) {
@@ -129,14 +138,17 @@ function remoteCompleteClaimedJob(PDO $db, string $machineId, string $jobId, arr
     }
     $db->beginTransaction();
     try {
-        $lookup = $db->prepare("SELECT action_name, deployment_id FROM dm_remote_readonly_job WHERE id=? AND machine_id=? AND state='claimed' FOR UPDATE");
+        $lookup = $db->prepare("SELECT action_name, deployment_id, arguments_json FROM dm_remote_readonly_job WHERE id=? AND machine_id=? AND state='claimed' FOR UPDATE");
         $lookup->execute([$jobId, $machineId]);
         $claimed = $lookup->fetch(PDO::FETCH_ASSOC);
         if (!is_array($claimed)) {
             throw new RuntimeException('job_not_claimed');
         }
         if ($claimed['action_name'] === 'workspace.write_text') {
-            $result = remoteNormalizeWriteResult($result);
+            $originalArguments = json_decode((string) $claimed['arguments_json'], true, 8);
+            $requestedContent = is_array($originalArguments) && is_string($originalArguments['content'] ?? null)
+                ? $originalArguments['content'] : null;
+            $result = remoteNormalizeWriteResult($result, $requestedContent);
         }
         $encoded = json_encode($result, JSON_THROW_ON_ERROR);
         if (strlen($encoded) > 65536) {
