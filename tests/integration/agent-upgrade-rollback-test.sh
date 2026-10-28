@@ -73,6 +73,22 @@ export PATH="$scratch/mocks:$PATH"
 sha=2b2736634d6a90524a4cf71b7589e6e90bb7920a
 touch "$scratch/timer-active"
 
+# The installer must reject executable PHP config from untrusted paths
+# before downloading code or touching the polling timer.
+chmod 0666 /etc/devmcp/agent.php
+if bash "$upgrade_script" "$sha" > "$scratch/writable-config.log" 2>&1; then echo 'FAIL: writable agent config accepted'; exit 1; fi
+grep -q 'Writable agent configuration path' "$scratch/writable-config.log"
+chmod 0644 /etc/devmcp/agent.php
+mv /etc/devmcp/agent.php /etc/devmcp/agent.real.php
+ln -s /etc/devmcp/agent.real.php /etc/devmcp/agent.php
+if bash "$upgrade_script" "$sha" > "$scratch/symlink-config.log" 2>&1; then echo 'FAIL: symlink agent config accepted'; exit 1; fi
+grep -q 'Untrusted agent configuration' "$scratch/symlink-config.log"
+rm /etc/devmcp/agent.php
+mv /etc/devmcp/agent.real.php /etc/devmcp/agent.php
+grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
+test -f "$scratch/timer-active"
+echo 'PASS: untrusted executable agent config rejected without mutation'
+
 # Never create, follow or truncate an untrusted lock; keep the original
 # binaries and active polling timer untouched on every denial.
 printf 'sentinel\n' > "$scratch/sentinel"
