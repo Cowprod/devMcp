@@ -20,6 +20,19 @@ $checks['content_changed'] = file_get_contents($root . '/docs/test.md') === "aft
 clearstatcache(true, $root . '/docs/test.md');
 $checks['group_preserved'] = filegroup($root . '/docs/test.md') === $originalGroup;
 $checks['mode_preserved'] = (fileperms($root . '/docs/test.md') & 0777) === $originalMode;
+// Exercise descriptor-based hashing on an empty source and on the 64 KiB
+// accepted source boundary. Neither is a binary or truncated read.
+file_put_contents($root . '/docs/empty.md', '');
+$emptyResult = $call('docs/empty.md', hash('sha256', ''), "populated\n");
+$checks['empty_source_descriptor_replace'] = ($emptyResult['ok'] ?? false) === true
+    && file_get_contents($root . '/docs/empty.md') === "populated\n";
+unlink($root . '/docs/empty.md');
+$boundarySource = str_repeat('x', 65536);
+file_put_contents($root . '/docs/boundary.md', $boundarySource);
+$boundaryResult = $call('docs/boundary.md', hash('sha256', $boundarySource), "bounded\n");
+$checks['max_size_source_descriptor_replace'] = ($boundaryResult['ok'] ?? false) === true
+    && file_get_contents($root . '/docs/boundary.md') === "bounded\n";
+unlink($root . '/docs/boundary.md');
 $lockPath = $state . '/remote-write-' . hash('sha256', $root) . '.lock';
 chmod($state, 0755);
 $checks['readable_state_directory_rejected'] =
