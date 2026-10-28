@@ -174,12 +174,22 @@ try {
         && count($page200['entries'] ?? []) === 200
         && ($page200['truncated'] ?? null) === false
         && !in_array('.env', array_column($page200['entries'] ?? [], 'name'), true));
+    $find200 = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'paging', 'filter' => 'md']);
+    $check('find exactly 200 visible matches is not truncated',
+        ($find200['ok'] ?? false) === true
+        && count($find200['files'] ?? []) === 200
+        && ($find200['truncated'] ?? null) === false);
     file_put_contents($pagingDir . '/item-200.md', "ok\\n");
     $page201 = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'paging']);
     $check('list 201 visible entries is truncated at 200',
         ($page201['ok'] ?? false) === true
         && count($page201['entries'] ?? []) === 200
         && ($page201['truncated'] ?? null) === true);
+    $find201 = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'paging', 'filter' => 'md']);
+    $check('find 201 visible matches is truncated at 200',
+        ($find201['ok'] ?? false) === true
+        && count($find201['files'] ?? []) === 200
+        && ($find201['truncated'] ?? null) === true);
     foreach (glob($pagingDir . '/*') ?: [] as $fixture) {
         unlink($fixture);
     }
