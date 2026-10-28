@@ -14,6 +14,7 @@ on:
       - 'tests/integration/remote-write-*.php'
       - 'tests/integration/remote-mcp-readonly-config-test.php'
       - 'tests/integration/remote-distributed-config-trust-test.php'
+      - 'tests/integration/agent-upgrade-rollback-test.sh'
       - '.github/workflows/remote-write-tests.yml'
   push:
     branches:
@@ -38,6 +39,8 @@ jobs:
           bash -n deploy/distributed/prepare-remote-write-pilot.sh
           bash -n deploy/distributed/upgrade-agent-readonly.sh
           bash -n deploy/distributed/enable-remote-mcp.sh
+      - name: Agent upgrade rollback on disposable CI host
+        run: sudo bash tests/integration/agent-upgrade-rollback-test.sh
       - name: Read-only MCP config export and deny tests
         run: |
           set -euo pipefail
