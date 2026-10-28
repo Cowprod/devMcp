@@ -13,6 +13,7 @@ on:
       - 'deploy/distributed/enable-remote-mcp.sh'
       - 'tests/integration/remote-write-*.php'
       - 'tests/integration/remote-mcp-readonly-config-test.php'
+      - 'tests/integration/remote-distributed-config-trust-test.php'
       - '.github/workflows/remote-write-tests.yml'
   push:
     branches:
@@ -29,7 +30,7 @@ jobs:
       - name: PHP syntax
         run: |
           php -l bin/devmcp-remote-write-retention
-          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/integration/remote-mcp-readonly-config-test.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
+          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/integration/remote-mcp-readonly-config-test.php tests/integration/remote-distributed-config-trust-test.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
             php -l "$file"
           done
       - name: Deployment script syntax
@@ -41,6 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           php tests/integration/remote-mcp-readonly-config-test.php
+          php tests/integration/remote-distributed-config-trust-test.php
           fixture=/etc/devmcp-ci-readonly-config
           generated="$(mktemp)"
           untrusted="$(mktemp /tmp/devmcp-ci-untrusted-XXXXXX.php)"
