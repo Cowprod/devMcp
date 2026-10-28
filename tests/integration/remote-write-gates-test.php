@@ -167,6 +167,26 @@ try {
     $check('read-only safe path remains accessible',
         (remoteWorkspaceAction($root, 'workspace.read',
             ['path' => 'docs/smoke.md'])['content'] ?? null) === "before\n");
+    // A benign-looking hardlink can alias a secret outside the workspace.
+    // realpath() alone cannot distinguish a hardlink from a normal file.
+    $outsideFile = $root . '-outside.txt';
+    $insideAlias = $root . '/docs/visible.md';
+    file_put_contents($outsideFile, "OUTSIDE_HARDLINK_SENTINEL\n");
+    if (!link($outsideFile, $insideAlias)) {
+        throw new RuntimeException('Cannot create disposable hardlink fixture');
+    }
+    try {
+        $hardlinkResult = remoteWorkspaceAction($root, 'workspace.read', ['path' => 'docs/visible.md']);
+        $check('read-only hardlink outside workspace refuses content',
+            ($hardlinkResult['error'] ?? null) === 'hardlinked_file_forbidden'
+            && !array_key_exists('content', $hardlinkResult));
+        $check('read-only ordinary file still available beside hardlink',
+            (remoteWorkspaceAction($root, 'workspace.read', ['path' => 'docs/smoke.md'])['content'] ?? null)
+                === "before\n");
+    } finally {
+        unlink($insideAlias);
+        unlink($outsideFile);
+    }
 
     if (!extension_loaded('pdo_sqlite')) {
         throw new RuntimeException('pdo_sqlite required for queue smoke');
