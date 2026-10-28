@@ -39,8 +39,10 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         return ['ok' => false, 'error' => 'private_lock_directory_required'];
     }
     $lockStat = @stat($lockRoot);
+    // Prevent other local accounts from opening/locking the agent's lock file.
+    // The installer provisions state_dir as 0700; fail closed for legacy 0755.
     if (!is_array($lockStat) || $lockStat['uid'] !== $uid
-        || ($lockStat['mode'] & 0022) !== 0) {
+        || ($lockStat['mode'] & 0077) !== 0) {
         return ['ok' => false, 'error' => 'untrusted_lock_directory'];
     }
     $segments = explode('/', $path);
@@ -78,9 +80,19 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
     if ($lock === false) {
         return ['ok' => false, 'error' => 'lock_failed'];
     }
-    if (!flock($lock, LOCK_EX)) {
+    $lockFileStat = @fstat($lock);
+    if (!is_array($lockFileStat)
+        || ($lockFileStat['mode'] & 0170000) !== 0100000
+        || $lockFileStat['uid'] !== $uid
+        || ($lockFileStat['mode'] & 0022) !== 0
+        || $lockFileStat['nlink'] !== 1) {
         fclose($lock);
-        return ['ok' => false, 'error' => 'lock_failed'];
+        return ['ok' => false, 'error' => 'untrusted_lock_file'];
+    }
+    // Never block an agent poll indefinitely behind another writer.
+    if (!flock($lock, LOCK_EX | LOCK_NB)) {
+        fclose($lock);
+        return ['ok' => false, 'error' => 'lock_busy'];
     }
     $tmp = null;
     try {
