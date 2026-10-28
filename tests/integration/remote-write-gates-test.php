@@ -68,6 +68,27 @@ try {
     $check('mixed safe and protected server allowlist fails closed',
         !remoteServerWriteEnabledForDeployment($mixedServer, $deployment));
     $check('server rejects other deployment', !remoteServerWriteApproved($server, str_repeat('c', 32), 'docs/smoke.md'));
+    // v1 must never write to two deployments, even when both are separately
+    // allowlisted. Enabling another pilot revokes the first at every gate.
+    $secondDeployment = str_repeat('d', 32);
+    $twoEnabledDeployments = $server;
+    $twoEnabledDeployments['deployments'][$secondDeployment] = [
+        'enabled' => true, 'paths' => ['docs/smoke.md'],
+    ];
+    $check('pilot refuses two enabled deployments',
+        !remoteServerWriteEnabledForDeployment($twoEnabledDeployments, $deployment)
+        && !remoteServerWriteApproved($twoEnabledDeployments, $deployment, 'docs/smoke.md')
+        && !remoteServerWriteApproved($twoEnabledDeployments, $secondDeployment, 'docs/smoke.md'));
+    $stagedSecondDeployment = $twoEnabledDeployments;
+    $stagedSecondDeployment['deployments'][$secondDeployment]['enabled'] = false;
+    $check('disabled staged deployment preserves sole pilot',
+        remoteServerWriteApproved($stagedSecondDeployment, $deployment, 'docs/smoke.md'));
+    $invalidEnabledDeployment = $server;
+    $invalidEnabledDeployment['deployments']['not-a-deployment-id'] = [
+        'enabled' => true, 'paths' => ['docs/smoke.md'],
+    ];
+    $check('malformed extra enabled deployment fails closed',
+        !remoteServerWriteApproved($invalidEnabledDeployment, $deployment, 'docs/smoke.md'));
     $check('server requires global switch', !remoteServerWriteApproved(['deployments' => $server['deployments']], $deployment, 'docs/smoke.md'));
     $check('server requires deployment switch', !remoteServerWriteApproved(['enabled' => true,
         'deployments' => [$deployment => ['paths' => ['docs/smoke.md']]]], $deployment, 'docs/smoke.md'));
