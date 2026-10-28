@@ -134,6 +134,35 @@ needed for expiry and acknowledgements; the MySQL CI suite now executes
 queue operations through an independently restricted user with these
 column-level grants.
 
+## Agent upgrade staging — not executed on real machines
+
+The existing enrolled agent may predate `remoteLocalPolicyFileTrusted()`.
+Do not call this function from an operator-side PHP migration script until
+its presence on the target has been verified: legacy installations will
+raise an undefined-function fatal error before changing their local policy.
+This error alone is not evidence of a broken agent or an authorized write.
+
+`deploy/distributed/upgrade-agent-readonly.sh` accepts one immutable 40-hex
+commit SHA. It downloads and syntax-checks **all seven agent files**, then
+loads the linked helper bundle to verify that the required policy, read,
+write and dispatcher functions exist **before modifying the installation**.
+It also validates root ownership/non-writable directories and refuses
+symlinked pre-existing binaries. For the short replacement window, it
+pauses an active polling timer and refuses to interrupt a running one-shot
+agent service. If installation or its service start fails, the script
+restores previous binaries, removes newly introduced files and resumes the
+timer. After a successful service start, it resumes the timer and leaves
+an operator-visible, private root-owned `ROLLBACK_SNAPSHOT` containing
+previous binaries plus `.originally-absent` for newly introduced paths.
+
+These safeguards narrow failed upgrades; replacing multiple files is
+**not** an atomic transaction against power loss or `SIGKILL`. Preserve
+the snapshot and verify the installed agent and local policy after any
+interruption. This script never changes a local policy or server write
+allowlist. Disposable CI exercises missing helpers, active service denial,
+service-start failure rollback, timer restoration and successful snapshots.
+**No physical agent upgrade is implied by passing CI.**
+
 ## Approval — both sides are mandatory
 
 The v1 pilot intentionally permits **at most one globally write-enabled
