@@ -13,7 +13,7 @@ function remoteWriteSafeRelativePath(string $path): bool
         return false;
     }
     foreach (explode('/', strtolower($path)) as $segment) {
-        foreach (['secret', 'credential', 'private', 'token', 'password', 'passwd', 'api_key', 'apikey'] as $marker) {
+        foreach (['secret', 'credential', 'private', 'token', 'password', 'passwd', 'api_key', 'apikey', 'id_rsa', 'id_ed25519'] as $marker) {
             if (str_contains($segment, $marker)) {
                 return false;
             }
