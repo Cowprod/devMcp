@@ -34,6 +34,18 @@ link($lockPath, $state . '/other.lock');
 $checks['hardlinked_lock_file_rejected'] =
     ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'untrusted_lock_file';
 unlink($state . '/other.lock');
+// An existing file with another hardlink must not be replaced under only
+// one of its names; both aliases must remain intact on rejection.
+$alias = $root . '/docs/alias.md';
+if (!link($root . '/docs/test.md', $alias)) {
+    throw new RuntimeException('Cannot prepare hardlink target test');
+}
+$checks['hardlinked_target_rejected'] =
+    ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'untrusted_target';
+$checks['hardlinked_target_preserved'] =
+    file_get_contents($root . '/docs/test.md') === "after\n"
+    && file_get_contents($alias) === "after\n";
+unlink($alias);
 $heldLock = fopen($lockPath, 'c');
 if ($heldLock === false || !flock($heldLock, LOCK_EX | LOCK_NB)) {
     throw new RuntimeException('Cannot prepare lock contention test');
