@@ -15,6 +15,12 @@ GRANT SELECT (id, deployment_id, action_name, state, created_at, claimed_at, fin
 SOURCE=/etc/devmcp-admin/distributed.php
 DEST=/etc/devmcp/mcp-distributed.php
 [[ -f "$SOURCE" ]] || { echo "Missing distributed admin config" >&2; exit 1; }
+# Fail closed: never propagate a write opt-in through this read-only setup script.
+# A write pilot requires its own explicitly reviewed activation procedure.
+if ! php -r '$c = require $argv[1]; if (!is_array($c)) exit(2); $w = $c["remote_write"] ?? null; if ($w !== null && (!is_array($w) || !empty($w["enabled"]))) exit(3);' "$SOURCE"; then
+  echo "Refusing remote MCP setup: source remote_write is enabled or invalid" >&2
+  exit 1
+fi
 getent group devmcp >/dev/null || { echo "Missing devmcp group" >&2; exit 1; }
 install -d -m 750 -o root -g devmcp /etc/devmcp
 TMP=$(mktemp /etc/devmcp/.mcp-distributed.XXXXXX)
@@ -24,7 +30,7 @@ $c = require $argv[1];
 foreach (["dsn", "writer_username", "writer_password"] as $key) {
     if (!isset($c[$key]) || !is_string($c[$key])) { exit(2); }
 }
-echo "<?php", PHP_EOL, "return ", var_export(array_intersect_key($c, array_flip(["dsn", "writer_username", "writer_password", "remote_write"])), true), ";", PHP_EOL;
+echo "<?php", PHP_EOL, "return ", var_export(array_intersect_key($c, array_flip(["dsn", "writer_username", "writer_password"])), true), ";", PHP_EOL;
 ' "$SOURCE" > "$TMP"
 php -l "$TMP"
 php -r '$c = require $argv[1]; if (!is_array($c) || empty($c["dsn"])) exit(2);' "$TMP" >/dev/null
