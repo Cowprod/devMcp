@@ -3,7 +3,15 @@
 # Stage and check the complete bundle, then restore prior binaries on failure.
 set -euo pipefail
 [[ "$(id -u)" -eq 0 && "$#" -eq 1 && "$1" =~ ^[a-f0-9]{40}$ ]] || { echo "Usage: sudo bash upgrade-agent-readonly.sh COMMIT_SHA" >&2; exit 2; }
-[[ -f /etc/devmcp/agent.php ]] || { echo "Agent not enrolled" >&2; exit 1; }
+# The service executes this PHP configuration as root-owned code. Reject
+# symlinks and writable ancestors before touching binaries or systemd.
+config=/etc/devmcp/agent.php
+[[ -f "$config" && ! -L "$config" ]] || { echo "Untrusted agent configuration" >&2; exit 1; }
+for entry in "$config" /etc/devmcp /etc /; do
+  [[ ! -L "$entry" && "$(stat -c %u "$entry")" == 0 ]] || { echo "Untrusted agent configuration path: $entry" >&2; exit 1; }
+  mode="$(stat -c %a "$entry")"
+  (( (8#$mode & 8#022) == 0 )) || { echo "Writable agent configuration path: $entry" >&2; exit 1; }
+done
 agent_root=/opt/devmcp-agent
 agent_dir=$agent_root/bin
 for directory in /opt "$agent_root" "$agent_dir"; do
