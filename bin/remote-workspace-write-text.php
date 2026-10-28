@@ -115,10 +115,31 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
             || ($targetStat['nlink'] ?? 0) !== 1) {
             return ['ok' => false, 'error' => 'untrusted_target'];
         }
-        if (filesize($target) > 65536) {
-            return ['ok' => false, 'error' => 'target_too_large'];
+        // Read from the same file descriptor whose inode and link count are
+        // checked. A pathname reopened by file_get_contents() could have been
+        // swapped for a symlink/hardlink after the original stat().
+        $source = @fopen($target, 'rb');
+        if ($source === false) {
+            return ['ok' => false, 'error' => 'target_not_regular_file'];
         }
-        $current = @file_get_contents($target, false, null, 0, 65537);
+        try {
+            $openedStat = @fstat($source);
+            if (!is_array($openedStat) || ($openedStat['mode'] & 0170000) !== 0100000
+                || ($openedStat['nlink'] ?? 0) !== 1
+                || $openedStat['dev'] !== $targetStat['dev']
+                || $openedStat['ino'] !== $targetStat['ino']
+                || $openedStat['uid'] !== $targetStat['uid']
+                || $openedStat['gid'] !== $targetStat['gid']
+                || ($openedStat['mode'] & 07777) !== ($targetStat['mode'] & 07777)) {
+                return ['ok' => false, 'error' => 'path_changed'];
+            }
+            if ($openedStat['size'] > 65536) {
+                return ['ok' => false, 'error' => 'target_too_large'];
+            }
+            $current = @stream_get_contents($source, 65537);
+        } finally {
+            fclose($source);
+        }
         // A changed file can grow after the initial stat; never authorize a
         // replacement based on a truncated read. A text extension alone does
         // not mean that the existing file contains UTF-8 text.
@@ -149,8 +170,25 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         // access for its intended group after the atomic rename.
         if (@file_put_contents($tmp, $content, LOCK_EX) !== strlen($content)
             || !@chgrp($tmp, (int) $targetStat['gid'])
-            || !@chmod($tmp, $targetStat['mode'] & 0777)
-            || !@rename($tmp, $target)) {
+            || !@chmod($tmp, $targetStat['mode'] & 0777)) {
+            return ['ok' => false, 'error' => 'atomic_replace_failed'];
+        }
+        // Verify the pathname still names the inode that passed the CAS.
+        // This narrows the window for an external writer replacing the file.
+        // It is not a substitute for descriptor-relative openat/renameat.
+        clearstatcache(true, $target);
+        $beforeReplace = @lstat($target);
+        if (!is_array($beforeReplace) || is_link($target)
+            || $beforeReplace['dev'] !== $targetStat['dev']
+            || $beforeReplace['ino'] !== $targetStat['ino']
+            || ($beforeReplace['nlink'] ?? 0) !== 1
+            || $beforeReplace['uid'] !== $targetStat['uid']
+            || $beforeReplace['gid'] !== $targetStat['gid']
+            || ($beforeReplace['mode'] & 07777) !== ($targetStat['mode'] & 07777)
+            || realpath($parent) !== $realParent) {
+            return ['ok' => false, 'error' => 'path_changed'];
+        }
+        if (!@rename($tmp, $target)) {
             return ['ok' => false, 'error' => 'atomic_replace_failed'];
         }
         $tmp = null;
