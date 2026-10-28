@@ -29,15 +29,22 @@ explicitly gated `workspace.write_text` action.
   This is a filename-based control, not secret
   content detection: sensitive files must never reside under innocuous names
   in a remotely inspectable workspace.
-  In addition, `workspace.read` rejects multiply-linked regular files
-  (`nlink != 1`). A hardlink with a benign filename inside the workspace
-  could otherwise expose the contents of an agent-readable file outside it:
-  symlink and `realpath()` checks alone do not establish this boundary.
-  The disposable CI gate creates an external-file hardlink to verify refusal.
+  In addition, `workspace.read` and `workspace.stat` reject
+  multiply-linked regular files (`nlink != 1`). A hardlink with a benign
+  filename inside the workspace could otherwise expose the content **or size**
+  of an agent-readable file outside it: symlink and `realpath()` checks alone
+  do not establish this boundary. The disposable CI gate creates an
+  external-file hardlink and verifies that neither read content nor stat
+  metadata is disclosed.
 - Arguments: `path` (relative), `content` (valid UTF-8, maximum 16 KiB),
   `expected_sha256` (current file content, 64 lowercase hex digits).
 - Compare-and-swap with SHA-256, then replace through a temporary file and
   rename under a per-workspace `flock`. Missing files and SHA mismatches fail.
+  The source is read through a file descriptor verified by `fstat()` against
+  its initial inode, owner, group, mode and link count; the pathname is checked
+  again immediately before the rename. This narrows replacement races but
+  does **not** make concurrent writes by uncooperative local processes atomic.
+  Disposable tests cover empty and maximum-size (64 KiB) existing text files.
 - The agent validates the root-owned, non-group/world-writable PHP policy
   file **and every ancestor directory before requiring it**, including for
   read-only actions. A legacy installation with an untrusted policy file
