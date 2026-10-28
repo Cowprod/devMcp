@@ -16,18 +16,20 @@ tmp="$(mktemp -d)"
 files=(distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php remote-job-dispatch.php remote-workspace-write-text.php)
 installed=()
 timer_was_active=0
+backup_dir=
 cleanup() {
   local exit_code=$?
   if (( exit_code != 0 && ${#installed[@]} > 0 )); then
     echo "ERROR: agent upgrade failed; restoring previous binaries" >&2
     local file
     for file in "${installed[@]}"; do
-      if [[ -f "$tmp/backup/$file" ]]; then
-        cp -p "$tmp/backup/$file" "$agent_dir/$file" || echo "ERROR: manual restore required: $file" >&2
+      if [[ -f "$backup_dir/original/$file" ]]; then
+        cp -p "$backup_dir/original/$file" "$agent_dir/$file" || echo "ERROR: manual restore required: $file" >&2
       else
         rm -f "$agent_dir/$file" || echo "ERROR: manual removal required: $file" >&2
       fi
     done
+    echo "RECOVERY_SNAPSHOT: $backup_dir/original" >&2
   fi
   if (( timer_was_active )); then
     systemctl start devmcp-agent.timer || echo "ERROR: manual timer restart required" >&2
@@ -70,12 +72,18 @@ mkdir -m 0700 "$tmp/backup"
 for file in "${files[@]}"; do
   dest="$agent_dir/$file"
   if [[ -e "$dest" || -L "$dest" ]]; then
-    [[ -f "$dest" && ! -L "$dest" && "$(stat -c %u "$dest")" == 0 ]] || { echo "Untrusted existing binary: $file" >&2; exit 1; }
+    [[ -f "$dest" && ! -L "$dest" && "$(stat -c %u "$dest")" == 0 && "$(stat -c %h "$dest")" == 1 ]] || { echo "Untrusted existing binary: $file" >&2; exit 1; }
+    mode="$(stat -c %a "$dest")"
+    (( (8#$mode & 8#022) == 0 )) || { echo "Writable existing binary: $file" >&2; exit 1; }
     cp -p "$dest" "$tmp/backup/$file"
   else
     printf '%s\n' "$file" >> "$tmp/backup/.originally-absent"
   fi
 done
+# Keep the snapshot outside temporary staging *before* replacing any file.
+# It remains available even if automatic rollback subsequently fails.
+backup_dir="$(mktemp -d "$agent_root/.upgrade-backup.XXXXXXXX")"
+mv "$tmp/backup" "$backup_dir/original"
 for file in "${files[@]}"; do
   installed+=("$file")
   install -m 0755 -o root -g root "$tmp/$file" "$agent_dir/$file"
@@ -86,7 +94,5 @@ if (( timer_was_active )); then
   timer_was_active=0
 fi
 # Preserve a private rollback snapshot after success; no policy file is copied.
-backup_dir="$(mktemp -d "$agent_root/.upgrade-backup.XXXXXXXX")"
-mv "$tmp/backup" "$backup_dir/original"
 printf 'PASS: agent bundle installed and service started; no write policy changed.\n'
 printf 'ROLLBACK_SNAPSHOT: %s/original\n' "$backup_dir"
