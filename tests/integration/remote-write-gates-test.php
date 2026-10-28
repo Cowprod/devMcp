@@ -8,7 +8,7 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 
 $checks = [];
 $additionalProtectedNames = ['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md',
-    '.env_backup', '.envrc', '.npmrc.bak', 'id_rsa.old', 'certificate.pem.bak'];
+    '.env_backup', '.envrc', '.npmrc.bak', 'id_rsa.old', 'id_rsa.md', 'id_ed25519_backup.txt', 'certificate.pem.bak'];
 $check = static function (string $name, bool $pass) use (&$checks): void {
     $checks[$name] = $pass;
     echo ($pass ? 'PASS' : 'FAIL') . ': ' . $name . PHP_EOL;
@@ -73,7 +73,8 @@ try {
     $check('job write denied by default', !remoteJobAllowed('workspace.write_text', $args));
     $check('job accepted with explicit capability', remoteJobAllowed('workspace.write_text', $args, true));
     foreach (['docs/secret-notes.md', 'docs/CREDENTIALS.txt', 'private/notes.md', 'docs/apiToken.md',
-        'docs/passwordVault.md', 'docs/passwd.md', 'docs/api_key.md', 'docs/apikey.md'] as $unsafePath) {
+        'docs/passwordVault.md', 'docs/passwd.md', 'docs/api_key.md', 'docs/apikey.md',
+        'docs/id_rsa.md', 'docs/id_ed25519_backup.txt'] as $unsafePath) {
         $check('job denies protected path ' . $unsafePath,
             !remoteJobAllowed('workspace.write_text', [...$args, 'path' => $unsafePath], true));
     }
