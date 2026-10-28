@@ -129,8 +129,8 @@ try {
     $check('untrusted policy file denied', !(remoteAuthorizedJobDispatch($local, $job, false)['ok'] ?? false));
     // Read-only inspection must not expose names that the write side treats
     // as sensitive. Test direct reads and both discovery APIs.
-    file_put_contents($root . '/docs/apiToken.md', "TOKEN_SENTINEL\\n");
-    file_put_contents($root . '/docs/privateNotes.md', "PRIVATE_SENTINEL\\n");
+    file_put_contents($root . '/docs/apiToken.md', "TOKEN_SENTINEL\n");
+    file_put_contents($root . '/docs/privateNotes.md', "PRIVATE_SENTINEL\n");
     $check('read-only token file blocked', (remoteWorkspaceAction($root, 'workspace.read',
         ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
     $check('read-only private file blocked', (remoteWorkspaceAction($root, 'workspace.read',
@@ -150,7 +150,7 @@ try {
         && in_array('docs/smoke.md', $found['files'] ?? [], true));
     $check('read-only safe path remains accessible',
         (remoteWorkspaceAction($root, 'workspace.read',
-            ['path' => 'docs/smoke.md'])['content'] ?? null) === "before\\n");
+            ['path' => 'docs/smoke.md'])['content'] ?? null) === "before\n");
 
     if (!extension_loaded('pdo_sqlite')) {
         throw new RuntimeException('pdo_sqlite required for queue smoke');
