@@ -152,6 +152,42 @@ try {
     $readJob = ['deployment_id' => $deployment, 'workspace_path' => $root, 'action' => 'workspace.read',
         'arguments' => ['path' => 'docs/smoke.md']];
     $check('read through dispatcher', (remoteAuthorizedJobDispatch($local, $readJob)['content'] ?? null) === "before\n");
+    // A symlinked ancestor of the pinned workspace was previously accepted:
+    // is_link($workspace) checks only the final component, while realpath()
+    // silently redirected reads into the canonical workspace. Fail closed
+    // even if a local policy was mistakenly pinned to that alias.
+    $ancestorLink = $root . '/parent-alias';
+    if (!symlink(dirname($root), $ancestorLink)) {
+        throw new RuntimeException('Cannot create disposable ancestor symlink');
+    }
+    try {
+        $aliasedWorkspace = $ancestorLink . '/' . basename($root);
+        $check('ancestor symlink fixture resolves with non-symlink final component',
+            realpath($aliasedWorkspace) === $root && !is_link($aliasedWorkspace));
+        foreach ([
+            'workspace.read' => ['path' => 'docs/smoke.md'],
+            'workspace.stat' => ['path' => 'docs/smoke.md'],
+            'workspace.list' => ['path' => 'docs'],
+            'workspace.find' => ['path' => 'docs', 'filter' => 'md'],
+            'git.head' => [],
+        ] as $inspectionAction => $inspectionArguments) {
+            $response = remoteWorkspaceAction($aliasedWorkspace, $inspectionAction, $inspectionArguments);
+            $check('noncanonical read workspace denied: ' . $inspectionAction,
+                ($response['error'] ?? null) === 'workspace_missing');
+        }
+        $aliasPolicy = $local;
+        $aliasPolicy['deployments'][$deployment]['workspace_path'] = $aliasedWorkspace;
+        $aliasJob = $readJob;
+        $aliasJob['workspace_path'] = $aliasedWorkspace;
+        $check('alias passes exact local string pin, but cannot bypass filesystem gate',
+            remoteLocalPolicyCheck($aliasPolicy, $aliasJob)
+            && (remoteAuthorizedJobDispatch($aliasPolicy, $aliasJob)['error'] ?? null) === 'workspace_missing');
+        $check('dotdot workspace alias rejected',
+            (remoteWorkspaceAction($root . '/docs/..', 'workspace.read',
+                ['path' => 'docs/smoke.md'])['error'] ?? null) === 'workspace_missing');
+    } finally {
+        unlink($ancestorLink);
+    }
     $check('untrusted policy file denied', !(remoteAuthorizedJobDispatch($local, $job, false)['ok'] ?? false));
     // Read-only inspection must not expose names that the write side treats
     // as sensitive. Test direct reads and both discovery APIs.
