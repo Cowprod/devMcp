@@ -158,6 +158,33 @@ try {
         && !in_array('apiToken.md', $listedNames, true)
         && !in_array('privateNotes.md', $listedNames, true)
         && in_array('smoke.md', $listedNames, true));
+    $check('read-only list does not reveal protected entries via truncated',
+        ($listing['truncated'] ?? null) === false);
+    // Pagination must count visible names only: exactly 200 ordinary files
+    // plus a hidden credential file is a complete listing, not a truncation.
+    $pagingDir = $root . '/paging';
+    mkdir($pagingDir, 0700);
+    for ($i = 0; $i < 200; ++$i) {
+        file_put_contents($pagingDir . '/item-' . str_pad((string) $i, 3, '0', STR_PAD_LEFT) . '.md', "ok\\n");
+    }
+    file_put_contents($pagingDir . '/.env', "HIDDEN_SENTINEL\\n");
+    $page200 = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'paging']);
+    $check('list exactly 200 visible and one protected is not truncated',
+        ($page200['ok'] ?? false) === true
+        && count($page200['entries'] ?? []) === 200
+        && ($page200['truncated'] ?? null) === false
+        && !in_array('.env', array_column($page200['entries'] ?? [], 'name'), true));
+    file_put_contents($pagingDir . '/item-200.md', "ok\\n");
+    $page201 = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'paging']);
+    $check('list 201 visible entries is truncated at 200',
+        ($page201['ok'] ?? false) === true
+        && count($page201['entries'] ?? []) === 200
+        && ($page201['truncated'] ?? null) === true);
+    foreach (glob($pagingDir . '/*') ?: [] as $fixture) {
+        unlink($fixture);
+    }
+    unlink($pagingDir . '/.env');
+    rmdir($pagingDir);
     $found = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'docs', 'filter' => 'md']);
     $check('read-only find hides password and API key names',
         array_intersect(array_map(static fn(string $name): string => 'docs/' . $name, $additionalProtectedNames),
