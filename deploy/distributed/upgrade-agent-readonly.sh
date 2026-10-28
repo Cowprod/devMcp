@@ -11,6 +11,18 @@ for directory in /opt "$agent_root" "$agent_dir"; do
   mode="$(stat -c %a "$directory")"
   (( (8#$mode & 8#022) == 0 )) || { echo "Group/world writable agent directory: $directory" >&2; exit 1; }
 done
+# Serialize independent operators' upgrades: overlapping installs and
+# rollbacks must never manipulate the same timer or binary set concurrently.
+# Keep FD 9 open until the EXIT trap completes.
+lock_file="$agent_root/.upgrade.lock"
+if [[ -e "$lock_file" || -L "$lock_file" ]]; then
+  [[ -f "$lock_file" && ! -L "$lock_file" && "$(stat -c %u "$lock_file")" == 0 && "$(stat -c %h "$lock_file")" == 1 ]] || { echo "Untrusted agent upgrade lock" >&2; exit 1; }
+  lock_mode="$(stat -c %a "$lock_file")"
+  (( (8#$lock_mode & 8#022) == 0 )) || { echo "Writable agent upgrade lock" >&2; exit 1; }
+fi
+( umask 077; : >> "$lock_file" )
+exec 9>>"$lock_file"
+flock -n 9 || { echo "Another agent upgrade is running" >&2; exit 1; }
 base="https://raw.githubusercontent.com/Cowprod/devMcp/$1/bin"
 tmp="$(mktemp -d)"
 files=(distributed-agent.php inspect-workspace.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php remote-job-dispatch.php remote-workspace-write-text.php)
