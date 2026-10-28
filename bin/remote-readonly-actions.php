@@ -91,17 +91,22 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
             return ['ok' => false, 'error' => 'unreadable'];
         }
         $entries = [];
+        $truncated = false;
         foreach ($items as $item) {
             if (in_array($item, ['.', '..'], true) || remoteReadProtectedSegment($item)) {
                 continue;
             }
+            // Only visible entries count toward pagination. Counting hidden
+            // credential names in "truncated" leaks their presence and
+            // incorrectly reports an incomplete listing.
             if (count($entries) >= 200) {
+                $truncated = true;
                 break;
             }
             $entries[] = ['name' => $item, 'type' => is_link($resolved . '/' . $item) ? 'symlink' :
                 (is_dir($resolved . '/' . $item) ? 'directory' : 'file')];
         }
-        return ['ok' => true, 'entries' => $entries, 'truncated' => count($items) > count($entries) + 2];
+        return ['ok' => true, 'entries' => $entries, 'truncated' => $truncated];
     }
     if ($action === 'workspace.read') {
         if (!is_file($resolved) || !is_readable($resolved) || filesize($resolved) > 65536) {
