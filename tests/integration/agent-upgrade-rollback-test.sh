@@ -17,6 +17,7 @@ chmod 0755 /opt/devmcp-agent /opt/devmcp-agent/bin
 printf '%s\n' '<?php return [];' > /etc/devmcp/agent.php
 printf '%s\n' '<?php // old agent' > /opt/devmcp-agent/bin/distributed-agent.php
 printf '%s\n' '<?php // old local policy' > /opt/devmcp-agent/bin/remote-local-policy.php
+chmod 0755 /opt/devmcp-agent/bin/distributed-agent.php /opt/devmcp-agent/bin/remote-local-policy.php
 cat > "$scratch/mocks/curl" <<'MOCK'
 #!/usr/bin/env bash
 set -eu
@@ -81,6 +82,9 @@ rm "$scratch/service-active"
 touch "$scratch/service-fail"
 if bash "$upgrade_script" "$sha" > "$scratch/failure.log" 2>&1; then echo 'FAIL: service failure accepted'; exit 1; fi
 grep -q 'restoring previous binaries' "$scratch/failure.log"
+recovery="$(sed -n 's/^RECOVERY_SNAPSHOT: //p' "$scratch/failure.log")"
+test -f "$recovery/distributed-agent.php"
+grep -q 'old agent' "$recovery/distributed-agent.php"
 grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
 grep -q 'old local policy' /opt/devmcp-agent/bin/remote-local-policy.php
 test ! -e /opt/devmcp-agent/bin/remote-job-policy.php
