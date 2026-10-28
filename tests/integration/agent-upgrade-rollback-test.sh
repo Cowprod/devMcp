@@ -85,6 +85,10 @@ if bash "$upgrade_script" "$sha" > "$scratch/symlink-config.log" 2>&1; then echo
 grep -q 'Untrusted agent configuration' "$scratch/symlink-config.log"
 rm /etc/devmcp/agent.php
 mv /etc/devmcp/agent.real.php /etc/devmcp/agent.php
+chmod 0777 /etc/devmcp
+if bash "$upgrade_script" "$sha" > "$scratch/writable-parent.log" 2>&1; then echo 'FAIL: writable config directory accepted'; exit 1; fi
+grep -q 'Writable agent configuration path' "$scratch/writable-parent.log"
+chmod 0755 /etc/devmcp
 grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
 test -f "$scratch/timer-active"
 echo 'PASS: untrusted executable agent config rejected without mutation'
