@@ -14,6 +14,28 @@ function remoteServerWriteEnabledForDeployment(array $policy, string $deployment
         || preg_match('/^[a-f0-9]{32}$/D', $deploymentId) !== 1) {
         return false;
     }
+    // The v1 pilot is intentionally limited to ONE write-enabled deployment
+    // across the entire server, not merely one active deployment per project.
+    // A second enabled entry must revoke both approvals at discovery, enqueue,
+    // and dequeue; disabled entries remain harmless for staged rollouts.
+    $deployments = $policy['deployments'] ?? null;
+    if (!is_array($deployments)) {
+        return false;
+    }
+    $enabledDeploymentId = null;
+    foreach ($deployments as $id => $candidate) {
+        if (!is_array($candidate) || ($candidate['enabled'] ?? false) !== true) {
+            continue;
+        }
+        if (!is_string($id) || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1
+            || $enabledDeploymentId !== null) {
+            return false;
+        }
+        $enabledDeploymentId = $id;
+    }
+    if ($enabledDeploymentId !== $deploymentId) {
+        return false;
+    }
     $entry = $policy['deployments'][$deploymentId] ?? null;
     if (!is_array($entry) || ($entry['enabled'] ?? false) !== true
         || !is_array($entry['paths'] ?? null)
