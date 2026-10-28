@@ -26,6 +26,11 @@ explicitly gated `workspace.write_text` action.
   spellings). This is a filename-based control, not secret
   content detection: sensitive files must never reside under innocuous names
   in a remotely inspectable workspace.
+  In addition, `workspace.read` rejects multiply-linked regular files
+  (`nlink != 1`). A hardlink with a benign filename inside the workspace
+  could otherwise expose the contents of an agent-readable file outside it:
+  symlink and `realpath()` checks alone do not establish this boundary.
+  The disposable CI gate creates an external-file hardlink to verify refusal.
 - Arguments: `path` (relative), `content` (valid UTF-8, maximum 16 KiB),
   `expected_sha256` (current file content, 64 lowercase hex digits).
 - Compare-and-swap with SHA-256, then replace through a temporary file and
