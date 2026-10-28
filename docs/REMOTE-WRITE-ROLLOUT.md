@@ -16,10 +16,13 @@ explicitly gated `workspace.write_text` action.
   even after upgrading the code. A remote project is offered the write action
   only if exactly one active deployment is visible and server-opted in.
 - Paths containing `secret`, `credential`, `private`, `token`, `password`,
-  `passwd`, `api_key` or `apikey` in any
+  `passwd`, `api_key`, `apikey`, `id_rsa` or `id_ed25519` in any
   case-insensitive path segment are also rejected by the server policy and
   queue validator **before content is stored in SQL**, even if explicitly
   allowlisted. The agent independently enforces the same protected-name deny.
+  The private-key name variants are denied consistently at both the
+  enqueue gate and the agent writer (for example `id_rsa.md` and
+  `id_ed25519_backup.txt`); these were already hidden by the read-only API.
   The existing remote read-only `workspace.read` and `workspace.stat` guards,
   together with `workspace.list` and `workspace.find` filtering, now reject
   these same protected-name markers (including common password and API-key
