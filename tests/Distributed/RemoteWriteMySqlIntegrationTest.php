@@ -253,10 +253,10 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         ];
         // The queue may contain a previously approved job. Adding another
         // enabled deployment must revoke it before an agent can claim it.
-        self::assertNull(\\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $conflictingPolicy));
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, $conflictingPolicy));
         self::assertSame('failed', $this->stateOf($id));
         self::assertSame('{}', $this->argumentsOf($id));
-        self::assertSame("before\\n", file_get_contents($this->root . '/docs/smoke.md'));
+        self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
         $this->assertClaimRejectionAudit($id, 'denied', 'server_write_not_approved');
     }
 
