@@ -28,8 +28,11 @@ try {
         throw new RuntimeException('identity');
     }
     $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
-    if (!is_string($configPath) || !is_file($configPath)) {
-        throw new RuntimeException('config');
+    // The env-selected PHP configuration executes code on require: fail closed
+    // for non-root owners, writable ancestors, and symlinked paths.
+    require_once dirname(__DIR__) . '/bin/remote-local-policy.php';
+    if (!is_string($configPath) || !remoteLocalPolicyFileTrusted($configPath)) {
+        throw new RuntimeException('untrusted_config');
     }
     $config = require $configPath;
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
