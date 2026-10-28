@@ -8,7 +8,8 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 
 $checks = [];
 $additionalProtectedNames = ['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md',
-    '.env_backup', '.envrc', '.npmrc.bak', 'id_rsa.old', 'id_rsa.md', 'id_ed25519_backup.txt', 'certificate.pem.bak'];
+    '.env_backup', '.envrc', '.npmrc.bak', 'id_rsa.old', 'id_rsa.md', 'id_ed25519_backup.txt',
+    'id_ecdsa.md', 'id_dsa_backup.txt', '.git.bak', '.ssh_backup', '.aws-old', '.config.copy', 'certificate.pem.bak'];
 $check = static function (string $name, bool $pass) use (&$checks): void {
     $checks[$name] = $pass;
     echo ($pass ? 'PASS' : 'FAIL') . ': ' . $name . PHP_EOL;
@@ -74,7 +75,7 @@ try {
     $check('job accepted with explicit capability', remoteJobAllowed('workspace.write_text', $args, true));
     foreach (['docs/secret-notes.md', 'docs/CREDENTIALS.txt', 'private/notes.md', 'docs/apiToken.md',
         'docs/passwordVault.md', 'docs/passwd.md', 'docs/api_key.md', 'docs/apikey.md',
-        'docs/id_rsa.md', 'docs/id_ed25519_backup.txt'] as $unsafePath) {
+        'docs/id_rsa.md', 'docs/id_ed25519_backup.txt', 'docs/id_ecdsa.md', 'docs/id_dsa_backup.txt'] as $unsafePath) {
         $check('job denies protected path ' . $unsafePath,
             !remoteJobAllowed('workspace.write_text', [...$args, 'path' => $unsafePath], true));
     }
@@ -150,6 +151,9 @@ try {
         ['path' => 'docs/privateNotes.md'])['error'] ?? null) === 'protected_path');
     $check('read-only token stat blocked', (remoteWorkspaceAction($root, 'workspace.stat',
         ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
+    $check('ordinary .gitignore name remains visible', !remoteReadProtectedSegment('.gitignore'));
+    $check('ordinary .github name remains visible', !remoteReadProtectedSegment('.github'));
+    $check('ordinary .configure name remains visible', !remoteReadProtectedSegment('.configure'));
     $listing = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'docs']);
     $listedNames = array_column($listing['entries'] ?? [], 'name');
     $check('read-only list hides password and API key names',
