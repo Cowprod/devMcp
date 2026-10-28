@@ -336,6 +336,74 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
         self::assertNotSame('{}', $this->argumentsOf($read));
     }
 
+    /**
+     * Disposable pilot sequence against the restricted MySQL runtime identity:
+     * successful write, SHA-guarded restoration, independent revocation, and
+     * continued read-only access. No production deployment is involved.
+     */
+    public function testDisposablePilotWriteRollbackAndIndependentRevocation(): void
+    {
+        $firstId = $this->enqueueWrite();
+        $first = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
+        self::assertIsArray($first);
+        self::assertSame($firstId, $first['id']);
+        $firstResult = \remoteAuthorizedJobDispatch($this->localPolicy, $first, true, $this->stateDirectory);
+        self::assertTrue($firstResult['ok']);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $firstId, $firstResult);
+        self::assertSame('succeeded', $this->stateOf($firstId));
+        self::assertSame("after\n", file_get_contents($this->root . '/docs/smoke.md'));
+
+        // Restore exactly the original bytes, but only if the first write's
+        // expected digest still matches the file. This is a new audited job.
+        $restoreArguments = ['path' => 'docs/smoke.md', 'content' => "before\n",
+            'expected_sha256' => hash('sha256', "after\n")];
+        $restoreId = \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment,
+            'workspace.write_text', $restoreArguments, true);
+        $restore = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
+        self::assertIsArray($restore);
+        self::assertSame($restoreId, $restore['id']);
+        $restoreResult = \remoteAuthorizedJobDispatch($this->localPolicy, $restore, true, $this->stateDirectory);
+        self::assertTrue($restoreResult['ok']);
+        self::assertSame(hash('sha256', "before\n"), $restoreResult['sha256']);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $restoreId, $restoreResult);
+        self::assertSame('succeeded', $this->stateOf($restoreId));
+        self::assertSame('{}', $this->argumentsOf($restoreId));
+        self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+
+        // Disabling the central approval prevents any new queued write claim.
+        $serverRevokedId = $this->enqueueWrite();
+        self::assertNull(\remoteClaimApprovedJob($this->runtimeDb, $this->machine, []));
+        self::assertSame('failed', $this->stateOf($serverRevokedId));
+        self::assertSame('{}', $this->argumentsOf($serverRevokedId));
+        $this->assertClaimRejectionAudit($serverRevokedId, 'denied', 'server_write_not_approved');
+
+        // The agent can independently refuse an already server-approved job.
+        $localRevokedId = $this->enqueueWrite();
+        $localRevokedJob = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, $this->serverPolicy);
+        self::assertIsArray($localRevokedJob);
+        self::assertSame($localRevokedId, $localRevokedJob['id']);
+        $noLocalWrite = $this->localPolicy;
+        $noLocalWrite['deployments'][$this->deployment]['allow_write'] = false;
+        $denied = \remoteAuthorizedJobDispatch($noLocalWrite, $localRevokedJob, true, $this->stateDirectory);
+        self::assertSame(['ok' => false, 'error' => 'local_policy_denied'], $denied);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $localRevokedId, $denied);
+        self::assertSame('failed', $this->stateOf($localRevokedId));
+        self::assertSame("before\n", file_get_contents($this->root . '/docs/smoke.md'));
+
+        // With write approval disabled on both sides, ordinary inspection
+        // must still work and report the restored file.
+        $readId = \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment,
+            'workspace.read', ['path' => 'docs/smoke.md']);
+        $read = \remoteClaimApprovedJob($this->runtimeDb, $this->machine, []);
+        self::assertIsArray($read);
+        self::assertSame($readId, $read['id']);
+        $readResult = \remoteAuthorizedJobDispatch($noLocalWrite, $read, false);
+        self::assertTrue($readResult['ok']);
+        self::assertSame("before\n", $readResult['content']);
+        \remoteCompleteClaimedJob($this->runtimeDb, $this->machine, $readId, $readResult);
+        self::assertSame('succeeded', $this->stateOf($readId));
+    }
+
     public function testLegacyReadOnlyJobStillWorks(): void
     {
         $id = \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment, 'workspace.read', ['path' => 'docs/smoke.md']);
