@@ -7,7 +7,8 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-dispatch.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 
 $checks = [];
-$additionalProtectedNames = ['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md'];
+$additionalProtectedNames = ['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md',
+    '.env_backup', '.envrc', '.npmrc.bak', 'id_rsa.old', 'certificate.pem.bak'];
 $check = static function (string $name, bool $pass) use (&$checks): void {
     $checks[$name] = $pass;
     echo ($pass ? 'PASS' : 'FAIL') . ': ' . $name . PHP_EOL;
@@ -164,6 +165,14 @@ try {
         && !in_array('docs/apiToken.md', $found['files'] ?? [], true)
         && !in_array('docs/privateNotes.md', $found['files'] ?? [], true)
         && in_array('docs/smoke.md', $found['files'] ?? [], true));
+    $foundAll = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'docs', 'filter' => 'all']);
+    $check('read-only find all hides protected backups',
+        ($foundAll['ok'] ?? false) === true
+        && array_intersect(
+            array_map(static fn(string $name): string => 'docs/' . $name, $additionalProtectedNames),
+            $foundAll['files'] ?? []
+        ) === []
+        && in_array('docs/smoke.md', $foundAll['files'] ?? [], true));
     $check('read-only safe path remains accessible',
         (remoteWorkspaceAction($root, 'workspace.read',
             ['path' => 'docs/smoke.md'])['content'] ?? null) === "before\n");

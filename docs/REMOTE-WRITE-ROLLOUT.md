@@ -23,7 +23,10 @@ explicitly gated `workspace.write_text` action.
   The existing remote read-only `workspace.read` and `workspace.stat` guards,
   together with `workspace.list` and `workspace.find` filtering, now reject
   these same protected-name markers (including common password and API-key
-  spellings). This is a filename-based control, not secret
+  spellings). The read APIs also deny common credential backup/variant
+  names such as `.env_backup`, `.envrc`, `.npmrc.bak`, `id_rsa.old` and
+  `certificate.pem.bak`; direct read/stat and list/find share one predicate.
+  This is a filename-based control, not secret
   content detection: sensitive files must never reside under innocuous names
   in a remotely inspectable workspace.
   In addition, `workspace.read` rejects multiply-linked regular files

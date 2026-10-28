@@ -1,6 +1,35 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Fail closed for credential filenames, including common backup variants.
+ * All read/list/find paths use the same predicate to prevent drift.
+ */
+function remoteReadProtectedSegment(string $name): bool
+{
+    $lower = strtolower($name);
+    if (in_array($lower, [
+        '.git', '.ssh', '.aws', '.config', '.env', '.npmrc', '.pypirc',
+        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519',
+        'credentials', 'secrets', 'secret', 'private',
+    ], true)) {
+        return true;
+    }
+    foreach (['.env', '.npmrc', '.pypirc', '.netrc', '.htpasswd', 'id_rsa', 'id_ed25519'] as $prefix) {
+        if (str_starts_with($lower, $prefix)) {
+            return true;
+        }
+    }
+    foreach (['secret', 'credential', 'private', 'token', 'password', 'passwd', 'api_key', 'apikey'] as $marker) {
+        if (str_contains($lower, $marker)) {
+            return true;
+        }
+    }
+    // A copy of certificate/private-key material must not become readable
+    // merely because an editor appended .bak, .old or a similar suffix.
+    return preg_match('/\\.(?:pem|key|p12|pfx|kdbx)(?:$|[._~-])/', $lower) === 1;
+}
+
 /** Read-only, bounded workspace operations; no shell or subprocess. */
 function remoteWorkspaceAction(string $workspace, string $action, array $arguments = []): array
 {
@@ -20,18 +49,9 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         in_array('..', explode('/', $relative), true)) {
         return ['ok' => false, 'error' => 'invalid_path'];
     }
-    // Never expose repository metadata, credentials, or private configuration.
-    $forbidden = ['.git', '.env', '.ssh', '.aws', '.config', '.npmrc', '.pypirc',
-        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519',
-        'credentials', 'secrets', 'secret', 'private'];
+    // Apply the same protected-name guard to direct access and discovery.
     foreach ($relative === '.' ? [] : explode('/', $relative) as $segment) {
-        $lower = strtolower($segment);
-        if (in_array($lower, $forbidden, true) || str_starts_with($lower, '.env.')
-            || str_contains($lower, 'secret') || str_contains($lower, 'credential')
-            || str_contains($lower, 'private') || str_contains($lower, 'token')
-            || str_contains($lower, 'password') || str_contains($lower, 'passwd')
-            || str_contains($lower, 'api_key') || str_contains($lower, 'apikey')
-            || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', $lower)) {
+        if (remoteReadProtectedSegment($segment)) {
             return ['ok' => false, 'error' => 'protected_path'];
         }
     }
@@ -61,12 +81,7 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         }
         $entries = [];
         foreach ($items as $item) {
-            if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
-                || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
-                || str_contains(strtolower($item), 'credential')
-                || str_contains(strtolower($item), 'private') || str_contains(strtolower($item), 'token')
-                    || str_contains(strtolower($item), 'password') || str_contains(strtolower($item), 'passwd')
-                    || str_contains(strtolower($item), 'api_key') || str_contains(strtolower($item), 'apikey') || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
+            if (in_array($item, ['.', '..'], true) || remoteReadProtectedSegment($item)) {
                 continue;
             }
             if (count($entries) >= 200) {
@@ -136,13 +151,7 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
                 continue;
             }
             foreach ($items as $item) {
-                if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
-                    || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
-                    || str_contains(strtolower($item), 'credential')
-                    || str_contains(strtolower($item), 'private') || str_contains(strtolower($item), 'token')
-                    || str_contains(strtolower($item), 'password') || str_contains(strtolower($item), 'passwd')
-                    || str_contains(strtolower($item), 'api_key') || str_contains(strtolower($item), 'apikey')
-                    || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
+                if (in_array($item, ['.', '..'], true) || remoteReadProtectedSegment($item)) {
                     continue;
                 }
                 $file = $directory . '/' . $item;
