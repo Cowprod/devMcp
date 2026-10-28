@@ -41,6 +41,14 @@ explicitly gated `workspace.write_text` action.
   do not establish this boundary. The disposable CI gate creates an
   external-file hardlink and verifies that neither read content nor stat
   metadata is disclosed.
+  Read-only workspace inspection also requires the **workspace root itself**
+  to be an exact canonical path, matching the write primitive. Checking only
+  `is_link($workspace)` on the final component previously permitted a symlink
+  in an ancestor (or a `docs/..` alias) to redirect `git.head`, `workspace.read`,
+  `workspace.stat`, `workspace.list` or `workspace.find`, even with a locally
+  pinned policy string. Disposable regression tests now verify that all five
+  actions and the policy-pinned dispatcher fail closed on such aliases. This
+  change is only on the PR branch; legacy deployed agents are unaffected.
 - Arguments: `path` (relative), `content` (valid UTF-8, maximum 16 KiB),
   `expected_sha256` (current file content, 64 lowercase hex digits).
 - Compare-and-swap with SHA-256, then replace through a temporary file and
