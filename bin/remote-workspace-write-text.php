@@ -103,7 +103,10 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         if (!is_array($targetStat) || $targetStat['uid'] !== $uid
             // Writable by another account would break the SHA compare-and-swap guarantee.
             || ($targetStat['mode'] & 0022) !== 0
-            || ($targetStat['mode'] & 0111) !== 0) {
+            || ($targetStat['mode'] & 0111) !== 0
+            // Replacing only one name of a multiply-linked inode would leave
+            // another alias holding the old content, violating write intent.
+            || ($targetStat['nlink'] ?? 0) !== 1) {
             return ['ok' => false, 'error' => 'untrusted_target'];
         }
         if (filesize($target) > 65536) {
@@ -128,6 +131,12 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
         $tmp = @tempnam($realParent, '.devmcp-');
         if ($tmp === false) {
             return ['ok' => false, 'error' => 'temporary_file_failed'];
+        }
+        // PHP may silently fall back to the system temp directory when the
+        // requested parent is not writable. Cross-filesystem rename is not
+        // guaranteed atomic, so never replace via a fallback temp file.
+        if (dirname($tmp) !== $realParent) {
+            return ['ok' => false, 'error' => 'temporary_file_outside_parent'];
         }
         // tempnam creates a new inode. Preserve the original group as well
         // as mode, or fail closed; otherwise a 0640 file could silently lose
