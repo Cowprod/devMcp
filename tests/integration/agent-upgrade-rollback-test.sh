@@ -71,7 +71,45 @@ MOCK
 chmod 0755 "$scratch/mocks/curl" "$scratch/mocks/systemctl"
 export PATH="$scratch/mocks:$PATH"
 sha=2b2736634d6a90524a4cf71b7589e6e90bb7920a
-touch "$scratch/timer-active" "$scratch/missing-helper"
+touch "$scratch/timer-active"
+
+# Never create, follow or truncate an untrusted lock; keep the original
+# binaries and active polling timer untouched on every denial.
+printf 'sentinel\n' > "$scratch/sentinel"
+ln -s "$scratch/sentinel" /opt/devmcp-agent/.upgrade.lock
+if bash "$upgrade_script" "$sha" > "$scratch/symlink-lock.log" 2>&1; then echo 'FAIL: symlink upgrade lock accepted'; exit 1; fi
+grep -q 'Untrusted agent upgrade lock' "$scratch/symlink-lock.log"
+test "$(cat "$scratch/sentinel")" = sentinel
+grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
+test -f "$scratch/timer-active"
+rm /opt/devmcp-agent/.upgrade.lock
+echo 'PASS: symlink upgrade lock refused without mutation'
+
+touch /opt/devmcp-agent/.upgrade.lock
+chmod 0666 /opt/devmcp-agent/.upgrade.lock
+if bash "$upgrade_script" "$sha" > "$scratch/writable-lock.log" 2>&1; then echo 'FAIL: writable upgrade lock accepted'; exit 1; fi
+grep -q 'Writable agent upgrade lock' "$scratch/writable-lock.log"
+chmod 0600 /opt/devmcp-agent/.upgrade.lock
+ln /opt/devmcp-agent/.upgrade.lock "$scratch/upgrade-lock-alias"
+if bash "$upgrade_script" "$sha" > "$scratch/hardlink-lock.log" 2>&1; then echo 'FAIL: hardlinked upgrade lock accepted'; exit 1; fi
+grep -q 'Untrusted agent upgrade lock' "$scratch/hardlink-lock.log"
+rm "$scratch/upgrade-lock-alias"
+test -f "$scratch/timer-active"
+echo 'PASS: writable and multiply linked upgrade locks refused'
+
+# Hold the lock in this test process: a concurrent installer must fail
+# before downloading a new bundle or interrupting the polling timer.
+exec 8>>/opt/devmcp-agent/.upgrade.lock
+flock -n 8
+if bash "$upgrade_script" "$sha" > "$scratch/concurrent.log" 2>&1; then echo 'FAIL: concurrent upgrade accepted'; exit 1; fi
+grep -q 'Another agent upgrade is running' "$scratch/concurrent.log"
+grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
+test -f "$scratch/timer-active"
+flock -u 8
+exec 8>&-
+echo 'PASS: concurrent upgrade refused without touching agent or timer'
+
+touch "$scratch/missing-helper"
 if bash "$upgrade_script" "$sha" > "$scratch/missing.log" 2>&1; then echo 'FAIL: incomplete bundle accepted'; exit 1; fi
 grep -q 'missing remoteLocalPolicyFileTrusted' "$scratch/missing.log"
 grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
