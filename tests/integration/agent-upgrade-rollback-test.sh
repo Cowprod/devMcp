@@ -27,7 +27,13 @@ while (($#)); do
 done
 [[ "$output" != '' ]] || exit 66
 case "$(basename "$output")" in
-  distributed-agent.php|inspect-workspace.php) printf '%s\n' '<?php // upgraded agent' > "$output" ;;
+  distributed-agent.php) printf '%s\n' '<?php // upgraded agent' > "$output" ;;
+  inspect-workspace.php)
+    if [[ -f "$DEVMCP_UPGRADE_TEST_DIR/missing-inspect" ]]; then
+      printf '%s\n' '<?php // deliberately missing inspectWorkspace' > "$output"
+    else
+      printf '%s\n' '<?php function inspectWorkspace(){return ["ok" => true];}' > "$output"
+    fi ;;
   remote-job-policy.php) printf '%s\n' '<?php function remoteJobAllowed(){return true;} function remoteWriteSafeRelativePath(){return true;}' > "$output" ;;
   remote-local-policy.php)
     if [[ -f "$DEVMCP_UPGRADE_TEST_DIR/missing-helper" ]]; then
@@ -72,6 +78,13 @@ grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
 test -f "$scratch/timer-active"
 echo 'PASS: incomplete pinned bundle rejected before install'
 rm "$scratch/missing-helper"
+touch "$scratch/missing-inspect"
+if bash "$upgrade_script" "$sha" > "$scratch/inspect.log" 2>&1; then echo 'FAIL: missing workspace inspector accepted'; exit 1; fi
+grep -q 'missing inspectWorkspace' "$scratch/inspect.log"
+grep -q 'old agent' /opt/devmcp-agent/bin/distributed-agent.php
+test -f "$scratch/timer-active"
+echo 'PASS: missing workspace inspector rejected before install'
+rm "$scratch/missing-inspect"
 touch "$scratch/service-active"
 if bash "$upgrade_script" "$sha" > "$scratch/active.log" 2>&1; then echo 'FAIL: active service permitted upgrade'; exit 1; fi
 grep -q 'Agent service is running' "$scratch/active.log"
