@@ -95,7 +95,8 @@ $checks['shared_writable_target_unchanged'] = file_get_contents($root . '/docs/t
 chmod($root . '/docs/test.md', 0600);
 $checks['traversal_rejected'] = ($call('../outside.md', $sha, 'x')['ok'] ?? false) === false;
 $checks['protected_name_rejected'] = ($call('docs/private.md', $sha, 'x')['ok'] ?? false) === false;
-foreach (['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md'] as $protectedName) {
+foreach (['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md',
+    'id_rsa.md', 'id_ed25519_backup.txt'] as $protectedName) {
     $checks['protected_write_' . $protectedName] =
         ($call('docs/' . $protectedName, $sha, 'x')['error'] ?? null) === 'protected_path';
 }
