@@ -127,6 +127,30 @@ try {
         'arguments' => ['path' => 'docs/smoke.md']];
     $check('read through dispatcher', (remoteAuthorizedJobDispatch($local, $readJob)['content'] ?? null) === "before\n");
     $check('untrusted policy file denied', !(remoteAuthorizedJobDispatch($local, $job, false)['ok'] ?? false));
+    // Read-only inspection must not expose names that the write side treats
+    // as sensitive. Test direct reads and both discovery APIs.
+    file_put_contents($root . '/docs/apiToken.md', "TOKEN_SENTINEL\\n");
+    file_put_contents($root . '/docs/privateNotes.md', "PRIVATE_SENTINEL\\n");
+    $check('read-only token file blocked', (remoteWorkspaceAction($root, 'workspace.read',
+        ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
+    $check('read-only private file blocked', (remoteWorkspaceAction($root, 'workspace.read',
+        ['path' => 'docs/privateNotes.md'])['error'] ?? null) === 'protected_path');
+    $check('read-only token stat blocked', (remoteWorkspaceAction($root, 'workspace.stat',
+        ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
+    $listing = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'docs']);
+    $listedNames = array_column($listing['entries'] ?? [], 'name');
+    $check('read-only list hides sensitive filenames', ($listing['ok'] ?? false) === true
+        && !in_array('apiToken.md', $listedNames, true)
+        && !in_array('privateNotes.md', $listedNames, true)
+        && in_array('smoke.md', $listedNames, true));
+    $found = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'docs', 'filter' => 'md']);
+    $check('read-only find hides sensitive filenames', ($found['ok'] ?? false) === true
+        && !in_array('docs/apiToken.md', $found['files'] ?? [], true)
+        && !in_array('docs/privateNotes.md', $found['files'] ?? [], true)
+        && in_array('docs/smoke.md', $found['files'] ?? [], true));
+    $check('read-only safe path remains accessible',
+        (remoteWorkspaceAction($root, 'workspace.read',
+            ['path' => 'docs/smoke.md'])['content'] ?? null) === "before\\n");
 
     if (!extension_loaded('pdo_sqlite')) {
         throw new RuntimeException('pdo_sqlite required for queue smoke');
@@ -192,6 +216,8 @@ try {
     @unlink($root . '/policy-link.php');
     @unlink($root . '/local-policy.php');
     @unlink($root . '/docs/link.md');
+    @unlink($root . '/docs/apiToken.md');
+    @unlink($root . '/docs/privateNotes.md');
     @unlink($root . '/docs/smoke.md');
     @unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
     @rmdir($state);
