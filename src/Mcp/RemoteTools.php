@@ -23,7 +23,10 @@ final class RemoteTools
     public static function fromConfig(array $config): ?self
     {
         $path = $config['distributed']['config_path'] ?? (getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php');
-        if (!is_string($path) || $path === '' || !is_readable($path)) {
+        // The distributed configuration is executable PHP and can authorize writes.
+        // Never evaluate it from an untrusted location (including symlinks).
+        require_once dirname(__DIR__, 2) . '/bin/remote-local-policy.php';
+        if (!is_string($path) || !\remoteLocalPolicyFileTrusted($path)) {
             return null;
         }
         $settings = require $path;
