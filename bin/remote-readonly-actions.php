@@ -90,7 +90,29 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
             || ($fileStat['nlink'] ?? 0) !== 1) {
             return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
         }
-        $body = file_get_contents($resolved, false, null, 0, 65537);
+        // Read through the same descriptor that we verify: reopening the
+        // pathname after lstat() would leave a swap window for a symlink or
+        // different inode to be substituted by another process.
+        $handle = @fopen($resolved, 'rb');
+        if ($handle === false) {
+            return ['ok' => false, 'error' => 'not_readable_or_too_large'];
+        }
+        try {
+            $openedStat = @fstat($handle);
+            if (!is_array($openedStat) || ($openedStat['mode'] & 0170000) !== 0100000
+                || ($openedStat['nlink'] ?? 0) !== 1) {
+                return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+            }
+            if ($openedStat['dev'] !== $fileStat['dev'] || $openedStat['ino'] !== $fileStat['ino']) {
+                return ['ok' => false, 'error' => 'path_changed'];
+            }
+            if ($openedStat['size'] > 65536) {
+                return ['ok' => false, 'error' => 'not_readable_or_too_large'];
+            }
+            $body = @stream_get_contents($handle, 65537);
+        } finally {
+            fclose($handle);
+        }
         if (!is_string($body) || strlen($body) > 65536 || !preg_match('//u', $body) || str_contains($body, chr(0))) {
             return ['ok' => false, 'error' => 'not_utf8_text'];
         }
