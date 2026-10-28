@@ -96,6 +96,10 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
     }
     $tmp = null;
     try {
+        // The agent is long-lived: PHP can cache a previous job's stat()
+        // result, including the hardlink count and file mode. Reinspect the
+        // target after acquiring our lock rather than trusting cached state.
+        clearstatcache(true, $target);
         if (is_link($target) || !is_file($target) || !is_readable($target) || !is_writable($target)) {
             return ['ok' => false, 'error' => 'target_not_regular_file'];
         }
