@@ -12,6 +12,7 @@ on:
       - 'deploy/distributed/upgrade-agent-readonly.sh'
       - 'deploy/distributed/enable-remote-mcp.sh'
       - 'tests/integration/remote-write-*.php'
+      - 'tests/integration/remote-mcp-readonly-config-test.php'
       - '.github/workflows/remote-write-tests.yml'
   push:
     branches:
@@ -28,7 +29,7 @@ jobs:
       - name: PHP syntax
         run: |
           php -l bin/devmcp-remote-write-retention
-          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
+          for file in bin/remote-*.php bin/distributed-agent.php src/Mcp/RemoteTools.php public/agent-job-poll.php public/agent-job-result.php tests/integration/remote-write-*.php tests/integration/remote-mcp-readonly-config-test.php tests/Distributed/RemoteWriteMySqlIntegrationTest.php; do
             php -l "$file"
           done
       - name: Deployment script syntax
@@ -36,6 +37,30 @@ jobs:
           bash -n deploy/distributed/prepare-remote-write-pilot.sh
           bash -n deploy/distributed/upgrade-agent-readonly.sh
           bash -n deploy/distributed/enable-remote-mcp.sh
+      - name: Read-only MCP config export and deny tests
+        run: |
+          set -euo pipefail
+          php tests/integration/remote-mcp-readonly-config-test.php
+          fixture=/etc/devmcp-ci-readonly-config
+          generated="$(mktemp)"
+          untrusted="$(mktemp /tmp/devmcp-ci-untrusted-XXXXXX.php)"
+          trap 'sudo rm -f "$fixture/distributed.php" "$fixture/link.php"; sudo rmdir "$fixture"; rm -f "$generated" "$untrusted"' EXIT
+          sudo install -d -m 0755 -o root -g root "$fixture"
+          printf '%s\n' "<?php return ['dsn' => 'mysql:test', 'writer_username' => 'ci', 'writer_password' => 'ci-only', 'remote_write' => ['enabled' => false, 'deployments' => []]];" | sudo tee "$fixture/distributed.php" >/dev/null
+          sudo chown root:root "$fixture/distributed.php"
+          sudo chmod 0644 "$fixture/distributed.php"
+          php bin/remote-mcp-readonly-config.php "$fixture/distributed.php" > "$generated"
+          php -l "$generated"
+          php -r '$c=require $argv[1]; if (array_key_exists("remote_write",$c) || ($c["dsn"] ?? "") !== "mysql:test") exit(1);' "$generated"
+          printf '%s\n' "<?php return ['dsn' => 'mysql:test', 'writer_username' => 'ci', 'writer_password' => 'ci-only', 'remote_write' => ['enabled' => true]];" | sudo tee "$fixture/distributed.php" >/dev/null
+          if php bin/remote-mcp-readonly-config.php "$fixture/distributed.php" > "$generated" 2>/dev/null; then exit 1; fi
+          test ! -s "$generated"
+          sudo ln -s "$fixture/distributed.php" "$fixture/link.php"
+          if php bin/remote-mcp-readonly-config.php "$fixture/link.php" > "$generated" 2>/dev/null; then exit 1; fi
+          test ! -s "$generated"
+          printf '%s\n' '<?php echo "UNTRUSTED_CONFIG_EXECUTED"; return [];' > "$untrusted"
+          if output="$(php bin/remote-mcp-readonly-config.php "$untrusted" 2>&1)"; then exit 1; fi
+          test "$output" = 'Refusing untrusted MCP configuration'
       - name: Root-owned executable agent config trust tests
         run: |
           set -euo pipefail
