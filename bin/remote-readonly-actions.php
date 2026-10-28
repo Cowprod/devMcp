@@ -10,12 +10,21 @@ function remoteReadProtectedSegment(string $name): bool
     $lower = strtolower($name);
     if (in_array($lower, [
         '.git', '.ssh', '.aws', '.config', '.env', '.npmrc', '.pypirc',
-        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519',
+        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa',
         'credentials', 'secrets', 'secret', 'private',
     ], true)) {
         return true;
     }
-    foreach (['.env', '.npmrc', '.pypirc', '.netrc', '.htpasswd', 'id_rsa', 'id_ed25519'] as $prefix) {
+    // A renamed copy of a hidden metadata/credential directory is not
+    // safe to browse. Delimiter matching keeps .gitignore and .github visible.
+    foreach (['.git', '.ssh', '.aws', '.config'] as $directory) {
+        if (str_starts_with($lower, $directory)
+            && strlen($lower) > strlen($directory)
+            && str_contains('._~-', $lower[strlen($directory)])) {
+            return true;
+        }
+    }
+    foreach (['.env', '.npmrc', '.pypirc', '.netrc', '.htpasswd', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'] as $prefix) {
         if (str_starts_with($lower, $prefix)) {
             return true;
         }
