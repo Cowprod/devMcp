@@ -189,9 +189,15 @@ try {
         $check('read-only hardlink outside workspace refuses content',
             ($hardlinkResult['error'] ?? null) === 'hardlinked_file_forbidden'
             && !array_key_exists('content', $hardlinkResult));
+        $hardlinkStat = remoteWorkspaceAction($root, 'workspace.stat', ['path' => 'docs/visible.md']);
+        $check('read-only stat does not disclose external hardlink metadata',
+            ($hardlinkStat['error'] ?? null) === 'hardlinked_file_forbidden'
+            && !array_key_exists('size', $hardlinkStat));
         $check('read-only ordinary file still available beside hardlink',
             (remoteWorkspaceAction($root, 'workspace.read', ['path' => 'docs/smoke.md'])['content'] ?? null)
                 === "before\n");
+        $check('read-only ordinary file still has stat metadata beside hardlink',
+            (remoteWorkspaceAction($root, 'workspace.stat', ['path' => 'docs/smoke.md'])['size'] ?? null) === 7);
     } finally {
         unlink($insideAlias);
         unlink($outsideFile);
