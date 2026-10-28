@@ -155,7 +155,11 @@ commit SHA. It downloads and syntax-checks **all seven agent files**, then
 loads the linked helper bundle to verify that the required policy, read,
 write and dispatcher functions exist **before modifying the installation**.
 It also validates root ownership/non-writable directories and refuses
-symlinked pre-existing binaries. For the short replacement window, it
+symlinked pre-existing binaries. A root-owned, non-writable, single-link
+`/opt/devmcp-agent/.upgrade.lock` is held with non-blocking `flock`
+through cleanup, so competing upgrade/rollback attempts fail before staging,
+timer manipulation or installation. Existing symlinked, writable or
+multiply-linked locks are rejected. For the short replacement window, it
 pauses an active polling timer and refuses to interrupt a running one-shot
 agent service. If installation or its service start fails, the script
 restores previous binaries, removes newly introduced files and resumes the
@@ -168,7 +172,8 @@ These safeguards narrow failed upgrades; replacing multiple files is
 the snapshot and verify the installed agent and local policy after any
 interruption. This script never changes a local policy or server write
 allowlist. Disposable CI exercises missing helpers, active service denial,
-service-start failure rollback, timer restoration and successful snapshots.
+service-start failure rollback, timer restoration, unsafe/contended upgrade
+lock denial, and successful snapshots.
 **No physical agent upgrade is implied by passing CI.**
 
 ## Approval — both sides are mandatory
