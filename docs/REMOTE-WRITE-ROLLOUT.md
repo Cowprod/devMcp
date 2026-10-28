@@ -149,9 +149,18 @@ deployment ID**. Configure the following `remote_write` key in
 ],
 ```
 
-The MCP process reads `/etc/devmcp/mcp-distributed.php`; the existing
-`deploy/distributed/enable-remote-mcp.sh` now copies that optional key
-when regenerated. Without it, MCP never advertises the write action.
+The MCP process reads `/etc/devmcp/mcp-distributed.php`. The existing
+`deploy/distributed/enable-remote-mcp.sh` is **read-only setup only**: it
+validates root ownership and safe ancestors before executing the admin PHP
+configuration, rejects any source configuration that enables `remote_write`,
+exports only the database keys and applies SQL grants **after** validation.
+It never copies `remote_write` into the generated MCP configuration. This
+script cannot activate the write pilot; such activation requires a separately
+reviewed, explicit MCP configuration and agent policy change, neither of
+which is automated or authorized by this draft. Without the opt-in key, MCP
+never advertises the write action. Disposable CI exercises trusted config
+export, disabled-policy stripping, enabled-policy refusal and untrusted PHP
+config rejection.
 
 Independently, the agent's **root-owned**
 `/etc/devmcp/remote-readonly-policy.php` must contain the same deployment
