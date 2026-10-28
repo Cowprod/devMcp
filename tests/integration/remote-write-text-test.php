@@ -46,6 +46,23 @@ $checks['hardlinked_target_preserved'] =
     file_get_contents($root . '/docs/test.md') === "after\n"
     && file_get_contents($alias) === "after\n";
 unlink($alias);
+// tempnam() can fall back outside the requested directory when the parent
+// is not writable. A cross-directory replacement must not be attempted.
+chmod($root . '/docs', 0500);
+try {
+    if (!is_writable($root . '/docs')) {
+        $fallback = $call('docs/test.md', hash('sha256', "after\n"), "unwanted\n");
+        $checks['tempnam_fallback_fails_closed'] = in_array(
+            $fallback['error'] ?? null,
+            ['temporary_file_failed', 'temporary_file_outside_parent'],
+            true
+        );
+        $checks['tempnam_fallback_preserves_target'] =
+            file_get_contents($root . '/docs/test.md') === "after\n";
+    }
+} finally {
+    chmod($root . '/docs', 0700);
+}
 $heldLock = fopen($lockPath, 'c');
 if ($heldLock === false || !flock($heldLock, LOCK_EX | LOCK_NB)) {
     throw new RuntimeException('Cannot prepare lock contention test');
