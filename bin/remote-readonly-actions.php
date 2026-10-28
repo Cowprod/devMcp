@@ -81,6 +81,15 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         if (!is_file($resolved) || !is_readable($resolved) || filesize($resolved) > 65536) {
             return ['ok' => false, 'error' => 'not_readable_or_too_large'];
         }
+        // A hardlink inside the workspace can point to an agent-readable
+        // file outside it, bypassing realpath/symlink restrictions. Deny
+        // multiply-linked files before returning any content.
+        clearstatcache(true, $resolved);
+        $fileStat = @lstat($resolved);
+        if (!is_array($fileStat) || ($fileStat['mode'] & 0170000) !== 0100000
+            || ($fileStat['nlink'] ?? 0) !== 1) {
+            return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+        }
         $body = file_get_contents($resolved, false, null, 0, 65537);
         if (!is_string($body) || strlen($body) > 65536 || !preg_match('//u', $body) || str_contains($body, chr(0))) {
             return ['ok' => false, 'error' => 'not_utf8_text'];
