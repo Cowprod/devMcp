@@ -16,19 +16,21 @@ explicitly gated `workspace.write_text` action.
   even after upgrading the code. A remote project is offered the write action
   only if exactly one active deployment is visible and server-opted in.
 - Paths containing `secret`, `credential`, `private`, `token`, `password`,
-  `passwd`, `api_key`, `apikey`, `id_rsa` or `id_ed25519` in any
+  `passwd`, `api_key`, `apikey`, `id_rsa`, `id_ed25519`, `id_ecdsa` or `id_dsa` in any
   case-insensitive path segment are also rejected by the server policy and
   queue validator **before content is stored in SQL**, even if explicitly
   allowlisted. The agent independently enforces the same protected-name deny.
-  The private-key name variants are denied consistently at both the
-  enqueue gate and the agent writer (for example `id_rsa.md` and
-  `id_ed25519_backup.txt`); these were already hidden by the read-only API.
+  Common SSH private-key name variants are denied consistently at the
+  enqueue gate, agent writer and read-only API (including `id_rsa.md`,
+  `id_ed25519_backup.txt`, `id_ecdsa.md` and `id_dsa_backup.txt`).
   The existing remote read-only `workspace.read` and `workspace.stat` guards,
   together with `workspace.list` and `workspace.find` filtering, now reject
   these same protected-name markers (including common password and API-key
   spellings). The read APIs also deny common credential backup/variant
   names such as `.env_backup`, `.envrc`, `.npmrc.bak`, `id_rsa.old` and
-  `certificate.pem.bak`; direct read/stat and list/find share one predicate.
+  `certificate.pem.bak`, plus renamed hidden directories (for example
+  `.ssh_backup`, `.aws-old`, `.config.copy`, `.git.bak`). Ordinary `.gitignore`
+  and `.github` names remain visible; direct read/stat and list/find share one predicate.
   This is a filename-based control, not secret
   content detection: sensitive files must never reside under innocuous names
   in a remotely inspectable workspace.
