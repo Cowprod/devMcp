@@ -136,6 +136,14 @@ column-level grants.
 
 ## Approval — both sides are mandatory
 
+The v1 pilot intentionally permits **at most one globally write-enabled
+remote deployment**, even across different projects. If a second deployment
+has `enabled => true` in the server-side `remote_write.deployments` map,
+**all remote writes fail closed** at discovery, enqueue, and queue claim;
+existing queued write payloads are rejected and scrubbed on claim. Staged
+entries with `enabled => false` do not revoke the sole approved pilot.
+This safety gate is independent of the agent's own exact-path allowlist.
+
 For a disposable deployment (never `caseRouter` first), create a sandbox
 workspace that already contains `docs/smoke.md` and register it as a single
 active deployment. Replace the placeholder ID below with the actual **32-hex
