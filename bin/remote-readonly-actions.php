@@ -160,7 +160,7 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         $found = [];
         $pending = [[$resolved, 0]];
         $visited = 0;
-        while ($pending !== [] && count($found) < 200 && $visited < 2000) {
+        while ($pending !== [] && count($found) < 201 && $visited < 2000) {
             [$directory, $depth] = array_pop($pending);
             $items = @scandir($directory);
             if ($items === false) {
@@ -180,13 +180,17 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
                 } elseif (is_file($file) && ($filter === 'all' || strtolower(pathinfo($file, PATHINFO_EXTENSION)) === $filter)) {
                     $found[] = substr($file, strlen($root) + 1);
                 }
-                if ($visited >= 2000 || count($found) >= 200) {
+                if ($visited >= 2000 || count($found) >= 201) {
                     break;
                 }
             }
         }
         sort($found, SORT_STRING);
-        return ['ok' => true, 'files' => $found, 'truncated' => $pending !== [] || $visited >= 2000];
+        // Inspect one extra visible match so the 200-entry limit reports
+        // truncation accurately, even when the last directory is exhausted.
+        // Protected names are skipped and must never affect this flag.
+        return ['ok' => true, 'files' => array_slice($found, 0, 200),
+            'truncated' => count($found) > 200 || $pending !== [] || $visited >= 2000];
     }
     return ['ok' => false, 'error' => 'action_not_allowed'];
 }
