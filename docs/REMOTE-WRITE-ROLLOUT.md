@@ -1,6 +1,6 @@
 # Remote write pilot — independent approvals and rollout gates
 
-Status (PR #38, October 27, 2026): implementation and disposable-workspace
+Status (PR #38, October 28, 2026): implementation and disposable-workspace
 integration tests are in the branch. **NOT deployed or enabled on any real
 agent.** This is a gated pilot, not yet general-purpose remote development.
 
@@ -33,7 +33,12 @@ explicitly gated `workspace.write_text` action.
   upgrading a legacy installation with unsafe permissions will now fail
   closed before any network contact. Check its ownership and ancestors as
   part of agent upgrade qualification.
-  The private lock state directory and writable workspace paths must be
+  The agent lock state directory must be owned by the agent account and
+  **private (0700, no group/other permissions)**. The normal installer already
+  provisions `/var/lib/devmcp-agent` this way. The existing lock file must be
+  an agent-owned, non-group/world-writable regular file with a single link.
+  A second concurrent write returns `lock_busy` immediately rather than
+  blocking the agent poll indefinitely. Writable workspace paths must be
   agent-owned and non-group/world-writable. Symlinks, traversal, executable
   targets and protected paths are forbidden.
 - Before replacing a file, the agent checks that the existing target is
