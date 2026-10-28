@@ -68,8 +68,19 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         }
     }
     if ($action === 'workspace.stat') {
-        return ['ok' => true, 'type' => is_dir($resolved) ? 'directory' : (is_file($resolved) ? 'file' : 'other'),
-            'size' => is_file($resolved) ? filesize($resolved) : null];
+        if (is_file($resolved)) {
+            // A safe-looking hardlink may reference a file outside the pinned
+            // workspace. Do not disclose even its size through stat when
+            // workspace.read would reject the same inode.
+            clearstatcache(true, $resolved);
+            $fileStat = @lstat($resolved);
+            if (!is_array($fileStat) || ($fileStat['mode'] & 0170000) !== 0100000
+                || ($fileStat['nlink'] ?? 0) !== 1) {
+                return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+            }
+            return ['ok' => true, 'type' => 'file', 'size' => $fileStat['size']];
+        }
+        return ['ok' => true, 'type' => is_dir($resolved) ? 'directory' : 'other', 'size' => null];
     }
     if ($action === 'workspace.list') {
         if (!is_dir($resolved)) {
