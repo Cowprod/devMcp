@@ -45,11 +45,11 @@ done
 # and trust-check functions. Check dependencies before replacing any binary.
 php -r '
   $dir = $argv[1];
-  foreach (["remote-job-policy.php", "remote-local-policy.php", "remote-readonly-actions.php",
+  foreach (["inspect-workspace.php", "remote-job-policy.php", "remote-local-policy.php", "remote-readonly-actions.php",
       "remote-workspace-write-text.php", "remote-job-dispatch.php"] as $file) {
       require_once $dir . "/" . $file;
   }
-  foreach (["remoteLocalPolicyFileTrusted", "remoteLocalPolicyCheck", "remoteJobAllowed",
+  foreach (["inspectWorkspace", "remoteLocalPolicyFileTrusted", "remoteLocalPolicyCheck", "remoteJobAllowed",
       "remoteWriteSafeRelativePath", "remoteWorkspaceAction", "remoteWorkspaceWriteText",
       "remoteAuthorizedJobDispatch"] as $name) {
       if (!function_exists($name)) {
