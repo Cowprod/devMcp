@@ -20,6 +20,32 @@ $checks['content_changed'] = file_get_contents($root . '/docs/test.md') === "aft
 clearstatcache(true, $root . '/docs/test.md');
 $checks['group_preserved'] = filegroup($root . '/docs/test.md') === $originalGroup;
 $checks['mode_preserved'] = (fileperms($root . '/docs/test.md') & 0777) === $originalMode;
+$lockPath = $state . '/remote-write-' . hash('sha256', $root) . '.lock';
+chmod($state, 0755);
+$checks['readable_state_directory_rejected'] =
+    ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'untrusted_lock_directory';
+$checks['readable_state_directory_unchanged'] = file_get_contents($root . '/docs/test.md') === "after\n";
+chmod($state, 0700);
+chmod($lockPath, 0666);
+$checks['writable_lock_file_rejected'] =
+    ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'untrusted_lock_file';
+chmod($lockPath, 0600);
+link($lockPath, $state . '/other.lock');
+$checks['hardlinked_lock_file_rejected'] =
+    ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'untrusted_lock_file';
+unlink($state . '/other.lock');
+$heldLock = fopen($lockPath, 'c');
+if ($heldLock === false || !flock($heldLock, LOCK_EX | LOCK_NB)) {
+    throw new RuntimeException('Cannot prepare lock contention test');
+}
+try {
+    $checks['concurrent_lock_fails_fast'] =
+        ($call('docs/test.md', hash('sha256', "after\n"), "unwanted\n")['error'] ?? null) === 'lock_busy';
+    $checks['concurrent_lock_preserves_content'] = file_get_contents($root . '/docs/test.md') === "after\n";
+} finally {
+    flock($heldLock, LOCK_UN);
+    fclose($heldLock);
+}
 $checks['stale_sha_rejected'] = ($call('docs/test.md', $sha, "oops\n")['error'] ?? '') === 'sha256_conflict';
 chmod($root . '/docs/test.md', 0666);
 $checks['shared_writable_target_rejected'] = ($call('docs/test.md', hash('sha256', "after\n"), "tampered\n")['error'] ?? '') === 'untrusted_target';
