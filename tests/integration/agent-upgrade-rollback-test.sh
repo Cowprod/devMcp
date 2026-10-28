@@ -6,9 +6,12 @@ set -euo pipefail
 upgrade_script="${1:-deploy/distributed/upgrade-agent-readonly.sh}"
 [[ -f "$upgrade_script" ]] || { echo 'Upgrade script missing' >&2; exit 1; }
 scratch="$(mktemp -d)"
+[[ "$(stat -c %u /opt)" == 0 ]] || { echo 'CI /opt must be root owned' >&2; exit 1; }
+original_opt_mode="$(stat -c %a /opt)"
+chmod go-w /opt
 export DEVMCP_UPGRADE_TEST_DIR="$scratch"
 trap 'rc=$?; echo "FAIL: disposable upgrade fixture line $LINENO (rc=$rc)" >&2; for log in "$scratch"/*.log; do if [[ -f "$log" ]]; then echo "--- $log ---" >&2; tail -n 25 "$log" >&2; fi; done' ERR
-trap 'rm -rf /etc/devmcp /opt/devmcp-agent "$scratch"' EXIT
+trap 'rm -rf /etc/devmcp /opt/devmcp-agent "$scratch"; chmod "$original_opt_mode" /opt' EXIT
 mkdir -p /etc/devmcp /opt/devmcp-agent/bin "$scratch/mocks"
 printf '%s\n' '<?php return [];' > /etc/devmcp/agent.php
 printf '%s\n' '<?php // old agent' > /opt/devmcp-agent/bin/distributed-agent.php
