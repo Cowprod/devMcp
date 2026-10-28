@@ -43,7 +43,11 @@ function remoteReadProtectedSegment(string $name): bool
 function remoteWorkspaceAction(string $workspace, string $action, array $arguments = []): array
 {
     $root = realpath($workspace);
-    if ($root === false || !is_dir($root) || is_link($workspace)) {
+    // Pin reads to the exact canonical workspace path, just like writes.
+    // Checking is_link() on the final component alone does not reject a
+    // symlinked ancestor (or a /docs/.. alias) of the approved workspace.
+    if ($root === false || !is_dir($root) || is_link($workspace)
+        || $root !== rtrim($workspace, '/')) {
         return ['ok' => false, 'error' => 'workspace_missing'];
     }
     if ($action === 'git.head') {
