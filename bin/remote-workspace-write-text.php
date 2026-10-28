@@ -52,7 +52,8 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
             || str_contains($lower, 'private') || str_contains($lower, 'token')
             || str_contains($lower, 'password') || str_contains($lower, 'passwd')
             || str_contains($lower, 'api_key') || str_contains($lower, 'apikey')
-            || str_contains($lower, 'id_rsa') || str_contains($lower, 'id_ed25519')) {
+            || str_contains($lower, 'id_rsa') || str_contains($lower, 'id_ed25519')
+            || str_contains($lower, 'id_ecdsa') || str_contains($lower, 'id_dsa')) {
             return ['ok' => false, 'error' => 'protected_path'];
         }
     }
