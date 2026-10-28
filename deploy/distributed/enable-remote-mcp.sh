@@ -6,34 +6,31 @@ php -l src/Mcp/RemoteTools.php
 php -l src/Mcp/ServerFactory.php
 php -l bin/devmcp
 php -l public/index.php
+php -l bin/remote-local-policy.php
+php -l bin/remote-mcp-readonly-config.php
+
+SOURCE=/etc/devmcp-admin/distributed.php
+DEST=/etc/devmcp/mcp-distributed.php
+[[ -f "$SOURCE" ]] || { echo "Missing distributed admin config" >&2; exit 1; }
+getent group devmcp >/dev/null || { echo "Missing devmcp group" >&2; exit 1; }
+install -d -m 750 -o root -g devmcp /etc/devmcp
+TMP=$(mktemp /etc/devmcp/.mcp-distributed.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+
+# This read-only setup script may never activate remote writes. Validate the
+# root-owned PHP source BEFORE executing it, then export only database keys.
+# Perform SQL grants and replace the destination only after validation succeeds.
+if ! php bin/remote-mcp-readonly-config.php "$SOURCE" > "$TMP"; then
+  echo "Refusing MCP setup: untrusted, invalid or write-enabled source configuration" >&2
+  exit 1
+fi
+php -l "$TMP"
 mariadb -e "
 GRANT SELECT (id, name, status) ON devmcp_distributed.dm_machine TO 'devmcp_writer'@'localhost';
 GRANT SELECT (id, project_id, machine_id, workspace_path, enabled) ON devmcp_distributed.dm_deployment TO 'devmcp_writer'@'localhost';
 GRANT SELECT (id) ON devmcp_distributed.dm_project TO 'devmcp_writer'@'localhost';
 GRANT SELECT (id, deployment_id, action_name, state, created_at, claimed_at, finished_at, result_json) ON devmcp_distributed.dm_remote_readonly_job TO 'devmcp_writer'@'localhost';
 "
-SOURCE=/etc/devmcp-admin/distributed.php
-DEST=/etc/devmcp/mcp-distributed.php
-[[ -f "$SOURCE" ]] || { echo "Missing distributed admin config" >&2; exit 1; }
-# Fail closed: never propagate a write opt-in through this read-only setup script.
-# A write pilot requires its own explicitly reviewed activation procedure.
-if ! php -r '$c = require $argv[1]; if (!is_array($c)) exit(2); $w = $c["remote_write"] ?? null; if ($w !== null && (!is_array($w) || !empty($w["enabled"]))) exit(3);' "$SOURCE"; then
-  echo "Refusing remote MCP setup: source remote_write is enabled or invalid" >&2
-  exit 1
-fi
-getent group devmcp >/dev/null || { echo "Missing devmcp group" >&2; exit 1; }
-install -d -m 750 -o root -g devmcp /etc/devmcp
-TMP=$(mktemp /etc/devmcp/.mcp-distributed.XXXXXX)
-trap 'rm -f "$TMP"' EXIT
-php -r '
-$c = require $argv[1];
-foreach (["dsn", "writer_username", "writer_password"] as $key) {
-    if (!isset($c[$key]) || !is_string($c[$key])) { exit(2); }
-}
-echo "<?php", PHP_EOL, "return ", var_export(array_intersect_key($c, array_flip(["dsn", "writer_username", "writer_password"])), true), ";", PHP_EOL;
-' "$SOURCE" > "$TMP"
-php -l "$TMP"
-php -r '$c = require $argv[1]; if (!is_array($c) || empty($c["dsn"])) exit(2);' "$TMP" >/dev/null
 chown root:devmcp "$TMP"
 chmod 640 "$TMP"
 mv -f "$TMP" "$DEST"
