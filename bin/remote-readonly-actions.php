@@ -28,6 +28,7 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         $lower = strtolower($segment);
         if (in_array($lower, $forbidden, true) || str_starts_with($lower, '.env.')
             || str_contains($lower, 'secret') || str_contains($lower, 'credential')
+            || str_contains($lower, 'private') || str_contains($lower, 'token')
             || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', $lower)) {
             return ['ok' => false, 'error' => 'protected_path'];
         }
@@ -60,7 +61,8 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         foreach ($items as $item) {
             if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
                 || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
-                || str_contains(strtolower($item), 'credential') || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
+                || str_contains(strtolower($item), 'credential')
+                || str_contains(strtolower($item), 'private') || str_contains(strtolower($item), 'token') || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
                 continue;
             }
             if (count($entries) >= 200) {
@@ -102,6 +104,7 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
                 if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
                     || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
                     || str_contains(strtolower($item), 'credential')
+                || str_contains(strtolower($item), 'private') || str_contains(strtolower($item), 'token')
                     || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
                     continue;
                 }
