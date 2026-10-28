@@ -7,6 +7,7 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-dispatch.php';
 require_once dirname(__DIR__, 2) . '/bin/remote-job-lifecycle.php';
 
 $checks = [];
+$additionalProtectedNames = ['passwordVault.md', 'passwd.md', 'api_key.md', 'apikey.md'];
 $check = static function (string $name, bool $pass) use (&$checks): void {
     $checks[$name] = $pass;
     echo ($pass ? 'PASS' : 'FAIL') . ': ' . $name . PHP_EOL;
@@ -70,7 +71,8 @@ try {
         'deployments' => [$deployment => ['paths' => ['docs/smoke.md']]]], $deployment, 'docs/smoke.md'));
     $check('job write denied by default', !remoteJobAllowed('workspace.write_text', $args));
     $check('job accepted with explicit capability', remoteJobAllowed('workspace.write_text', $args, true));
-    foreach (['docs/secret-notes.md', 'docs/CREDENTIALS.txt', 'private/notes.md', 'docs/apiToken.md'] as $unsafePath) {
+    foreach (['docs/secret-notes.md', 'docs/CREDENTIALS.txt', 'private/notes.md', 'docs/apiToken.md',
+        'docs/passwordVault.md', 'docs/passwd.md', 'docs/api_key.md', 'docs/apikey.md'] as $unsafePath) {
         $check('job denies protected path ' . $unsafePath,
             !remoteJobAllowed('workspace.write_text', [...$args, 'path' => $unsafePath], true));
     }
@@ -131,6 +133,15 @@ try {
     // as sensitive. Test direct reads and both discovery APIs.
     file_put_contents($root . '/docs/apiToken.md', "TOKEN_SENTINEL\n");
     file_put_contents($root . '/docs/privateNotes.md', "PRIVATE_SENTINEL\n");
+    foreach ($additionalProtectedNames as $protectedName) {
+        file_put_contents($root . '/docs/' . $protectedName, "PROTECTED_SENTINEL\n");
+        $check('read-only read denies ' . $protectedName,
+            (remoteWorkspaceAction($root, 'workspace.read', ['path' => 'docs/' . $protectedName])['error'] ?? null)
+                === 'protected_path');
+        $check('read-only stat denies ' . $protectedName,
+            (remoteWorkspaceAction($root, 'workspace.stat', ['path' => 'docs/' . $protectedName])['error'] ?? null)
+                === 'protected_path');
+    }
     $check('read-only token file blocked', (remoteWorkspaceAction($root, 'workspace.read',
         ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
     $check('read-only private file blocked', (remoteWorkspaceAction($root, 'workspace.read',
@@ -139,11 +150,16 @@ try {
         ['path' => 'docs/apiToken.md'])['error'] ?? null) === 'protected_path');
     $listing = remoteWorkspaceAction($root, 'workspace.list', ['path' => 'docs']);
     $listedNames = array_column($listing['entries'] ?? [], 'name');
+    $check('read-only list hides password and API key names',
+        array_intersect($additionalProtectedNames, $listedNames) === []);
     $check('read-only list hides sensitive filenames', ($listing['ok'] ?? false) === true
         && !in_array('apiToken.md', $listedNames, true)
         && !in_array('privateNotes.md', $listedNames, true)
         && in_array('smoke.md', $listedNames, true));
     $found = remoteWorkspaceAction($root, 'workspace.find', ['path' => 'docs', 'filter' => 'md']);
+    $check('read-only find hides password and API key names',
+        array_intersect(array_map(static fn(string $name): string => 'docs/' . $name, $additionalProtectedNames),
+            $found['files'] ?? []) === []);
     $check('read-only find hides sensitive filenames', ($found['ok'] ?? false) === true
         && !in_array('docs/apiToken.md', $found['files'] ?? [], true)
         && !in_array('docs/privateNotes.md', $found['files'] ?? [], true)
@@ -218,6 +234,9 @@ try {
     @unlink($root . '/docs/link.md');
     @unlink($root . '/docs/apiToken.md');
     @unlink($root . '/docs/privateNotes.md');
+    foreach ($additionalProtectedNames as $protectedName) {
+        @unlink($root . '/docs/' . $protectedName);
+    }
     @unlink($root . '/docs/smoke.md');
     @unlink($state . '/remote-write-' . hash('sha256', $root) . '.lock');
     @rmdir($state);

@@ -15,14 +15,15 @@ explicitly gated `workspace.write_text` action.
 - Exact, separately maintained server and agent path allowlists. Default deny
   even after upgrading the code. A remote project is offered the write action
   only if exactly one active deployment is visible and server-opted in.
-- Paths containing `secret`, `credential`, `private`, or `token` in any
+- Paths containing `secret`, `credential`, `private`, `token`, `password`,
+  `passwd`, `api_key` or `apikey` in any
   case-insensitive path segment are also rejected by the server policy and
   queue validator **before content is stored in SQL**, even if explicitly
   allowlisted. The agent independently enforces the same protected-name deny.
   The existing remote read-only `workspace.read` and `workspace.stat` guards,
   together with `workspace.list` and `workspace.find` filtering, now reject
-  these same protected-name markers (`token` and partial `private` names were
-  previously inconsistent). This is a filename-based control, not secret
+  these same protected-name markers (including common password and API-key
+  spellings). This is a filename-based control, not secret
   content detection: sensitive files must never reside under innocuous names
   in a remotely inspectable workspace.
 - Arguments: `path` (relative), `content` (valid UTF-8, maximum 16 KiB),

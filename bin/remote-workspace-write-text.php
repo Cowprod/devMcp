@@ -49,7 +49,9 @@ function remoteWorkspaceWriteText(string $workspace, array $arguments, string $l
     foreach ($segments as $segment) {
         $lower = strtolower($segment);
         if (str_contains($lower, 'secret') || str_contains($lower, 'credential')
-            || str_contains($lower, 'private') || str_contains($lower, 'token')) {
+            || str_contains($lower, 'private') || str_contains($lower, 'token')
+            || str_contains($lower, 'password') || str_contains($lower, 'passwd')
+            || str_contains($lower, 'api_key') || str_contains($lower, 'apikey')) {
             return ['ok' => false, 'error' => 'protected_path'];
         }
     }
