@@ -46,7 +46,11 @@ explicitly gated `workspace.write_text` action.
   A second concurrent write returns `lock_busy` immediately rather than
   blocking the agent poll indefinitely. Writable workspace paths must be
   agent-owned and non-group/world-writable. Symlinks, traversal, executable
-  targets and protected paths are forbidden.
+  targets, hardlinked target files (link count != 1) and protected paths are
+  forbidden. `tempnam()` is also checked to ensure the temporary file really
+  resides in the target parent directory: PHP may fall back to the system
+  temporary directory when the parent is unwritable, in which case an atomic
+  same-directory replacement cannot be guaranteed and the operation fails.
 - Before replacing a file, the agent checks that the existing target is
   at most 64 KiB, valid UTF-8 and contains no NUL bytes. A binary file named
   .md or .txt is rejected even when its expected SHA-256 matches.
