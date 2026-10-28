@@ -215,13 +215,15 @@ final class RemoteWriteMySqlIntegrationTest extends TestCase
 
     public function testProtectedWritePathNeverPersistsPayloadWithRuntimeGrants(): void
     {
-        $protected = [...$this->arguments, 'path' => 'docs/API-Token.md'];
-        try {
-            \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment,
-                'workspace.write_text', $protected, true);
-            self::fail('Protected path must be rejected before enqueue');
-        } catch (\InvalidArgumentException $error) {
-            // The same restricted worker must never persist this content.
+        foreach (['docs/API-Token.md', 'docs/id_rsa.md', 'docs/id_ed25519_backup.txt'] as $path) {
+            $protected = [...$this->arguments, 'path' => $path];
+            try {
+                \enqueueRemoteReadonlyJob($this->runtimeDb, $this->deployment,
+                    'workspace.write_text', $protected, true);
+                self::fail('Protected path must be rejected before enqueue: ' . $path);
+            } catch (\InvalidArgumentException $error) {
+                // The same restricted worker must never persist this content.
+            }
         }
         $query = $this->db->prepare(
             "SELECT COUNT(*) FROM dm_remote_readonly_job WHERE deployment_id=? "
