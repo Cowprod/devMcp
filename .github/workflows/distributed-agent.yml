@@ -9,12 +9,8 @@ on:
       - 'public/agent-ping.php'
       - 'src/Distributed/Security/AgentAuthenticator.php'
       - '.github/workflows/distributed-agent.yml'
+  # Run on every PR: changes to the MCP facade can affect agent-facing safety.
   pull_request:
-    paths:
-      - 'deploy/distributed/**'
-      - 'bin/distributed-agent.php'
-      - 'public/distributed-admin.php'
-      - '.github/workflows/distributed-agent.yml'
 jobs:
   bootstrap:
     runs-on: ubuntu-24.04

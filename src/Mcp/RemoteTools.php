@@ -36,6 +36,33 @@ final class RemoteTools
 
     private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
 
+    /**
+     * Read-only checks for a future provisioning request. Even disabled
+     * projects must be detected, not just the currently executable deployments.
+     */
+    public function registeredProjectExists(string $projectId): bool
+    {
+        $query = $this->db->prepare('SELECT id FROM dm_project WHERE id = ? LIMIT 1');
+        $query->execute([$projectId]);
+        return $query->fetchColumn() !== false;
+    }
+
+    public function machineForProvisioningPreview(string $machine): array
+    {
+        $query = $this->db->prepare(
+            'SELECT id, name, status FROM dm_machine WHERE id = ? OR name = ? LIMIT 3'
+        );
+        $query->execute([$machine, $machine]);
+        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
+        if (count($rows) !== 1) {
+            throw new InvalidArgumentException(
+                count($rows) === 0 ? 'Machine distante inconnue' : 'Nom de machine ambigu'
+            );
+        }
+        return $rows[0];
+    }
+
+
     public function projects(): array
     {
         $rows = $this->remoteProjectList()['deployments'];

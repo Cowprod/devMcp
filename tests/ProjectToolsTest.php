@@ -83,6 +83,37 @@ final class ProjectToolsTest extends TestCase
         $tools->actionRun('demo', 'remote.read');
     }
 
+    public function testNewLocalProjectCanBePreviewedButNotCreated(): void
+    {
+        $plan = $this->tools([])->projectCreatePreview(
+            'new-project', 'Description', 'Cowprod/new-project', 'create',
+            'local', 'local', '/srv/projects/new-project'
+        );
+        self::assertSame('preview_only', $plan['state']);
+        self::assertTrue($plan['checks']['local_project_id_free']);
+        self::assertFalse($plan['checks']['distributed_registry_checked']);
+        self::assertNull($plan['checks']['distributed_project_id_free']);
+        self::assertFalse($plan['registration']['project_created']);
+    }
+
+    public function testLocalProjectNameCollisionIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->tools([])->projectCreatePreview(
+            'demo', 'Duplicate', 'Cowprod/demo', 'create',
+            'local', 'local', '/srv/projects/demo'
+        );
+    }
+
+    public function testRemotePreviewRefusesAbsentDistributedRegistry(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->tools([])->projectCreatePreview(
+            'new-project', 'Description', 'Cowprod/new-project', 'attach',
+            'remote', 'agent-1', '/srv/projects/new-project'
+        );
+    }
+
     /**
      * @param array<string, array<string, mixed>> $actions
      */

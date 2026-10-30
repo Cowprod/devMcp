@@ -8,6 +8,7 @@ use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
 use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Project\ProjectCreationPreview;
 use InvalidArgumentException;
 
 final class ProjectTools
@@ -43,6 +44,63 @@ final class ProjectTools
             'projects' => $projects,
             'host' => $this->hostTools->capabilities(),
         ];
+    }
+
+    /**
+     * Prepare a project/repository intent without creating either resource.
+     * This endpoint is deliberately read-only, including for remote agents.
+     */
+    public function projectCreatePreview(
+        string $project_id,
+        string $description,
+        string $github_repository,
+        string $repository_mode,
+        string $target,
+        string $machine,
+        string $workspace_path,
+    ): array {
+        $preview = ProjectCreationPreview::prepare(
+            $project_id, $description, $github_repository, $repository_mode,
+            $target, $machine, $workspace_path
+        );
+        $id = $preview['project']['id'];
+        if (isset($this->projects->all()[$id])) {
+            throw new InvalidArgumentException('Projet local deja enregistre');
+        }
+        // The distributed registry includes disabled projects invisible to project_list.
+        $centralChecked = $this->remoteTools !== null;
+        if ($centralChecked && $this->remoteTools->registeredProjectExists($id)) {
+            throw new InvalidArgumentException('Projet distribue deja enregistre');
+        }
+
+        if ($target === 'remote') {
+            if ($this->remoteTools === null) {
+                throw new InvalidArgumentException('Registre distant indisponible');
+            }
+            $remoteMachine = $this->remoteTools->machineForProvisioningPreview($machine);
+            $preview['destination']['machine'] = $remoteMachine['name'];
+            $preview['destination']['machine_id'] = $remoteMachine['id'];
+            $preview['destination']['machine_status'] = $remoteMachine['status'];
+        } else {
+            $hostname = gethostname();
+            if ($machine !== 'local' && ($hostname === false || $machine !== $hostname)) {
+                throw new InvalidArgumentException('Machine locale inconnue : utiliser local');
+            }
+            $preview['destination']['machine'] = $hostname ?: 'local';
+            $preview['destination']['machine_id'] = null;
+            $preview['destination']['machine_status'] = 'local';
+        }
+
+        $preview['checks'] = [
+            'local_project_id_free' => true,
+            'distributed_registry_checked' => $centralChecked,
+            'distributed_project_id_free' => $centralChecked ? true : null,
+            'machine_identity_checked' => true,
+            'github_repository_checked' => false,
+            'workspace_policy_checked' => false,
+        ];
+        $preview['next_step'] = 'Provisioning disabled: approve separate GitHub and machine policies before mutation';
+        return $preview;
     }
 
     /**
