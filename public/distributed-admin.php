@@ -464,7 +464,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 </div></section>
 <h2 class="h5">Affectations</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th><th>Diagnostic</th><th>Branche</th><th>Commit</th><th>Contrôle UTC</th></tr></thead><tbody>
-<?php foreach ($deployments as $deployment): ?><tr data-record-id="<?= e($deployment['id']) ?>" data-enabled="<?= $deployment['enabled'] ? '1' : '0' ?>"><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
+<?php foreach ($deployments as $deployment): ?><tr data-record-id="<?= e($deployment['id']) ?>" data-enabled="<?= $deployment['enabled'] ? '1' : '0' ?>" data-machine-status="<?= e($deployment['machine_status']) ?>"><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 </section>
 <section class="admin-panel" id="panel-android" data-panel="android"><h2 class="h5" id="android-adb">Android / ADB sur touchdeck</h2>
@@ -799,24 +799,69 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
       const projectId=row.cells[0].textContent.trim();
       const deployments=registry.deployments?.rows.filter(r=>r.cells[0].textContent.trim()===projectId)||[];
       if(localActions.length){
-        const label=el('h4','small text-secondary mt-3','Actions locales déclarées');
-        list.appendChild(label);
+        list.appendChild(el('h4','small text-secondary mt-3','Actions locales déclarées'));
         localActions.forEach(action=>{
           const line=el('div','registry-action-entry');
           line.appendChild(el('code','',action));
-          line.appendChild(el('span','badge bg-secondary','Configuration locale'));
+          line.appendChild(el('span','badge '+(document.documentElement.dataset.localInventoryFresh==='1'?'bg-secondary':'bg-warning'),
+            document.documentElement.dataset.localInventoryFresh==='1'?'Configuration locale':'Instantané périmé'));
           list.appendChild(line);
         });
+        list.appendChild(el('p','small text-secondary mt-2','Les autorisations locales proviennent de la configuration privée de devMcp ; elles ne sont pas modifiables depuis le registre distribué.'));
       }
       if(deployments.length){
-        list.appendChild(el('h4','small text-secondary mt-3','Actions distantes possibles (liste de lecture seule)'));
-        ['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'].forEach(action=>{
-          const line=el('div','registry-action-entry');
-          line.appendChild(el('code','',action));
-          line.appendChild(el('span','badge bg-info text-dark','Soumise à la politique de la machine'));
-          list.appendChild(line);
+        list.appendChild(el('h4','small text-secondary mt-3','Actions distantes par affectation'));
+        deployments.forEach(deployment=>{
+          const machine=deployment.cells[1].textContent.trim();
+          const enabled=deployment.dataset.enabled==='1';
+          const approved=deployment.dataset.machineStatus==='active';
+          const box=el('div','border rounded p-3 mt-2');
+          const top=el('div','d-flex align-items-center gap-2 flex-wrap mb-2');
+          top.appendChild(el('strong','',machine));
+          const status=enabled&&approved?'Éligible côté registre':!enabled?'Affectation désactivée':'Machine non approuvée';
+          top.appendChild(el('span','badge '+(enabled&&approved?'bg-info text-dark':'bg-secondary'),status));
+          const index=registry.deployments.rows.indexOf(deployment);
+          top.appendChild(link('deployments',index,'Voir l’affectation'));
+          box.appendChild(top);
+          if(!enabled||!approved){
+            box.appendChild(el('p','small text-secondary mb-0','Aucune action ne peut être mise en file sur cette affectation dans son état actuel.'));
+            list.appendChild(box);return;
+          }
+          const csrf=document.querySelector('input[name="csrf"]')?.value;
+          if(!csrf){
+            box.appendChild(el('p','small text-secondary mb-0','Formulaire indisponible : session non initialisée.'));
+            list.appendChild(box);return;
+          }
+          const form=el('form');form.method='post';form.action='/';
+          function hidden(name,value){const input=el('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);}
+          hidden('csrf',csrf);hidden('operation','remote.readonly.enqueue');
+          hidden('deployment_id',deployment.dataset.recordId);
+          const actionGroup=el('div','input-group input-group-sm mb-2');
+          const actions=el('select','form-select');actions.name='action_name';
+          ['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'].forEach(name=>{
+            const option=el('option','',name);option.value=name;actions.appendChild(option);
+          });
+          actionGroup.append(el('span','input-group-text','Action'),actions);
+          const pathGroup=el('div','input-group input-group-sm mb-2');
+          const path=el('input','form-control');path.name='path';path.value='.';path.maxLength=512;
+          pathGroup.append(el('span','input-group-text','Chemin'),path);
+          const filterGroup=el('div','input-group input-group-sm mb-2');
+          const filter=el('select','form-select');filter.name='filter';
+          ['all','php','js','json','md'].forEach(name=>{
+            const option=el('option','',name);option.value=name;filter.appendChild(option);
+          });
+          filterGroup.append(el('span','input-group-text','Filtre'),filter);
+          const updateFields=()=>{
+            pathGroup.classList.toggle('d-none',actions.value==='git.head');
+            filterGroup.classList.toggle('d-none',actions.value!=='workspace.find');
+          };
+          actions.addEventListener('change',updateFields);updateFields();
+          const submit=el('button','btn btn-success btn-sm','Mettre en file');submit.type='submit';
+          form.append(actionGroup,pathGroup,filterGroup,submit);
+          box.appendChild(form);
+          list.appendChild(box);
         });
-        list.appendChild(el('p','small text-secondary mt-2','La disponibilité effective dépend de l’affectation, de l’état de la machine et de sa politique locale.'));
+        list.appendChild(el('p','small text-secondary mt-2','La mise en file reste soumise aux contrôles serveur et à la politique locale de chaque agent. « Éligible côté registre » ne garantit ni exécution ni disponibilité de l’agent.'));
       }
       if(!localActions.length&&!deployments.length){
         list.appendChild(el('p','text-secondary small','Aucune action publiée pour ce projet.'));
@@ -841,6 +886,8 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     }
   }
   Object.keys(specs).forEach(build);
+  // Cross-record links are only complete once all three registries exist.
+  Object.keys(specs).forEach(name=>{if(registry[name]?.rows.length)select(name,0);});
 })();
 </script>
 </body></html>
