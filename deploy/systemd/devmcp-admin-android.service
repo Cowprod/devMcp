@@ -1,0 +1,15 @@
+[Unit]
+Description=Inventaire ADB local et captures d'écran pour devMcp Admin
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=devmcp
+Group=devmcp
+Environment=HOME=/var/lib/devmcp
+UMask=0027
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-admin-android
+TimeoutStartSec=100
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=no
