@@ -70,7 +70,7 @@ final class AndroidSnapshotTest extends TestCase
             $pending = AndroidSnapshot::screenshotStatus($serial, $root . '/requests', $root . '/screenshots');
             self::assertTrue($pending['pending']);
             self::assertFalse($pending['ready']);
-            file_put_contents($root . '/screenshots/' . $serial . '.png', "\\x89PNG\\r\\n\\x1a\\n" . str_repeat('x', 70));
+            file_put_contents($root . '/screenshots/' . $serial . '.png', "\x89PNG\r\n\x1a\n" . str_repeat('x', 70));
             unlink($request);
             $done = AndroidSnapshot::screenshotStatus($serial, $root . '/requests', $root . '/screenshots');
             self::assertFalse($done['pending']);
