@@ -38,6 +38,7 @@ jobs:
           sh -n deploy/apply-vm-runtime.sh
           sh -n deploy/install-touchdeck-ota.sh
           bash -n deploy/distributed/install-local-admin-bridge.sh
+          bash -n deploy/distributed/apply-local-admin-bridge.sh
       - name: Smoke-test workspace inspection boundaries
         run: |
           mkdir -p /tmp/devmcp-inspect-fixture/sub
