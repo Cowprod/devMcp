@@ -296,6 +296,8 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .registry-sidebar .btn-success.active{box-shadow:inset 0 0 0 2px #fff}
 .registry-detail>.card .row{margin-left:0;margin-right:0}
 .registry-detail>.card .row>[class*="col-"]{width:100%;max-width:none;padding:0}
+.registry-create-form{max-width:100%}
+.registry-create-form .input-group-text{width:25%;min-width:130px}
 .registry-detail>.card .card{box-shadow:none}
 .registry-sidebar h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:#b5bdd0;margin:.2rem .5rem .8rem}
 .registry-entry{display:block;width:100%;border:0;border-radius:.45rem;background:transparent;color:#e9edf8;text-align:left;padding:.7rem .75rem;margin-bottom:.3rem;overflow-wrap:anywhere}
@@ -662,15 +664,22 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     const creationForm=Array.from(panel.querySelectorAll('form')).find(f=>f.querySelector('input[name="operation"]')?.value===operations[name]);
     const creationRoot=creationForm?.closest('.row')||creationForm?.closest('.card');
     if(!creationRoot)return;
+    // Keep only the existing creation form and its explanatory note, not the nested card.
+    const creationView=el('div','registry-create-form');
+    creationView.appendChild(creationForm);
+    const note=creationForm.nextElementSibling;
+    if(note&&note.tagName==='SMALL')creationView.appendChild(note);
     creationRoot.remove();
     const add=el('button','btn btn-success btn-sm w-100 mb-3',name==='machines'?'Ajouter une machine':name==='projects'?'Ajouter un projet':'Ajouter une affectation');
     add.type='button';add.addEventListener('click',()=>showCreate(name));side.appendChild(add);
     const detail=el('div','card'), body=el('div','card-body');detail.appendChild(body);content.appendChild(detail);
-    const overview=el('details','registry-overview');const summary=el('summary','','Vue globale');overview.appendChild(summary);
-    Array.from(panel.children).forEach(node=>overview.appendChild(node));
-    const parked=el('div','d-none');parked.appendChild(creationRoot);content.appendChild(parked);
-    content.appendChild(overview);layout.append(side,content);panel.appendChild(layout);
-    registry[name]={rows,side,body,spec,creationRoot,parked,add};
+    // Old tables stay in the DOM solely as source data and for their existing controls.
+    const parked=el('div','d-none');
+    Array.from(panel.children).forEach(node=>parked.appendChild(node));
+    parked.appendChild(creationView);
+    const remoteAction=name==='deployments'?parked.querySelector('input[name="operation"][value="remote.readonly.enqueue"]')?.closest('section.card'):null;
+    content.appendChild(parked);layout.append(side,content);panel.appendChild(layout);
+    registry[name]={rows,side,body,spec,creationView,parked,add,remoteAction,enrollmentForms:[]};
     rows.forEach((tr,i)=>{
       const cells=Array.from(tr.cells), title=cells[spec.key].textContent.trim(), subtitle=cells[spec.sub].textContent.trim();
       const button=el('button','registry-entry');button.type='button';button.dataset.index=String(i);
@@ -683,10 +692,13 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     const state=registry[name];if(!state)return;
     state.side.querySelectorAll('.registry-entry').forEach(button=>{button.classList.remove('active');button.setAttribute('aria-pressed','false');});
     state.add.classList.add('active');state.add.setAttribute('aria-pressed','true');
+    if(state.remoteAction)state.parked.appendChild(state.remoteAction);
+    state.enrollmentForms.forEach(({form,cell})=>cell.appendChild(form));
+    state.enrollmentForms=[];
     state.body.replaceChildren();
     state.body.appendChild(el('h2','h5 mb-3',state.add.textContent.trim()));
-    state.body.appendChild(state.creationRoot);
-    state.creationRoot.querySelector('input:not([type="hidden"]),select')?.focus();
+    state.body.appendChild(state.creationView);
+    state.creationView.querySelector('input:not([type="hidden"]),select')?.focus();
   }
   function link(name,index,label) {
     const b=el('button','btn btn-sm btn-secondary',label);b.type='button';
@@ -710,12 +722,15 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     state.side.querySelectorAll('.registry-entry').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',i===index?'true':'false');});
     const row=state.rows[index],body=state.body;
     state.add.classList.remove('active');state.add.setAttribute('aria-pressed','false');
-    state.parked.appendChild(state.creationRoot);
+    state.parked.appendChild(state.creationView);
+    if(state.remoteAction)state.parked.appendChild(state.remoteAction);
+    state.enrollmentForms.forEach(({form,cell})=>cell.appendChild(form));
+    state.enrollmentForms=[];
     body.replaceChildren();
     const header=el('div','registry-toolbar');header.appendChild(el('h2','h5 mb-0',row.cells[state.spec.key].textContent.trim()));
     body.appendChild(header);
     const fields=el('dl','registry-fields mt-3');
-    Array.from(row.cells).forEach((cell,i)=>{fields.appendChild(el('dt','',state.spec.columns[i]));const dd=el('dd');if(cell.querySelector('form,button,input,select')){dd.textContent=cell.textContent.trim()||'Voir la vue globale';}else{dd.textContent=cell.textContent.trim()||'—';}fields.appendChild(dd);});body.appendChild(fields);
+    Array.from(row.cells).forEach((cell,i)=>{fields.appendChild(el('dt','',state.spec.columns[i]));const dd=el('dd');if(cell.querySelector('form,button,input,select')){dd.textContent=cell.textContent.trim()||'—';}else{dd.textContent=cell.textContent.trim()||'—';}fields.appendChild(dd);});body.appendChild(fields);
     // Editable registry metadata only; local projects and enabled deployments remain read-only.
     const id=row.dataset.recordId||'', csrf=document.querySelector('input[name="csrf"]')?.value;
     const canEdit=!!csrf && ((name==='machines'&&!!id)
@@ -758,8 +773,19 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
       body.appendChild(el('p','small text-secondary mt-3','Affectation active : édition du répertoire verrouillée.'));
     }
     related(name,row,body);
-    if(name==='deployments'){
-      const action=body.closest('.registry-detail').querySelector('form input[name="operation"][value="remote.readonly.enqueue"]');
+    if(name==='machines'){
+      // Enrollment and approval remain associated with their own machine, not a global list.
+      const enrollment=row.querySelectorAll('form');
+      enrollment.forEach(form=>{state.enrollmentForms.push({form,cell:form.parentElement});body.appendChild(form);});
+    }
+    if(name==='deployments'&&state.remoteAction){
+      const section=state.remoteAction;
+      section.classList.remove('card','remote-action-card');
+      section.classList.add('mt-4');
+      const inner=section.querySelector('.card-body');
+      if(inner)inner.classList.remove('card-body');
+      body.appendChild(section);
+      const action=section.querySelector('form input[name="operation"][value="remote.readonly.enqueue"]');
       if(action){const select=action.closest('form').querySelector('select[name="deployment_id"]');if(select){const label=row.cells[0].textContent.trim()+' / '+row.cells[1].textContent.trim();const option=Array.from(select.options).find(o=>o.textContent.trim()===label);if(option)select.value=option.value;}}
     }
   }
