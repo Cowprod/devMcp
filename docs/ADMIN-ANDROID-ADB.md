@@ -11,33 +11,33 @@ Le tableau indique le numéro de série, le modèle, la version Android, l'état
 ADB, le pourcentage de batterie et l'espace libre disponible (si ces deux
 mesures sont accessibles).
 
-Le bouton Capture d'écran crée un fichier \`.req\` vide, nommé avec un identifiant
+Le bouton Capture d'écran crée un fichier `.req` vide, nommé avec un identifiant
 aléatoire et un numéro de série autorisé par l'inventaire récent. Le service
 devmcp traite au plus quatre demandes par passage après revérification que
 la tablette est réellement connectée et autorisée. La capture est réalisée
-par \`adb -s SERIAL exec-out screencap -p\` sans shell et sa signature PNG est
+par `adb -s SERIAL exec-out screencap -p` sans shell et sa signature PNG est
 vérifiée avant publication. Les fichiers PNG sont disponibles uniquement via
-la page HTTPS authentifiée (route \`/?adb_image=SERIAL\`).
+la page HTTPS authentifiée (route `/?adb_image=SERIAL`).
 
 Aucun dossier Android n'est effacé ou exploré par ce service. Aucune opération
-d'écriture ADB (\`push\`, \`install\`, \`rm\`, \`am force-stop\`) n'est exposée.
+d'écriture ADB (`push`, `install`, `rm`, `am force-stop`) n'est exposée.
 
 ## Fichiers, permissions
 
-Le pont utilise \`/var/lib/devmcp-admin-bridge\`, séparé du répertoire
-privé \`/var/lib/devmcp\` qui n'est pas accessible à www-data.
+Le pont utilise `/var/lib/devmcp-admin-bridge`, séparé du répertoire
+privé `/var/lib/devmcp` qui n'est pas accessible à www-data.
 
-- \`projects.json\` : métadonnées du runtime local (0640).
-- \`android.json\` : inventaire et détails du dernier passage (0640).
-- \`requests/\` : permissions de création réservées à www-data ; fichiers
+- `projects.json` : métadonnées du runtime local (0640).
+- `android.json` : inventaire et détails du dernier passage (0640).
+- `requests/` : permissions de création réservées à www-data ; fichiers
   vides à nom contraint, jamais de commande arbitraire.
-- \`screenshots/\` : PNG créés par devmcp, lus par www-data (0640).
+- `screenshots/` : PNG créés par devmcp, lus par www-data (0640).
 
 Répertoires : propriétaire devmcp, groupe www-data ; bit setgid. Les
 fichiers sont publiés par renommage atomique. Le processus web ne reçoit
-pas le droit de lecture de \`/etc/devmcp/global.php\` ni le droit d'exécuter
+pas le droit de lecture de `/etc/devmcp/global.php` ni le droit d'exécuter
 ADB. Une capture n'est acceptée qu'avec un CSRF valide et un appareil vu
-comme \`device\` dans un instantané âgé de moins de deux minutes.
+comme `device` dans un instantané âgé de moins de deux minutes.
 
 Le service est limité par des délais d'exécution ADB et par une taille
 de PNG maximale de 12 Mio. La file web est limitée à 20 demandes
@@ -46,23 +46,23 @@ de PNG maximale de 12 Mio. La file web est limitée à 20 demandes
 ## Activation
 
 Installer d'abord **les mêmes commits testés** dans les deux checkouts :
-\`/opt/devmcp\` (MCP) et \`/opt/devmcp-admin\` (application web).
-Ne pas écraser les configurations \`/etc/devmcp\` ni \`/etc/devmcp-admin\`.
+`/opt/devmcp` (MCP) et `/opt/devmcp-admin` (application web).
+Ne pas écraser les configurations `/etc/devmcp` ni `/etc/devmcp-admin`.
 
 Une fois ces deux installations synchronisées, lancer :
 
-\`\`\`sh
+```sh
 sudo bash /opt/devmcp/deploy/distributed/install-local-admin-bridge.sh
-\`\`\`
+```
 
 Le script vérifie la présence des deux copies, les groupes système, la syntaxe
 PHP, les permissions de publication et active les services/timers systemd.
 
 Contrôles de lecture possibles, sans intervention sur les tablettes :
 
-\`\`\`sh
+```sh
 systemctl status devmcp-admin-projects.timer devmcp-admin-android.timer --no-pager
-\`\`\`
+```
 
 L'inventaire est une observation périodique : son horodatage UTC est toujours
 visible. Si ADB est hors service, la page doit annoncer l'indisponibilité et
