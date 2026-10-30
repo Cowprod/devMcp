@@ -79,6 +79,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if (!$online || !is_dir(AndroidSnapshot::REQUEST_DIRECTORY)) {
                 throw new InvalidArgumentException('Appareil ADB indisponible ou inventaire périmé.');
             }
+            $queued = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.req') ?: [];
+            if (count($queued) >= 20) {
+                throw new InvalidArgumentException('File de captures saturée (20 demandes maximum).');
+            }
+            foreach ($queued as $file) {
+                if (str_ends_with($file, '-' . $serial . '.req')) {
+                    throw new InvalidArgumentException('Une capture est déjà en attente pour cet appareil.');
+                }
+            }
             $request = AndroidSnapshot::REQUEST_DIRECTORY . '/' . bin2hex(random_bytes(16)) . '-' . $serial . '.req';
             $handle = @fopen($request, 'x');
             if ($handle === false) {
@@ -170,6 +179,8 @@ try {
 }
 // Keep distributed registry writes separate from local runtime definitions.
 $localSnapshot = LocalProjectSnapshot::read(LocalProjectSnapshot::DEFAULT_PATH);
+$localFresh = $localSnapshot['ok']
+    && strtotime($localSnapshot['generated_at_utc']) >= time() - 600;
 $projectRows = [];
 foreach ($projects as $project) {
     $projectRows[$project['id']] = [
@@ -342,7 +353,7 @@ $pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?
 <?php if ($localSnapshot['ok']): ?>
 <tr><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
 <td><?= e($localSnapshot['host']['architecture']) ?></td><td><span class="badge bg-info">Local</span></td>
-<td><span class="badge bg-success">devMcp actif</span></td><td>—</td>
+<td><span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Hôte local' : 'Instantané périmé' ?></span></td><td>—</td>
 <td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
 <?php endif; ?>
 <?php foreach ($machines as $machine): ?>
@@ -353,7 +364,9 @@ $pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?
 <?php if (!$localSnapshot['ok']): ?>
 <div class="alert alert-warning">Catalogue local indisponible : <?= e($localSnapshot['reason']) ?>. Les projets distribués restent visibles. Aucun accès direct à la configuration privée depuis le serveur web.</div>
 <?php else: ?>
-<p class="small text-secondary">Catalogue local publié le <?= e($localSnapshot['generated_at_utc']) ?> UTC. Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
+<p class="small text-secondary">Catalogue local publié le <?= e($localSnapshot['generated_at_utc']) ?> UTC
+<span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Actualisé' : 'Périmé' ?></span>.
+Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
 <?php endif; ?>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
