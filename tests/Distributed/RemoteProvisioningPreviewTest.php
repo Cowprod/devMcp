@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Tests\Distributed;
 
-use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Mcp\RemoteTools;
 use InvalidArgumentException;
 use PDO;
