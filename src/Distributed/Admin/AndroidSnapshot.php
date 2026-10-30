@@ -48,6 +48,7 @@ final class AndroidSnapshot
                 'android_version' => '',
                 'battery_percent' => null,
                 'storage_free_gb' => null,
+                'multicam_pid' => null,
             ];
         }
         return array_values($devices);
@@ -85,6 +86,9 @@ final class AndroidSnapshot
                     $device['storage_free_gb'] = round((int) $fields[3] / 1048576, 2);
                 }
             }
+            // Lightweight, read-only process status; the process may exit between snapshots.
+            $pidOutput = self::run([self::ADB, '-s', $serial, 'shell', 'pidof', self::DIAGNOSTIC_PACKAGE], 4);
+            $device['multicam_pid'] = is_string($pidOutput) ? self::parseMainPid($pidOutput) : null;
         }
         unset($device);
         return ['schema_version' => 1, 'generated_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
