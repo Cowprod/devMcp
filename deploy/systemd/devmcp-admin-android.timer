@@ -1,0 +1,12 @@
+[Unit]
+Description=Actualise l'inventaire ADB pour devMcp Admin
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Persistent=true
+Unit=devmcp-admin-android.service
+
+[Install]
+WantedBy=timers.target
