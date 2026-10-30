@@ -19,6 +19,16 @@ par `adb -s SERIAL exec-out screencap -p` sans shell et sa signature PNG est
 vérifiée avant publication. Les fichiers PNG sont disponibles uniquement via
 la page HTTPS authentifiée (route `/?adb_image=SERIAL`).
 
+Le bouton **Logs MultiCam** demande, via la même file contrôlée, les 200 dernières lignes
+`logcat` du **processus actif** `fr.emmanuel.multicam` seulement. Le worker
+résout son PID avec `adb shell pidof` puis utilise `adb logcat -d -t 200 --pid=PID` :
+le tampon Android n'est jamais vidé et l'application n'est jamais interrompue.
+Si elle n'est pas active, l'interface indique que le journal est indisponible.
+Les journaux sont bornés à 130 Ko, accessibles uniquement en HTTPS authentifié
+(`/?adb_log=SERIAL`), puis supprimés automatiquement après 15 minutes.
+Ils peuvent contenir des informations sensibles émises par l'application ; ne pas
+les transmettre à des tiers sans les relire.
+
 Aucun dossier Android n'est effacé ou exploré par ce service. Aucune opération
 d'écriture ADB (`push`, `install`, `rm`, `am force-stop`) n'est exposée.
 
@@ -32,6 +42,7 @@ privé `/var/lib/devmcp` qui n'est pas accessible à www-data.
 - `requests/` : permissions de création réservées à www-data ; fichiers
   vides à nom contraint, jamais de commande arbitraire.
 - `screenshots/` : PNG créés par devmcp, lus par www-data (0640).
+- `logs/` : diagnostics textuels temporaires, privés, groupe www-data (0640).
 
 Répertoires : propriétaire devmcp, groupe www-data ; bit setgid. Les
 fichiers sont publiés par renommage atomique. Le processus web ne reçoit
@@ -72,6 +83,6 @@ ne pas permettre de demander une capture.
 
 - Pas de streaming de l'écran, seulement un PNG sur demande.
 - Pas de contrôle à distance tactile.
-- Pas de consultation de logcat et de copie de fichiers dans cette version.
+- Consultation de logcat limitée au PID MultiCam actif ; pas de recherche arbitraire dans les journaux système ni de copie de fichiers Android.
 - Les captures précédentes sont remplacées pour un numéro de série donné.
 - Un utilisateur avec accès administrateur HTTPS voit les captures réalisées.
