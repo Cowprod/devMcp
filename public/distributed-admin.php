@@ -49,6 +49,22 @@ if (isset($_GET['adb_image'])) {
     fclose($stream);
     exit;
 }
+// Application-scoped logcat is kept for at most 15 minutes and only served over authenticated HTTPS.
+if (isset($_GET['adb_log'])) {
+    $serial = (string) $_GET['adb_log'];
+    $file = AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.log';
+    if (!AndroidSnapshot::validSerial($serial) || is_link($file) || !is_file($file)
+        || !is_readable($file) || filesize($file) > 131072 || filesize($file) < 20
+        || filemtime($file) < time() - 900) {
+        http_response_code(404);
+        exit('Journal indisponible ou expiré');
+    }
+    header('Content-Type: text/plain; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: inline; filename="multicam-' . $serial . '.log"');
+    readfile($file);
+    exit;
+}
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $androidSnapshot = AndroidSnapshot::read();
@@ -65,7 +81,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit('Invalid CSRF token');
     }
     try {
-        if (($_POST['operation'] ?? '') === 'android.screenshot.request') {
+        if (in_array(($_POST['operation'] ?? ''), ['android.screenshot.request', 'android.log.request'], true)) {
+            $isLog = ($_POST['operation'] === 'android.log.request');
+            $extension = $isLog ? '.logreq' : '.req';
             $serial = (string) ($_POST['device'] ?? '');
             $online = false;
             if ($adbFresh && AndroidSnapshot::validSerial($serial)) {
@@ -79,22 +97,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if (!$online || !is_dir(AndroidSnapshot::REQUEST_DIRECTORY)) {
                 throw new InvalidArgumentException('Appareil ADB indisponible ou inventaire périmé.');
             }
-            $queued = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.req') ?: [];
+            $queued = array_merge(
+                glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.req') ?: [],
+                glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.logreq') ?: [],
+            );
             if (count($queued) >= 20) {
-                throw new InvalidArgumentException('File de captures saturée (20 demandes maximum).');
+                throw new InvalidArgumentException('File ADB saturée (20 demandes maximum).');
             }
             foreach ($queued as $file) {
-                if (str_ends_with($file, '-' . $serial . '.req')) {
-                    throw new InvalidArgumentException('Une capture est déjà en attente pour cet appareil.');
+                if (str_ends_with($file, '-' . $serial . $extension)) {
+                    throw new InvalidArgumentException('Une demande identique est déjà en attente pour cet appareil.');
                 }
             }
-            $request = AndroidSnapshot::REQUEST_DIRECTORY . '/' . bin2hex(random_bytes(16)) . '-' . $serial . '.req';
+            $request = AndroidSnapshot::REQUEST_DIRECTORY . '/' . bin2hex(random_bytes(16)) . '-' . $serial . $extension;
             $handle = @fopen($request, 'x');
             if ($handle === false) {
-                throw new RuntimeException('Impossible de mettre la capture en file.');
+                throw new RuntimeException('Impossible de mettre la demande ADB en file.');
             }
             fclose($handle);
-            header('Location: /?adb_pending=' . rawurlencode($serial), true, 303);
+            header('Location: /?adb_pending=' . rawurlencode($serial) . '&adb_kind=' . ($isLog ? 'journal' : 'capture'), true, 303);
             exit;
         }
         if (!isset($config['writer_username'], $config['writer_password'])) {
@@ -320,19 +341,27 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <span class="badge <?= $adbFresh ? 'bg-success' : 'bg-warning' ?>"><?= $adbFresh ? 'Actualisé' : 'Périmé' ?></span>
 <?php if (!$androidSnapshot['adb_available']): ?> · ADB indisponible sur l'hôte.<?php endif; ?>
 </p>
-<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
+<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Demande de <?= ($_GET['adb_kind'] ?? '') === 'journal' ? 'journal' : 'capture' ?> enregistrée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
 <div class="table-responsive"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th></tr></thead>
+<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th><th>Journal MultiCam</th></tr></thead>
 <tbody>
 <?php foreach ($androidSnapshot['devices'] as $device): ?>
 <?php $serial = $device['serial']; $shot = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
-$pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?: []; ?>
+$pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?: [];
+$logFile = AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.log';
+$logPending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.logreq') ?: []; ?>
 <tr><td>
 <form method="post" action="/" class="d-inline">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
 <input type="hidden" name="operation" value="android.screenshot.request">
 <input type="hidden" name="device" value="<?= e($serial) ?>">
 <button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera"></i> Capture</button>
+</form>
+<form method="post" action="/" class="d-inline">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="android.log.request">
+<input type="hidden" name="device" value="<?= e($serial) ?>">
+<button type="submit" class="btn btn-sm btn-success" title="Derniers journaux MultiCam du processus actif, sans effacement" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-file-lines"></i> Logs</button>
 </form></td>
 <td><code><?= e($serial) ?></code></td>
 <td><span class="badge <?= $device['state'] === 'device' && $adbFresh ? 'bg-success' : 'bg-secondary' ?>"><?= e($device['state']) ?></span></td>
@@ -341,9 +370,11 @@ $pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?
 <td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
 <td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
-<?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
+<?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td>
+<td><?php if ($logPending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
+<?php if (is_file($logFile) && !is_link($logFile) && filemtime($logFile) >= time() - 900): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_log=<?= rawurlencode($serial) ?>">Consulter (<?= e(gmdate('d/m H:i', (int) filemtime($logFile))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">MultiCam inactive ou logs indisponibles</span><?php else: ?>—<?php endif; ?></td></tr>
 <?php endforeach; ?>
-<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="8">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
+<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="9">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
 </tbody></table></div>
 <?php endif; ?>
 </div></div>
