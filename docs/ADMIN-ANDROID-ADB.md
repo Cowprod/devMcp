@@ -75,3 +75,30 @@ ne pas permettre de demander une capture.
 - Pas de consultation de logcat et de copie de fichiers dans cette version.
 - Les captures précédentes sont remplacées pour un numéro de série donné.
 - Un utilisateur avec accès administrateur HTTPS voit les captures réalisées.
+
+## Ergonomie et identification des appareils
+
+- Après la demande d'une capture, la page reste sur la section Android/ADB.
+  L'état « En attente » expose un bouton d'actualisation et une interrogation
+  HTTPS du statut toutes les 3 secondes (80 passages au maximum) ; l'image est
+  insérée sans recharger toute la page une fois la demande terminée.
+- Les aperçus existants ouvrent une fenêtre modale avec téléchargement PNG.
+  Le navigateur ajoute un paramètre de cache distinct à chaque nouvelle image.
+- Un libellé local libre (par exemple « Capture B », « Master » ou « Storage »)
+  peut être enregistré par l'administrateur pour chaque numéro de série ADB.
+  Il est conservé côté serveur dans le dossier privé
+  `/var/lib/devmcp-admin-bridge/labels`, propriété de `www-data`.
+  Le numéro de série reste la seule clé technique ; ce libellé ne modifie
+  ni le nom ni le rôle de la tablette dans MultiCam.
+- Le worker lit séparément `getprop net.hostname` (hôte réseau, parfois vide)
+  et `settings get global device_name` (nom Android défini dans les paramètres).
+  Si aucune information n'est fournie par l'appareil, la colonne indique « — ».
+- Le point de lecture `/?adb_status=SERIAL` renvoie uniquement l'état
+  `pending/ready/error/mtime` d'une capture d'un appareil connu, sous la même
+  authentification HTTPS que l'administration. Aucun accès anonyme aux images
+  ou aux états n'est exposé.
+
+Après mise à jour du code dans les **deux** installations, le script de
+déploiement `install-local-admin-bridge.sh` crée le dossier `labels` avec
+les permissions adéquates. Les libellés survivent aux redémarrages et aux
+mises à jour Git, et ne sont pas intégrés à l'inventaire ADB régénéré.
