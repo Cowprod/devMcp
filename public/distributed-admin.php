@@ -371,7 +371,12 @@ $logPending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.logr
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
 <td><?php if (!$adbFresh || $device['state'] !== 'device' || !array_key_exists('multicam_pid', $device)): ?>—
 <?php elseif ($device['multicam_pid'] === null): ?><span class="badge bg-secondary">Inactif</span>
-<?php else: ?><span class="badge bg-success">Actif (PID <?= e($device['multicam_pid']) ?>)</span><?php endif; ?></td>
+<?php else: ?><span class="badge bg-success">Actif (PID <?= e($device['multicam_pid']) ?>)</span><?php endif; ?>
+<?php if (is_string($device['multicam_version_name'] ?? null) && $device['multicam_version_name'] !== ''): ?>
+<br><small class="text-secondary">Version installée : <?= e($device['multicam_version_name']) ?><?php if (is_string($device['multicam_version_code'] ?? null)): ?> (code <?= e($device['multicam_version_code']) ?>)<?php endif; ?></small>
+<?php elseif (is_string($device['multicam_version_code'] ?? null)): ?>
+<br><small class="text-secondary">Version installée : code <?= e($device['multicam_version_code']) ?></small>
+<?php endif; ?></td>
 <td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
 <?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td>
 <td><?php if ($logPending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
