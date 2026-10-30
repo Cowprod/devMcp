@@ -343,7 +343,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 </p>
 <?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Demande de <?= ($_GET['adb_kind'] ?? '') === 'journal' ? 'journal' : 'capture' ?> enregistrée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
 <div class="table-responsive"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th><th>Journal MultiCam</th></tr></thead>
+<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>MultiCam</th><th>Capture précédente</th><th>Journal MultiCam</th></tr></thead>
 <tbody>
 <?php foreach ($androidSnapshot['devices'] as $device): ?>
 <?php $serial = $device['serial']; $shot = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
@@ -369,12 +369,15 @@ $logPending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.logr
 <td><?= e($device['android_version'] ?: '—') ?></td>
 <td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
+<td><?php if (!$adbFresh || $device['state'] !== 'device' || !array_key_exists('multicam_pid', $device)): ?>—
+<?php elseif ($device['multicam_pid'] === null): ?><span class="badge bg-secondary">Inactif</span>
+<?php else: ?><span class="badge bg-success">Actif (PID <?= e($device['multicam_pid']) ?>)</span><?php endif; ?></td>
 <td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
 <?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td>
 <td><?php if ($logPending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
 <?php if (is_file($logFile) && !is_link($logFile) && filemtime($logFile) >= time() - 900): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_log=<?= rawurlencode($serial) ?>">Consulter (<?= e(gmdate('d/m H:i', (int) filemtime($logFile))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">MultiCam inactive ou logs indisponibles</span><?php else: ?>—<?php endif; ?></td></tr>
 <?php endforeach; ?>
-<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="9">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
+<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="10">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
 </tbody></table></div>
 <?php endif; ?>
 </div></div>
