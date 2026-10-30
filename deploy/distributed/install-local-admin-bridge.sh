@@ -24,6 +24,8 @@ php -l /opt/devmcp-admin/public/distributed-admin.php
 systemctl daemon-reload
 systemctl enable --now devmcp-admin-projects.timer devmcp-admin-android.timer
 systemctl start devmcp-admin-projects.service devmcp-admin-android.service
-test -r /var/lib/devmcp-admin-bridge/projects.json
-test -r /var/lib/devmcp-admin-bridge/android.json
-echo "OK - Catalogue local + inventaire ADB publiés"
+runuser -u www-data -- test -r /var/lib/devmcp-admin-bridge/projects.json
+runuser -u www-data -- test -r /var/lib/devmcp-admin-bridge/android.json
+runuser -u www-data -- test -w /var/lib/devmcp-admin-bridge/requests
+runuser -u devmcp -- test -w /var/lib/devmcp-admin-bridge/screenshots
+echo "OK - Catalogue local + inventaire ADB publiés et accessibles par PHP-FPM"
