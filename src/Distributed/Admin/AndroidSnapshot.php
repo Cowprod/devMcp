@@ -15,6 +15,8 @@ final class AndroidSnapshot
     public const DEFAULT_PATH = '/var/lib/devmcp-admin-bridge/android.json';
     public const REQUEST_DIRECTORY = '/var/lib/devmcp-admin-bridge/requests';
     public const SCREENSHOT_DIRECTORY = '/var/lib/devmcp-admin-bridge/screenshots';
+    public const LOG_DIRECTORY = '/var/lib/devmcp-admin-bridge/logs';
+    private const DIAGNOSTIC_PACKAGE = 'fr.emmanuel.multicam';
     private const ADB = '/usr/bin/adb';
 
     public static function validSerial(string $serial): bool
@@ -162,4 +164,59 @@ final class AndroidSnapshot
             }
         }
     }
+
+    /** Extract the first Android PID. No shell expansion or arbitrary user-selected process. */
+    public static function parseMainPid(string $output): ?string
+    {
+        $output = trim($output);
+        if (!preg_match('/^\d+(?:\s+\d+)*$/D', $output)) {
+            return null;
+        }
+        $parts = preg_split('/\s+/', $output);
+        $pid = $parts[0] ?? '';
+        return strlen($pid) <= 10 && (int) $pid > 0 ? $pid : null;
+    }
+
+    /** Read-only, application-scoped diagnostic. Does not clear logcat or stop the app. */
+    public static function captureLog(string $serial, array $connected): bool
+    {
+        if (!self::validSerial($serial) || !in_array($serial, $connected, true)) {
+            return false;
+        }
+        $pidOutput = self::run(
+            [self::ADB, '-s', $serial, 'shell', 'pidof', self::DIAGNOSTIC_PACKAGE],
+            5,
+        );
+        $pid = is_string($pidOutput) ? self::parseMainPid($pidOutput) : null;
+        if ($pid === null) {
+            return false;
+        }
+        $raw = self::run(
+            [self::ADB, '-s', $serial, 'logcat', '-d', '-t', '200', '--pid=' . $pid, '-v', 'time'],
+            12,
+        );
+        if (!is_string($raw) || trim($raw) === '') {
+            return false;
+        }
+        // Limit retained diagnostics, including hostile or unusually long log messages.
+        $truncated = strlen($raw) > 130000;
+        $text = 'MultiCam logcat (' . self::DIAGNOSTIC_PACKAGE . ', PID ' . $pid . ")\n"
+            . 'Captured UTC: ' . gmdate('Y-m-d\TH:i:s\Z') . "\n"
+            . ($truncated ? "[Derniers 130 Ko du journal uniquement]\n" : '')
+            . ($truncated ? substr($raw, -130000) : $raw);
+        $temp = tempnam(self::LOG_DIRECTORY, '.log-');
+        if ($temp === false) {
+            return false;
+        }
+        try {
+            return file_put_contents($temp, $text, LOCK_EX) === strlen($text)
+                && chmod($temp, 0640)
+                && rename($temp, self::LOG_DIRECTORY . '/' . $serial . '.log');
+        } finally {
+            if (is_file($temp)) {
+                unlink($temp);
+            }
+        }
+    }
+
 }
