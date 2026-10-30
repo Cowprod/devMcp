@@ -261,6 +261,7 @@ foreach ($projects as $project) {
         'origin' => 'Distribué',
         'workspace' => '',
         'actions' => [],
+        'action_details' => [],
     ];
 }
 foreach ($localSnapshot['projects'] as $project) {
@@ -275,10 +276,12 @@ foreach ($localSnapshot['projects'] as $project) {
             'origin' => 'Local',
             'workspace' => '',
             'actions' => [],
+            'action_details' => [],
         ];
     }
     $projectRows[$id]['workspace'] = $project['workspace_path'];
     $projectRows[$id]['actions'] = $project['actions'];
+    $projectRows[$id]['action_details'] = $project['action_details'] ?? [];
 }
 ksort($projectRows);
 
@@ -444,7 +447,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -843,10 +846,23 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       const projectId=row.cells[0].textContent.trim();
       const deployments=registry.deployments?.rows.filter(r=>r.cells[0].textContent.trim()===projectId)||[];
       if(localActions.length){
+        // This JSON is validated by LocalProjectSnapshot and HTML-escaped by PHP.
+        let actionDetails={};
+        try {actionDetails=JSON.parse(row.dataset.actionDetails||'{}');} catch (_) {}
         list.appendChild(el('h4','small text-secondary mt-3','Actions locales déclarées'));
         localActions.forEach(action=>{
           const line=el('div','registry-action-entry');
-          line.appendChild(el('code','',action));
+          const detail=actionDetails[action];
+          const description=el('div','flex-grow-1');
+          description.appendChild(el('code','d-block',action));
+          if(detail && typeof detail.description==='string'){
+            description.appendChild(el('div','small text-secondary',detail.description));
+          }
+          line.appendChild(description);
+          if(detail && Number.isInteger(detail.timeout_seconds) && typeof detail.sync_allowed==='boolean'){
+            line.appendChild(el('span','badge bg-info text-dark',detail.sync_allowed?'Synchrone autorisé':'Asynchrone uniquement'));
+            line.appendChild(el('span','badge bg-secondary',detail.timeout_seconds+' s max.'));
+          }
           line.appendChild(el('span','badge '+(document.documentElement.dataset.localInventoryFresh==='1'?'bg-secondary':'bg-warning'),
             document.documentElement.dataset.localInventoryFresh==='1'?'Configuration locale':'Instantané périmé'));
           list.appendChild(line);

@@ -23,12 +23,22 @@ final class LocalProjectSnapshot
         $projects = [];
         foreach (ProjectRegistry::fromConfig($config)->all() as $project) {
             $actions = array_keys($project->getActions());
+            // Publish strictly descriptive metadata, never argv/cwd/enum values.
+            $actionDetails = [];
+            foreach ($project->getActions() as $action) {
+                $actionDetails[$action->id] = [
+                    'description' => $action->description,
+                    'sync_allowed' => $action->syncAllowed,
+                    'timeout_seconds' => $action->timeoutSeconds,
+                ];
+            }
             $projects[] = [
                 'id' => $project->id,
                 'description' => $project->description,
                 'workspace_path' => $project->root,
                 'action_count' => count($actions),
                 'actions' => $actions,
+                'action_details' => $actionDetails,
             ];
         }
         return [
@@ -92,11 +102,42 @@ final class LocalProjectSnapshot
                     return $empty;
                 }
             }
+            // Old snapshots with no details remain readable during a staggered rollout.
+            $actionDetails = $project['action_details'] ?? [];
+            if (!is_array($actionDetails)
+                || (array_key_exists('action_details', $project)
+                    && count($actionDetails) !== count($project['actions']))) {
+                $empty['reason'] = 'métadonnées d’actions invalides';
+                return $empty;
+            }
+            foreach ($actionDetails as $actionId => $detail) {
+                if (!is_string($actionId) || !in_array($actionId, $project['actions'], true)
+                    || !is_array($detail)
+                    || !is_string($detail['description'] ?? null)
+                    || trim($detail['description']) === ''
+                    || strlen($detail['description']) > 255
+                    || !is_bool($detail['sync_allowed'] ?? null)
+                    || !is_int($detail['timeout_seconds'] ?? null)
+                    || $detail['timeout_seconds'] < 1
+                    || $detail['timeout_seconds'] > 86400
+                    || array_diff(array_keys($detail), ['description', 'sync_allowed', 'timeout_seconds']) !== []) {
+                    $empty['reason'] = 'métadonnée d’action invalide';
+                    return $empty;
+                }
+            }
             if (isset($projects[$project['id']])) {
                 $empty['reason'] = 'projet local dupliqué';
                 return $empty;
             }
-            $projects[$project['id']] = $project;
+            // Never forward unexpected metadata from the bridge JSON into the UI.
+            $projects[$project['id']] = [
+                'id' => $project['id'],
+                'description' => $project['description'],
+                'workspace_path' => $project['workspace_path'],
+                'action_count' => $project['action_count'],
+                'actions' => $project['actions'],
+                'action_details' => $actionDetails,
+            ];
         }
         return [
             'ok' => true,
