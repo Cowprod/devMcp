@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
 use Cowprod\DevMcp\Distributed\Admin\DashboardRepository;
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
 use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
@@ -25,8 +26,34 @@ if (($_SERVER['HTTPS'] ?? '') !== 'on'
     http_response_code(403);
     exit('Access denied');
 }
+// Screenshots are served only to authenticated HTTPS administrators, by serial.
+if (isset($_GET['adb_image'])) {
+    $serial = (string) $_GET['adb_image'];
+    $file = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
+    if (!AndroidSnapshot::validSerial($serial) || is_link($file) || !is_file($file)
+        || !is_readable($file) || filesize($file) > 12582912 || filesize($file) < 64) {
+        http_response_code(404);
+        exit('Capture indisponible');
+    }
+    $stream = fopen($file, 'rb');
+    if ($stream === false || fread($stream, 8) !== "\x89PNG\r\n\x1a\n") {
+        if (is_resource($stream)) { fclose($stream); }
+        http_response_code(404);
+        exit('Capture invalide');
+    }
+    rewind($stream);
+    header('Content-Type: image/png');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: inline; filename="capture-' . $serial . '.png"');
+    fpassthru($stream);
+    fclose($stream);
+    exit;
+}
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+$androidSnapshot = AndroidSnapshot::read();
+$adbFresh = $androidSnapshot['ok']
+    && strtotime($androidSnapshot['generated_at_utc']) >= time() - 120;
 $error = null;
 $invitation = null;
 $bootstrapCert = '/etc/devmcp-admin/tls/admin.crt';
@@ -38,6 +65,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit('Invalid CSRF token');
     }
     try {
+        if (($_POST['operation'] ?? '') === 'android.screenshot.request') {
+            $serial = (string) ($_POST['device'] ?? '');
+            $online = false;
+            if ($adbFresh && AndroidSnapshot::validSerial($serial)) {
+                foreach ($androidSnapshot['devices'] as $device) {
+                    if ($device['serial'] === $serial && $device['state'] === 'device') {
+                        $online = true;
+                        break;
+                    }
+                }
+            }
+            if (!$online || !is_dir(AndroidSnapshot::REQUEST_DIRECTORY)) {
+                throw new InvalidArgumentException('Appareil ADB indisponible ou inventaire périmé.');
+            }
+            $request = AndroidSnapshot::REQUEST_DIRECTORY . '/' . bin2hex(random_bytes(16)) . '-' . $serial . '.req';
+            $handle = @fopen($request, 'x');
+            if ($handle === false) {
+                throw new RuntimeException('Impossible de mettre la capture en file.');
+            }
+            fclose($handle);
+            header('Location: /?adb_pending=' . rawurlencode($serial), true, 303);
+            exit;
+        }
         if (!isset($config['writer_username'], $config['writer_password'])) {
             throw new RuntimeException('Write access not configured');
         }
@@ -250,6 +300,42 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="btn-group"><button class="btn btn-success" type="submit" <?= !$projects || !$machines ? 'disabled' : '' ?>>Associer (exécution désactivée)</button></div>
 </form><small class="text-secondary">Association enregistrée sans démarrage de jobs. Le répertoire sera vérifié sur l'agent avant toute activation.</small>
 </div></section>
+<h2 class="h5">Android / ADB sur touchdeck</h2>
+<div class="card mb-4"><div class="card-body">
+<?php if (!$androidSnapshot['ok']): ?>
+<div class="alert alert-warning">Inventaire ADB indisponible. Le service de publication doit être installé sur touchdeck.</div>
+<?php else: ?>
+<p class="small text-secondary mb-2">Dernier contrôle : <?= e($androidSnapshot['generated_at_utc']) ?> UTC.
+<span class="badge <?= $adbFresh ? 'bg-success' : 'bg-warning' ?>"><?= $adbFresh ? 'Actualisé' : 'Périmé' ?></span>
+<?php if (!$androidSnapshot['adb_available']): ?> · ADB indisponible sur l'hôte.<?php endif; ?>
+</p>
+<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
+<div class="table-responsive"><table class="table table-sm table-striped table-hover">
+<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th></tr></thead>
+<tbody>
+<?php foreach ($androidSnapshot['devices'] as $device): ?>
+<?php $serial = $device['serial']; $shot = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
+$pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?: []; ?>
+<tr><td>
+<form method="post" action="/" class="d-inline">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="android.screenshot.request">
+<input type="hidden" name="device" value="<?= e($serial) ?>">
+<button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera"></i> Capture</button>
+</form></td>
+<td><code><?= e($serial) ?></code></td>
+<td><span class="badge <?= $device['state'] === 'device' && $adbFresh ? 'bg-success' : 'bg-secondary' ?>"><?= e($device['state']) ?></span></td>
+<td><?= e($device['model'] ?: $device['product']) ?></td>
+<td><?= e($device['android_version'] ?: '—') ?></td>
+<td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
+<td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
+<td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
+<?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
+<?php endforeach; ?>
+<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="8">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
+</tbody></table></div>
+<?php endif; ?>
+</div></div>
 <h2 class="h5">Machines</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
