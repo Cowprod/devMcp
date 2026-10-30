@@ -48,6 +48,10 @@ try {
         if (preg_match('/^[a-f0-9]{32}-([A-Za-z0-9_.:-]{1,128})\.req$/D', $filename, $match) !== 1) {
             continue;
         }
+        if (filemtime($request) < time() - 900) {
+            unlink($request);
+            continue;
+        }
         $serial = $match[1];
         $errorFile = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error';
         $success = AndroidSnapshot::capture($serial, $connected);
