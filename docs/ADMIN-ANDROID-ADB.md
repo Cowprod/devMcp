@@ -14,6 +14,14 @@ mesures sont accessibles). L'état **MultiCam actif / inactif** est déduit de
 Il s'agit d'une photographie périodique, pas d'une garantie que l'application
 est toujours active au moment où un diagnostic est demandé.
 
+L'administration affiche également la **version réellement installée de MultiCam**
+(nom et code de version) sur chaque tablette, même lorsque l'application est
+arrêtée. La lecture `adb shell dumpsys package fr.emmanuel.multicam` est bornée
+à cinq secondes par appareil ; elle n'installe rien et ne touche ni aux données
+ni aux enregistrements. Le parseur n'extrait que la section de ce package, afin
+de ne pas confondre ses informations avec celles d'une autre application.
+Si le package est absent ou que la lecture échoue, la version reste inconnue.
+
 Le bouton Capture d'écran crée un fichier `.req` vide, nommé avec un identifiant
 aléatoire et un numéro de série autorisé par l'inventaire récent. Le service
 devmcp traite au plus quatre demandes par passage après revérification que
