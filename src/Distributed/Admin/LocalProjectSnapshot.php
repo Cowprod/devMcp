@@ -13,7 +13,7 @@ use RuntimeException;
  */
 final class LocalProjectSnapshot
 {
-    public const DEFAULT_PATH = '/var/lib/devmcp/admin-share/projects.json';
+    public const DEFAULT_PATH = '/var/lib/devmcp-admin-bridge/projects.json';
 
     /** @param array<string,mixed> $config
      *  @return array<string,mixed>
