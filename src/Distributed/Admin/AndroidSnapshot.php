@@ -20,7 +20,7 @@ final class AndroidSnapshot
     public static function validSerial(string $serial): bool
     {
         return strlen($serial) <= 128
-            && preg_match('/^[A-Za-z0-9_.:-]+$/D', $serial) === 1;
+            && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/D', $serial) === 1;
     }
 
     /** @return list<array<string,mixed>> */
@@ -44,6 +44,8 @@ final class AndroidSnapshot
                 'model' => $model[1] ?? '',
                 'product' => $product[1] ?? '',
                 'android_version' => '',
+                'hostname' => '',
+                'device_name' => '',
                 'battery_percent' => null,
                 'storage_free_gb' => null,
             ];
@@ -68,6 +70,11 @@ final class AndroidSnapshot
             }
             $version = self::run([self::ADB, '-s', $serial, 'shell', 'getprop', 'ro.build.version.release'], 4);
             $device['android_version'] = is_string($version) ? substr(trim($version), 0, 30) : '';
+            // Android does not guarantee a network hostname; keep the Settings name separately.
+            $host = self::run([self::ADB, '-s', $serial, 'shell', 'getprop', 'net.hostname'], 4);
+            $device['hostname'] = self::cleanDeviceName($host);
+            $settingsName = self::run([self::ADB, '-s', $serial, 'shell', 'settings', 'get', 'global', 'device_name'], 4);
+            $device['device_name'] = self::cleanDeviceName($settingsName);
             $battery = self::run([self::ADB, '-s', $serial, 'shell', 'dumpsys', 'battery'], 4);
             if (is_string($battery)
                 && preg_match('/^\s*level:\s*(\d+)/m', $battery, $level)
@@ -87,6 +94,43 @@ final class AndroidSnapshot
         unset($device);
         return ['schema_version' => 1, 'generated_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
             'adb_available' => $available && $list !== null, 'devices' => $devices];
+    }
+
+    public static function cleanDeviceName(?string $raw): string
+    {
+        if ($raw === null || strtolower(trim($raw)) === 'null') {
+            return '';
+        }
+        $text = trim((string) preg_replace('/[\\x00-\\x1f\\x7f]/', ' ', $raw));
+        return substr($text, 0, 100);
+    }
+
+    /**
+     * @return array{pending:bool,ready:bool,error:bool,mtime:int|null}
+     */
+    public static function screenshotStatus(
+        string $serial,
+        string $requestDirectory = self::REQUEST_DIRECTORY,
+        string $screenshotDirectory = self::SCREENSHOT_DIRECTORY
+    ): array {
+        $empty = ['pending' => false, 'ready' => false, 'error' => false, 'mtime' => null];
+        if (!self::validSerial($serial)) {
+            return $empty;
+        }
+        $pending = glob($requestDirectory . '/*-' . $serial . '.req') ?: [];
+        $pending = array_filter($pending, static fn (string $file): bool => !is_link($file) && is_file($file));
+        $shot = $screenshotDirectory . '/' . $serial . '.png';
+        $ready = !is_link($shot) && is_file($shot) && is_readable($shot);
+        $size = $ready ? filesize($shot) : false;
+        $ready = $ready && is_int($size) && $size >= 64 && $size <= 12582912;
+        $mtime = $ready ? filemtime($shot) : false;
+        $error = $screenshotDirectory . '/' . $serial . '.error';
+        return [
+            'pending' => count($pending) > 0,
+            'ready' => $ready,
+            'error' => !is_link($error) && is_file($error) && count($pending) === 0,
+            'mtime' => is_int($mtime) ? $mtime : null,
+        ];
     }
 
     /** @return array{ok:bool,generated_at_utc:string,adb_available:bool,devices:list<array<string,mixed>>} */
