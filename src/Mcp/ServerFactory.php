@@ -38,6 +38,21 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $projectPreviewSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string', 'maxLength' => 64, 'description' => 'Nouvel identifiant de projet (minuscules).'],
+                'description' => ['type' => 'string', 'maxLength' => 255],
+                'github_repository' => ['type' => 'string', 'description' => 'Depot owner/repo (pas une URL).'],
+                'repository_mode' => ['type' => 'string', 'enum' => ['create', 'attach']],
+                'target' => ['type' => 'string', 'enum' => ['local', 'remote']],
+                'machine' => ['type' => 'string', 'description' => 'local ou hostname local, sinon nom/ID de machine distante connue.'],
+                'workspace_path' => ['type' => 'string', 'maxLength' => 1024, 'description' => 'Chemin absolu demande, non encore autorise ni cree.'],
+            ],
+            'required' => ['project_id', 'description', 'github_repository', 'repository_mode', 'target', 'machine', 'workspace_path'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -47,6 +62,12 @@ final class ServerFactory
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
+            ->addTool(
+                [$tools, 'projectCreatePreview'],
+                'project_create_preview',
+                description: 'Valide un plan de création local ou distant et de dépôt GitHub, sans écriture ni permission nouvelle.',
+                inputSchema: $projectPreviewSchema,
+            )
             ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
             ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée.')
             ->addTool(
