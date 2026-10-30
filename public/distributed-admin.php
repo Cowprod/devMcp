@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\DashboardRepository;
+use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
 use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
 use Cowprod\DevMcp\Distributed\Enrollment\EnrollmentService;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
@@ -117,6 +118,38 @@ try {
     http_response_code(503);
     exit('Dashboard temporarily unavailable');
 }
+// Keep distributed registry writes separate from local runtime definitions.
+$localSnapshot = LocalProjectSnapshot::read(LocalProjectSnapshot::DEFAULT_PATH);
+$projectRows = [];
+foreach ($projects as $project) {
+    $projectRows[$project['id']] = [
+        'id' => $project['id'],
+        'description' => $project['description'],
+        'repository_url' => $project['repository_url'],
+        'origin' => 'Distribué',
+        'workspace' => '',
+        'actions' => [],
+    ];
+}
+foreach ($localSnapshot['projects'] as $project) {
+    $id = $project['id'];
+    if (isset($projectRows[$id])) {
+        $projectRows[$id]['origin'] = 'Local + distribué';
+    } else {
+        $projectRows[$id] = [
+            'id' => $id,
+            'description' => $project['description'],
+            'repository_url' => '',
+            'origin' => 'Local',
+            'workspace' => '',
+            'actions' => [],
+        ];
+    }
+    $projectRows[$id]['workspace'] = $project['workspace_path'];
+    $projectRows[$id]['actions'] = $project['actions'];
+}
+ksort($projectRows);
+
 function e(mixed $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -160,7 +193,7 @@ function e(mixed $value): string
 </form></div></section>
 <section class="row g-3 mb-4">
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) ?></div></div></div></div>
-<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projects) ?></div></div></div></div>
+<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projectRows) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
 <?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Installation du client (commande unique, jeton à usage unique) :</p>
@@ -224,11 +257,20 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
-<h2 class="h5">Projets</h2>
+<h2 class="h5">Projets (locaux et distribués)</h2>
+<?php if (!$localSnapshot['ok']): ?>
+<div class="alert alert-warning">Catalogue local indisponible : <?= e($localSnapshot['reason']) ?>. Les projets distribués restent visibles. Aucun accès direct à la configuration privée depuis le serveur web.</div>
+<?php else: ?>
+<p class="small text-secondary">Catalogue local publié le <?= e($localSnapshot['generated_at_utc']) ?> UTC. Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
+<?php endif; ?>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Identifiant</th><th>Description</th><th>Dépôt</th></tr></thead><tbody>
-<?php foreach ($projects as $project): ?>
-<tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td><td><?= e($project['repository_url']) ?></td></tr>
+<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
+<?php foreach ($projectRows as $project): ?>
+<tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
+<td><code><?= e($project['workspace'] ?: '—') ?></code></td>
+<td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
+<td><?= e($project['repository_url'] ?: '—') ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 <h2 class="h5">Affectations</h2>
