@@ -273,6 +273,21 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .admin-panel .table code{color:#ffe08a}
 .admin-panel .table td{white-space:normal}
 @media(min-width:1200px){.admin-panel[data-panel="dashboard"]>.row>.col-lg-6{min-width:0}}
+
+/* Shared master/detail layout for registry views */
+.registry-layout{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:1rem;align-items:start}
+.registry-sidebar{background:#192238;border:1px solid #36405a;border-radius:.65rem;padding:.8rem;position:sticky;top:1rem;max-height:75vh;overflow:auto}
+.registry-sidebar h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:#b5bdd0;margin:.2rem .5rem .8rem}
+.registry-entry{display:block;width:100%;border:0;border-radius:.45rem;background:transparent;color:#e9edf8;text-align:left;padding:.7rem .75rem;margin-bottom:.3rem;overflow-wrap:anywhere}
+.registry-entry:hover,.registry-entry:focus-visible{background:#303c59;color:#fff}
+.registry-entry.active{background:#435579;color:#fff;box-shadow:inset 3px 0 #e851a4}
+.registry-entry small{display:block;color:#c2cadd;margin-top:.2rem}
+.registry-detail{min-width:0}.registry-detail .card{margin-bottom:1rem}
+.registry-fields{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr);gap:.55rem 1rem}
+.registry-fields dt{color:#aab3c6;font-weight:normal}.registry-fields dd{margin:0;overflow-wrap:anywhere}
+.registry-overview{margin-top:1rem}.registry-overview summary{cursor:pointer;padding:.7rem;color:#c5d0e5}
+.registry-related button{margin:.2rem}.registry-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+@media(max-width:750px){.registry-layout{grid-template-columns:1fr}.registry-sidebar{position:static;max-height:220px}.registry-fields{grid-template-columns:1fr}.registry-fields dt{margin-top:.4rem}}
 </style>
 </head>
 <body>
@@ -599,6 +614,74 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
   if (document.querySelector('.adb-capture-cell[data-pending="1"]')) {
     window.setTimeout(pollPending, 2500);
   }
+})();
+</script>
+
+<script>
+/* Read-only registry drill-down. Existing POST forms, CSRF, and overview tables remain intact. */
+(function () {
+  const specs = {
+    machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
+    projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
+    deployments: {title:'Affectations', columns:['Projet','Machine','Répertoire','Exécution','Diagnostic','Branche','Commit','Contrôle UTC'], key:0, sub:1}
+  };
+  const registry = {};
+  function el(tag, cls, text) {const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+  function build(name) {
+    const panel=document.getElementById('panel-'+name), spec=specs[name];
+    if(!panel)return;
+    const tables=Array.from(panel.querySelectorAll('table'));
+    const table=tables.find(t=>{const headers=Array.from(t.querySelectorAll('thead th')).map(x=>x.textContent.trim());return headers.length===spec.columns.length&&headers[0]===spec.columns[0];});
+    if(!table)return;
+    const rows=Array.from(table.querySelectorAll('tbody tr')).filter(tr=>tr.cells.length===spec.columns.length);
+    const layout=el('div','registry-layout'), side=el('aside','registry-sidebar'), content=el('div','registry-detail');
+    side.appendChild(el('h3','',spec.title));
+    const detail=el('div','card'), body=el('div','card-body');detail.appendChild(body);content.appendChild(detail);
+    const overview=el('details','registry-overview');const summary=el('summary','','Vue globale et formulaires existants');overview.appendChild(summary);
+    const existing=Array.from(panel.children);
+    existing.forEach(node=>overview.appendChild(node));
+    content.appendChild(overview);layout.append(side,content);panel.appendChild(layout);
+    registry[name]={rows,side,body,spec};
+    rows.forEach((tr,i)=>{
+      const cells=Array.from(tr.cells), title=cells[spec.key].textContent.trim(), subtitle=cells[spec.sub].textContent.trim();
+      const button=el('button','registry-entry');button.type='button';button.dataset.index=String(i);
+      button.appendChild(el('span','',title));button.appendChild(el('small','',subtitle));
+      button.addEventListener('click',()=>select(name,i));side.appendChild(button);
+    });
+    if(rows.length)select(name,0);else body.appendChild(el('p','text-secondary','Aucun élément enregistré.'));
+  }
+  function link(name,index,label) {
+    const b=el('button','btn btn-sm btn-secondary',label);b.type='button';
+    b.addEventListener('click',()=>{location.hash=name;select(name,index);});return b;
+  }
+  function related(name,row,body) {
+    const heading=el('h3','h6 mt-4','Éléments associés'), area=el('div','registry-related');
+    const machineName=name==='machines'?row.cells[0].textContent.trim():name==='deployments'?row.cells[1].textContent.trim():null;
+    const projectName=name==='projects'?row.cells[0].textContent.trim():name==='deployments'?row.cells[0].textContent.trim():null;
+    const machines=registry.machines,projects=registry.projects,deployments=registry.deployments;
+    if(name==='machines'&&deployments)deployments.rows.forEach((r,i)=>{if(r.cells[1].textContent.trim()===machineName)area.appendChild(link('deployments',i,r.cells[0].textContent.trim()+' / affectation'));});
+    if(name==='projects'&&deployments)deployments.rows.forEach((r,i)=>{if(r.cells[0].textContent.trim()===projectName)area.appendChild(link('deployments',i,r.cells[1].textContent.trim()+' / affectation'));});
+    if(name==='deployments'){
+      if(machines)machines.rows.forEach((r,i)=>{if(r.cells[0].textContent.trim()===machineName)area.appendChild(link('machines',i,'Machine : '+machineName));});
+      if(projects)projects.rows.forEach((r,i)=>{if(r.cells[0].textContent.trim()===projectName)area.appendChild(link('projects',i,'Projet : '+projectName));});
+    }
+    if(area.children.length){body.append(heading,area);}else if(name!=='deployments'){body.append(heading,el('p','text-secondary small','Aucune affectation enregistrée.'));}
+  }
+  function select(name,index){
+    const state=registry[name];if(!state||!state.rows[index])return;
+    state.side.querySelectorAll('.registry-entry').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',i===index?'true':'false');});
+    const row=state.rows[index],body=state.body;body.replaceChildren();
+    const header=el('div','registry-toolbar');header.appendChild(el('h2','h5 mb-0',row.cells[state.spec.key].textContent.trim()));
+    const edit=el('button','btn btn-sm btn-secondary','Afficher les formulaires');edit.type='button';edit.addEventListener('click',()=>{const d=body.closest('.registry-detail').querySelector('details.registry-overview');d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});});header.appendChild(edit);body.appendChild(header);
+    const fields=el('dl','registry-fields mt-3');
+    Array.from(row.cells).forEach((cell,i)=>{fields.appendChild(el('dt','',state.spec.columns[i]));const dd=el('dd');if(cell.querySelector('form,button,input,select')){dd.textContent=cell.textContent.trim()||'Voir la vue globale';}else{dd.textContent=cell.textContent.trim()||'—';}fields.appendChild(dd);});body.appendChild(fields);
+    related(name,row,body);
+    if(name==='deployments'){
+      const action=body.closest('.registry-detail').querySelector('form input[name="operation"][value="remote.readonly.enqueue"]');
+      if(action){const select=action.closest('form').querySelector('select[name="deployment_id"]');if(select){const label=row.cells[0].textContent.trim()+' / '+row.cells[1].textContent.trim();const option=Array.from(select.options).find(o=>o.textContent.trim()===label);if(option)select.value=option.value;}}
+    }
+  }
+  Object.keys(specs).forEach(build);
 })();
 </script>
 </body></html>
