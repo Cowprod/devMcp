@@ -25,6 +25,16 @@ final class AndroidSnapshotTest extends TestCase
         self::assertSame('unauthorized', $devices[3]['state']);
     }
 
+    public function testAcceptsOnlyNumericPidOutputAndSelectsMainPid(): void
+    {
+        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234\\n"));
+        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234 5678\\n"));
+        self::assertNull(AndroidSnapshot::parseMainPid("1234; reboot"));
+        self::assertNull(AndroidSnapshot::parseMainPid("not running"));
+        self::assertNull(AndroidSnapshot::parseMainPid("0"));
+        self::assertNull(AndroidSnapshot::parseMainPid("9999999999999999"));
+    }
+
     public function testRejectsSerialInjectionAndMalformedSnapshots(): void
     {
         self::assertFalse(AndroidSnapshot::validSerial('../bad/serial'));
