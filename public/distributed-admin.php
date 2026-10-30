@@ -438,18 +438,116 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <dialog id="adb-dialog" aria-label="Capture Android" style="max-width:96vw;max-height:95vh;padding:1rem;border-radius:10px;background:#222;color:white"><div class="d-flex justify-content-between align-items-center gap-3 mb-2"><strong id="adb-dialog-title">Capture Android</strong><button type="button" id="adb-close" class="btn btn-sm btn-secondary">Fermer</button></div><img id="adb-dialog-img" alt="Capture agrandie" style="display:block;max-width:90vw;max-height:75vh;object-fit:contain;margin:auto"><div class="mt-3"><a id="adb-download" class="btn btn-success" download>Télécharger le PNG</a></div></dialog>
 <script>
 (function () {
- const dialog=document.getElementById('adb-dialog'), img=document.getElementById('adb-dialog-img'), download=document.getElementById('adb-download');
- document.querySelectorAll('.adb-preview').forEach(function (button) {
-   button.addEventListener('click',function () {
-     const url=button.dataset.url, serial=button.dataset.serial;
-     img.src=url; download.href=url; download.download='capture-'+serial+'.png';
-     document.getElementById('adb-dialog-title').textContent='Capture Android — '+serial;
-     dialog.showModal();
-   });
- });
- document.getElementById('adb-close').addEventListener('click',function () {dialog.close();});
- dialog.addEventListener('click',function (event) {if(event.target===dialog)dialog.close();});
- dialog.addEventListener('close',function () {img.removeAttribute('src');});
+  const dialog = document.getElementById('adb-dialog');
+  const image = document.getElementById('adb-dialog-img');
+  const download = document.getElementById('adb-download');
+
+  function badge(text, color) {
+    const item = document.createElement('span');
+    item.className = 'badge ' + color + ' me-1';
+    item.textContent = text;
+    return item;
+  }
+
+  function drawCapture(cell, status) {
+    const serial = cell.dataset.serial;
+    const fragment = document.createDocumentFragment();
+    if (status.pending) {
+      fragment.appendChild(badge('En attente', 'bg-warning'));
+      const refresh = document.createElement('button');
+      refresh.type = 'button';
+      refresh.className = 'btn btn-sm btn-secondary adb-refresh';
+      refresh.title = 'Actualiser la capture';
+      refresh.setAttribute('aria-label', 'Actualiser la capture de ' + serial);
+      const icon = document.createElement('i');
+      icon.className = 'fa-solid fa-arrows-rotate';
+      icon.setAttribute('aria-hidden', 'true');
+      refresh.appendChild(icon);
+      fragment.appendChild(refresh);
+    }
+    if (status.error) fragment.appendChild(badge('Échec', 'bg-danger'));
+    if (status.ready) {
+      const url = '/?adb_image=' + encodeURIComponent(serial) + '&v=' + encodeURIComponent(status.mtime || 0) + '&r=' + Date.now();
+      const preview = document.createElement('button');
+      preview.type = 'button';
+      preview.className = 'btn btn-link p-0 adb-preview';
+      preview.title = 'Agrandir la capture';
+      preview.dataset.url = url;
+      preview.dataset.serial = serial;
+      const thumb = document.createElement('img');
+      thumb.src = url;
+      thumb.alt = 'Capture de ' + serial;
+      thumb.loading = 'lazy';
+      thumb.style.cssText = 'max-width:72px;max-height:100px;object-fit:contain;border-radius:4px';
+      preview.appendChild(thumb);
+      fragment.appendChild(preview);
+      if (Number.isInteger(status.mtime)) {
+        const date = document.createElement('div');
+        date.className = 'small';
+        date.textContent = new Date(status.mtime * 1000).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
+        }) + ' UTC';
+        fragment.appendChild(date);
+      }
+    } else if (!status.pending && !status.error) {
+      fragment.appendChild(document.createTextNode('—'));
+    }
+    cell.replaceChildren(fragment);
+    cell.dataset.pending = status.pending ? '1' : '0';
+    cell.dataset.signature = [status.pending, status.ready, status.error, status.mtime].join(':');
+  }
+
+  async function refreshCapture(cell) {
+    if (cell.dataset.loading === '1') return;
+    cell.dataset.loading = '1';
+    const button = cell.querySelector('.adb-refresh');
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch('/?adb_status=' + encodeURIComponent(cell.dataset.serial), {
+        cache: 'no-store', credentials: 'same-origin', headers: {'Accept':'application/json'}
+      });
+      if (!response.ok) throw new Error('Statut indisponible');
+      const status = await response.json();
+      const signature = [status.pending, status.ready, status.error, status.mtime].join(':');
+      if (cell.dataset.signature !== signature) drawCapture(cell, status);
+    } catch (error) {
+      // The retry button stays available; an ADB or network failure cannot stop the page.
+    } finally {
+      cell.dataset.loading = '0';
+      if (button && button.isConnected) button.disabled = false;
+    }
+  }
+
+  document.addEventListener('click', function (event) {
+    const preview = event.target.closest('.adb-preview');
+    if (preview) {
+      const url = preview.dataset.url, serial = preview.dataset.serial;
+      image.src = url;
+      download.href = url;
+      download.download = 'capture-' + serial + '.png';
+      document.getElementById('adb-dialog-title').textContent = 'Capture Android — ' + serial;
+      dialog.showModal();
+      return;
+    }
+    const refresh = event.target.closest('.adb-refresh');
+    if (refresh) refreshCapture(refresh.closest('.adb-capture-cell'));
+  });
+  document.getElementById('adb-close').addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (event) { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', function () { image.removeAttribute('src'); });
+
+  let polling = 0;
+  async function pollPending() {
+    const pending = Array.from(document.querySelectorAll('.adb-capture-cell[data-pending="1"]'));
+    if (!pending.length || polling++ >= 80) return;
+    await Promise.all(pending.map(refreshCapture));
+    if (document.querySelector('.adb-capture-cell[data-pending="1"]')) {
+      window.setTimeout(pollPending, 3000);
+    }
+  }
+  if (document.querySelector('.adb-capture-cell[data-pending="1"]')) {
+    window.setTimeout(pollPending, 2500);
+  }
 })();
 </script>
 </body></html>
