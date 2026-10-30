@@ -28,7 +28,7 @@ La publication atomique est faite par :
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-admin-projects-export
 \`\`\`
 
-Le fichier \`/var/lib/devmcp/admin-share/projects.json\` est écrit avec les droits \`0640\`
+Le fichier \`/var/lib/devmcp-admin-bridge/projects.json\` est écrit avec les droits \`0640\`
 dans un répertoire \`devmcp:www-data\` de mode \`2750\`. Sa lecture par PHP-FPM
 est possible sans accès aux secrets du runtime. Ne pas mettre cet instantané
 dans le document root public d'Nginx.
@@ -36,7 +36,7 @@ dans le document root public d'Nginx.
 ### Installation initiale (privilège root requis une seule fois)
 
 \`\`\`sh
-sudo install -d -o devmcp -g www-data -m 2750 /var/lib/devmcp/admin-share
+sudo install -d -o devmcp -g www-data -m 2750 /var/lib/devmcp-admin-bridge
 sudo -u devmcp /usr/bin/php /opt/devmcp/bin/devmcp-admin-projects-export
 \`\`\`
 
