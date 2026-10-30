@@ -745,7 +745,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
         || (name==='projects'&&row.dataset.registryEditable==='1')
         || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
     if(canEdit){
-      const card=el('div','border rounded p-3 mt-3'), title=el('h3','h6','Modifier les métadonnées');
+      const card=el('div','mt-4'), title=el('h3','h6','Modifier les métadonnées');
       const form=el('form','');form.method='post';form.action='/';
       function hidden(key,value){const input=el('input');input.type='hidden';input.name=key;input.value=value;form.appendChild(input);}
       function field(label,key,value,type,max){
