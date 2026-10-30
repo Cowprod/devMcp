@@ -114,6 +114,12 @@ final class ProjectToolsTest extends TestCase
         );
     }
 
+    public function testRepositoryCreationIsUnavailableWithoutExplicitInstancePolicy(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->tools([])->githubRepositoryCreate('Cowprod/demo-new', 'CREATE_PRIVATE_REPOSITORY');
+    }
+
     /**
      * @param array<string, array<string, mixed>> $actions
      */
