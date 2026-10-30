@@ -242,7 +242,7 @@ function e(mixed $value): string
 <div class="btn-group"><button type="submit" class="btn btn-success">Mettre en file</button></div>
 </form></div></section>
 <section class="row g-3 mb-4">
-<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) ?></div></div></div></div>
+<div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) + ($localSnapshot['ok'] ? 1 : 0) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projectRows) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Jobs incertains</div><div class="fs-3 text-warning"><?= $counts['uncertain'] ?? 0 ?></div></div></div></div>
 </section>
@@ -339,6 +339,12 @@ $pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?
 <h2 class="h5">Machines</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
+<?php if ($localSnapshot['ok']): ?>
+<tr><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
+<td><?= e($localSnapshot['host']['architecture']) ?></td><td><span class="badge bg-info">Local</span></td>
+<td><span class="badge bg-success">devMcp actif</span></td><td>—</td>
+<td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
+<?php endif; ?>
 <?php foreach ($machines as $machine): ?>
 <tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
 <?php endforeach; ?>
