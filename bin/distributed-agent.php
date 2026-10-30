@@ -1,11 +1,19 @@
 <?php
 declare(strict_types=1);
 
-// A deliberately non-executing enrollment agent. No remote jobs are accepted
-// until an approved, locally pinned policy and a deployment are installed.
+// Enrollment and bounded remote-action agent. Jobs require an approved,
+// locally pinned policy; writes additionally require two independent opt-ins.
 $configPath = '/etc/devmcp/agent.php';
 if (!is_readable($configPath)) {
     fwrite(STDERR, "devMcp: agent configuration missing\n");
+    exit(1);
+}
+// The bootstrap configuration is executable PHP, just like the local policy.
+// Refuse unsafe ownership, permissions, ancestors or symlinks BEFORE require.
+// install-agent.sh provisions /etc/devmcp/agent.php as root:devmcp-agent 0640.
+require_once __DIR__ . '/remote-local-policy.php';
+if (!remoteLocalPolicyFileTrusted($configPath)) {
+    fwrite(STDERR, "devMcp: untrusted agent configuration\n");
     exit(1);
 }
 $config = require $configPath;
@@ -59,7 +67,7 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
-// No remote jobs: only bounded, read-only inspection of registered workspaces.
+// Report bounded, read-only inspection of registered workspaces before polling.
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];
 if (!is_array($deployments) || count($deployments) > 32) {
@@ -97,17 +105,18 @@ foreach ($deployments as $deployment) {
     }
 }
 $policyPath = '/etc/devmcp/remote-readonly-policy.php';
-if (!is_file($policyPath) || is_link($policyPath)) {
-    fwrite(STDOUT, "devMcp: remote actions disabled by local policy\n");
+require_once __DIR__ . '/remote-local-policy.php';
+// A PHP policy is executable. Reject untrusted ownership and any writable
+// ancestor BEFORE require, for read-only as well as write jobs.
+if (!remoteLocalPolicyFileTrusted($policyPath)) {
+    fwrite(STDOUT, "devMcp: remote actions disabled by untrusted local policy\n");
     exit(0);
 }
 $policy = require $policyPath;
 if (!is_array($policy) || ($policy['enabled'] ?? false) !== true) {
     exit(0);
 }
-require __DIR__ . '/remote-readonly-actions.php';
-require __DIR__ . '/remote-job-policy.php';
-require __DIR__ . '/remote-local-policy.php';
+require __DIR__ . '/remote-job-dispatch.php';
 $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
     'X-DevMcp-Machine: ' . $config['machine_id']];
 $post = static function (string $endpoint, string $body) use ($server, $headers, $config): ?array {
@@ -137,9 +146,9 @@ foreach ($poll['jobs'] as $job) {
         || preg_match('/^[a-f0-9]{32}$/D', $job['id']) !== 1) {
         continue;
     }
-    $result = remoteLocalPolicyCheck($policy, $job)
-        ? remoteWorkspaceAction($job['workspace_path'], $job['action'], $job['arguments'])
-        : ['ok' => false, 'error' => 'local_policy_denied'];
+    // Policy trust was established before its PHP content was executed.
+    $result = remoteAuthorizedJobDispatch($policy, $job, true,
+        is_string($config['state_dir'] ?? null) ? $config['state_dir'] : '');
     $payload = json_encode(['protocol_version' => 1, 'job_id' => $job['id'],
         'result' => $result], JSON_THROW_ON_ERROR);
     if (strlen($payload) > 69000) {
@@ -148,5 +157,5 @@ foreach ($poll['jobs'] as $job) {
     }
     $post('/v1/agent/job-result', $payload);
 }
-fwrite(STDOUT, "devMcp: remote read-only poll complete\n");
+fwrite(STDOUT, "devMcp: remote poll complete\n");
 

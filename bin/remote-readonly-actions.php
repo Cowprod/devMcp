@@ -1,11 +1,53 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Fail closed for credential filenames, including common backup variants.
+ * All read/list/find paths use the same predicate to prevent drift.
+ */
+function remoteReadProtectedSegment(string $name): bool
+{
+    $lower = strtolower($name);
+    if (in_array($lower, [
+        '.git', '.ssh', '.aws', '.config', '.env', '.npmrc', '.pypirc',
+        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa',
+        'credentials', 'secrets', 'secret', 'private',
+    ], true)) {
+        return true;
+    }
+    // A renamed copy of a hidden metadata/credential directory is not
+    // safe to browse. Delimiter matching keeps .gitignore and .github visible.
+    foreach (['.git', '.ssh', '.aws', '.config'] as $directory) {
+        if (str_starts_with($lower, $directory)
+            && strlen($lower) > strlen($directory)
+            && str_contains('._~-', $lower[strlen($directory)])) {
+            return true;
+        }
+    }
+    foreach (['.env', '.npmrc', '.pypirc', '.netrc', '.htpasswd', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'] as $prefix) {
+        if (str_starts_with($lower, $prefix)) {
+            return true;
+        }
+    }
+    foreach (['secret', 'credential', 'private', 'token', 'password', 'passwd', 'api_key', 'apikey'] as $marker) {
+        if (str_contains($lower, $marker)) {
+            return true;
+        }
+    }
+    // A copy of certificate/private-key material must not become readable
+    // merely because an editor appended .bak, .old or a similar suffix.
+    return preg_match('/\\.(?:pem|key|p12|pfx|kdbx)(?:$|[._~-])/', $lower) === 1;
+}
+
 /** Read-only, bounded workspace operations; no shell or subprocess. */
 function remoteWorkspaceAction(string $workspace, string $action, array $arguments = []): array
 {
     $root = realpath($workspace);
-    if ($root === false || !is_dir($root) || is_link($workspace)) {
+    // Pin reads to the exact canonical workspace path, just like writes.
+    // Checking is_link() on the final component alone does not reject a
+    // symlinked ancestor (or a /docs/.. alias) of the approved workspace.
+    if ($root === false || !is_dir($root) || is_link($workspace)
+        || $root !== rtrim($workspace, '/')) {
         return ['ok' => false, 'error' => 'workspace_missing'];
     }
     if ($action === 'git.head') {
@@ -20,15 +62,9 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         in_array('..', explode('/', $relative), true)) {
         return ['ok' => false, 'error' => 'invalid_path'];
     }
-    // Never expose repository metadata, credentials, or private configuration.
-    $forbidden = ['.git', '.env', '.ssh', '.aws', '.config', '.npmrc', '.pypirc',
-        '.netrc', '.htpasswd', '.htaccess', 'id_rsa', 'id_ed25519',
-        'credentials', 'secrets', 'secret', 'private'];
+    // Apply the same protected-name guard to direct access and discovery.
     foreach ($relative === '.' ? [] : explode('/', $relative) as $segment) {
-        $lower = strtolower($segment);
-        if (in_array($lower, $forbidden, true) || str_starts_with($lower, '.env.')
-            || str_contains($lower, 'secret') || str_contains($lower, 'credential')
-            || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', $lower)) {
+        if (remoteReadProtectedSegment($segment)) {
             return ['ok' => false, 'error' => 'protected_path'];
         }
     }
@@ -45,8 +81,19 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         }
     }
     if ($action === 'workspace.stat') {
-        return ['ok' => true, 'type' => is_dir($resolved) ? 'directory' : (is_file($resolved) ? 'file' : 'other'),
-            'size' => is_file($resolved) ? filesize($resolved) : null];
+        if (is_file($resolved)) {
+            // A safe-looking hardlink may reference a file outside the pinned
+            // workspace. Do not disclose even its size through stat when
+            // workspace.read would reject the same inode.
+            clearstatcache(true, $resolved);
+            $fileStat = @lstat($resolved);
+            if (!is_array($fileStat) || ($fileStat['mode'] & 0170000) !== 0100000
+                || ($fileStat['nlink'] ?? 0) !== 1) {
+                return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+            }
+            return ['ok' => true, 'type' => 'file', 'size' => $fileStat['size']];
+        }
+        return ['ok' => true, 'type' => is_dir($resolved) ? 'directory' : 'other', 'size' => null];
     }
     if ($action === 'workspace.list') {
         if (!is_dir($resolved)) {
@@ -57,25 +104,59 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
             return ['ok' => false, 'error' => 'unreadable'];
         }
         $entries = [];
+        $truncated = false;
         foreach ($items as $item) {
-            if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
-                || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
-                || str_contains(strtolower($item), 'credential') || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
+            if (in_array($item, ['.', '..'], true) || remoteReadProtectedSegment($item)) {
                 continue;
             }
+            // Only visible entries count toward pagination. Counting hidden
+            // credential names in "truncated" leaks their presence and
+            // incorrectly reports an incomplete listing.
             if (count($entries) >= 200) {
+                $truncated = true;
                 break;
             }
             $entries[] = ['name' => $item, 'type' => is_link($resolved . '/' . $item) ? 'symlink' :
                 (is_dir($resolved . '/' . $item) ? 'directory' : 'file')];
         }
-        return ['ok' => true, 'entries' => $entries, 'truncated' => count($items) > count($entries) + 2];
+        return ['ok' => true, 'entries' => $entries, 'truncated' => $truncated];
     }
     if ($action === 'workspace.read') {
         if (!is_file($resolved) || !is_readable($resolved) || filesize($resolved) > 65536) {
             return ['ok' => false, 'error' => 'not_readable_or_too_large'];
         }
-        $body = file_get_contents($resolved, false, null, 0, 65537);
+        // A hardlink inside the workspace can point to an agent-readable
+        // file outside it, bypassing realpath/symlink restrictions. Deny
+        // multiply-linked files before returning any content.
+        clearstatcache(true, $resolved);
+        $fileStat = @lstat($resolved);
+        if (!is_array($fileStat) || ($fileStat['mode'] & 0170000) !== 0100000
+            || ($fileStat['nlink'] ?? 0) !== 1) {
+            return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+        }
+        // Read through the same descriptor that we verify: reopening the
+        // pathname after lstat() would leave a swap window for a symlink or
+        // different inode to be substituted by another process.
+        $handle = @fopen($resolved, 'rb');
+        if ($handle === false) {
+            return ['ok' => false, 'error' => 'not_readable_or_too_large'];
+        }
+        try {
+            $openedStat = @fstat($handle);
+            if (!is_array($openedStat) || ($openedStat['mode'] & 0170000) !== 0100000
+                || ($openedStat['nlink'] ?? 0) !== 1) {
+                return ['ok' => false, 'error' => 'hardlinked_file_forbidden'];
+            }
+            if ($openedStat['dev'] !== $fileStat['dev'] || $openedStat['ino'] !== $fileStat['ino']) {
+                return ['ok' => false, 'error' => 'path_changed'];
+            }
+            if ($openedStat['size'] > 65536) {
+                return ['ok' => false, 'error' => 'not_readable_or_too_large'];
+            }
+            $body = @stream_get_contents($handle, 65537);
+        } finally {
+            fclose($handle);
+        }
         if (!is_string($body) || strlen($body) > 65536 || !preg_match('//u', $body) || str_contains($body, chr(0))) {
             return ['ok' => false, 'error' => 'not_utf8_text'];
         }
@@ -92,17 +173,14 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
         $found = [];
         $pending = [[$resolved, 0]];
         $visited = 0;
-        while ($pending !== [] && count($found) < 200 && $visited < 2000) {
+        while ($pending !== [] && count($found) < 201 && $visited < 2000) {
             [$directory, $depth] = array_pop($pending);
             $items = @scandir($directory);
             if ($items === false) {
                 continue;
             }
             foreach ($items as $item) {
-                if (in_array($item, ['.', '..'], true) || in_array(strtolower($item), $forbidden, true)
-                    || str_starts_with(strtolower($item), '.env.') || str_contains(strtolower($item), 'secret')
-                    || str_contains(strtolower($item), 'credential')
-                    || preg_match('/\\.(?:pem|key|p12|pfx|kdbx)$/D', strtolower($item))) {
+                if (in_array($item, ['.', '..'], true) || remoteReadProtectedSegment($item)) {
                     continue;
                 }
                 $file = $directory . '/' . $item;
@@ -115,13 +193,17 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
                 } elseif (is_file($file) && ($filter === 'all' || strtolower(pathinfo($file, PATHINFO_EXTENSION)) === $filter)) {
                     $found[] = substr($file, strlen($root) + 1);
                 }
-                if ($visited >= 2000 || count($found) >= 200) {
+                if ($visited >= 2000 || count($found) >= 201) {
                     break;
                 }
             }
         }
         sort($found, SORT_STRING);
-        return ['ok' => true, 'files' => $found, 'truncated' => $pending !== [] || $visited >= 2000];
+        // Inspect one extra visible match so the 200-entry limit reports
+        // truncation accurately, even when the last directory is exhausted.
+        // Protected names are skipped and must never affect this flag.
+        return ['ok' => true, 'files' => array_slice($found, 0, 200),
+            'truncated' => count($found) > 200 || $pending !== [] || $visited >= 2000];
     }
     return ['ok' => false, 'error' => 'action_not_allowed'];
 }

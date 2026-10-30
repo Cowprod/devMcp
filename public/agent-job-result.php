@@ -3,6 +3,7 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 require dirname(__DIR__) . '/vendor/autoload.php';
+require dirname(__DIR__) . '/bin/remote-job-lifecycle.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 try {
@@ -33,23 +34,17 @@ try {
         throw new RuntimeException('identity');
     }
     $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
-    if (!is_string($configPath) || !is_file($configPath)) {
-        throw new RuntimeException('config');
+    // The env-selected PHP configuration executes code on require: fail closed
+    // for non-root owners, writable ancestors, and symlinked paths.
+    require_once dirname(__DIR__) . '/bin/remote-local-policy.php';
+    if (!is_string($configPath) || !remoteLocalPolicyFileTrusted($configPath)) {
+        throw new RuntimeException('untrusted_config');
     }
     $config = require $configPath;
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
         (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $matches[1], true);
-    $result = json_encode($payload['result'], JSON_THROW_ON_ERROR);
-    if (strlen($result) > 65536) {
-        throw new RuntimeException('result_size');
-    }
-    $statement = $db->prepare("UPDATE dm_remote_readonly_job SET state = ?, result_json = ?, finished_at = UTC_TIMESTAMP(6) WHERE id = ? AND machine_id = ? AND state = 'claimed'");
-    $statement->execute([($payload['result']['ok'] ?? false) === true ? 'succeeded' : 'failed',
-        $result, $payload['job_id'], $machineId]);
-    if ($statement->rowCount() !== 1) {
-        throw new RuntimeException('job_not_claimed');
-    }
+    remoteCompleteClaimedJob($db, $machineId, $payload['job_id'], $payload['result']);
     echo '{"protocol_version":1,"ok":true}';
 } catch (Throwable $error) {
     error_log('devmcp-job-result: ' . get_class($error) . ': ' . substr($error->getMessage(), 0, 150));

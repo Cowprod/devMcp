@@ -1,9 +1,50 @@
 <?php
 declare(strict_types=1);
 
-/** Initial read-only allowlist. */
-function remoteJobAllowed(string $action, array $args): bool
+/**
+ * Reject sensitive names before write payloads enter the SQL queue, not
+ * merely when an agent finally attempts the filesystem replacement.
+ * Keep the same conservative segment markers as the agent-side guard.
+ */
+function remoteWriteSafeRelativePath(string $path): bool
 {
+    if (strlen($path) > 512
+        || preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.(?:txt|md)$~D', $path) !== 1) {
+        return false;
+    }
+    foreach (explode('/', strtolower($path)) as $segment) {
+        foreach (['secret', 'credential', 'private', 'token', 'password', 'passwd', 'api_key', 'apikey', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'] as $marker) {
+            if (str_contains($segment, $marker)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * Remote job argument validation. Writes require explicit approval at every
+ * caller (MCP enqueue, server poll, agent); the default remains read-only.
+ */
+function remoteJobAllowed(string $action, array $args, bool $allowWrite = false): bool
+{
+    if ($action === 'workspace.write_text') {
+        if (!$allowWrite
+            || array_diff(array_keys($args), ['path', 'content', 'expected_sha256']) !== []
+            || !is_string($args['path'] ?? null)
+            || !is_string($args['content'] ?? null)
+            || !is_string($args['expected_sha256'] ?? null)) {
+            return false;
+        }
+        $path = $args['path'];
+        $content = $args['content'];
+        return remoteWriteSafeRelativePath($path)
+            && strlen($content) <= 16384
+            && strpos($content, chr(0)) === false
+            && preg_match('//u', $content) === 1
+            && preg_match('/^[a-f0-9]{64}$/D', $args['expected_sha256']) === 1;
+    }
+
     $noArgs = ['git.head'];
     $pathActions = ['workspace.list', 'workspace.read', 'workspace.stat'];
     if (in_array($action, $noArgs, true)) {
