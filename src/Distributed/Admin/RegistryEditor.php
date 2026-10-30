@@ -112,6 +112,90 @@ final class RegistryEditor
         }
     }
 
+    public function updateMachine(string $id, string $name, string $os, string $architecture): void
+    {
+        $name = trim($name);
+        if (preg_match('/^[a-f0-9]{32}$/D', $id) !== 1
+            || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/D', $name) !== 1
+            || !in_array($os, ['linux', 'windows', 'macos'], true)
+            || !in_array($architecture, ['x86_64', 'aarch64', 'armv7'], true)) {
+            throw new InvalidArgumentException('Paramètres machine invalides');
+        }
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare('UPDATE dm_machine SET name=?, os_family=?, architecture=? WHERE id=?');
+            $statement->execute([$name, $os, $architecture, $id]);
+            $check = $this->db->prepare('SELECT id FROM dm_machine WHERE id=?');
+            $check->execute([$id]);
+            if ($check->fetchColumn() === false) {
+                throw new InvalidArgumentException('Machine introuvable');
+            }
+            $this->audit('machine.update', 'machine', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
+    public function updateProject(string $id, string $description, string $repositoryUrl): void
+    {
+        $description = trim($description);
+        $repositoryUrl = trim($repositoryUrl);
+        if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $id) !== 1
+            || $description === '' || strlen($description) > 255
+            || strlen($repositoryUrl) > 1024
+            || ($repositoryUrl !== '' && (!filter_var($repositoryUrl, FILTER_VALIDATE_URL)
+                || parse_url($repositoryUrl, PHP_URL_SCHEME) !== 'https'))) {
+            throw new InvalidArgumentException('Paramètres projet invalides');
+        }
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare('UPDATE dm_project SET description=?, repository_url=? WHERE id=?');
+            $statement->execute([$description, $repositoryUrl === '' ? null : $repositoryUrl, $id]);
+            $check = $this->db->prepare('SELECT id FROM dm_project WHERE id=?');
+            $check->execute([$id]);
+            if ($check->fetchColumn() === false) {
+                throw new InvalidArgumentException('Projet distribué introuvable ou en lecture seule');
+            }
+            $this->audit('project.update', 'project', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
+    public function updateDeploymentPath(string $id, string $workspacePath): void
+    {
+        if (preg_match('/^[a-f0-9]{32}$/D', $id) !== 1
+            || strlen($workspacePath) > 1024
+            || preg_match('~^/[a-zA-Z0-9_./-]+$~D', $workspacePath) !== 1
+            || str_contains($workspacePath, '//')
+            || in_array('..', explode('/', $workspacePath), true)) {
+            throw new InvalidArgumentException('Répertoire de travail invalide');
+        }
+        $this->db->beginTransaction();
+        try {
+            $check = $this->db->prepare('SELECT enabled FROM dm_deployment WHERE id=? FOR UPDATE');
+            $check->execute([$id]);
+            $enabled = $check->fetchColumn();
+            if ($enabled === false) {
+                throw new InvalidArgumentException('Affectation introuvable');
+            }
+            if ((int) $enabled !== 0) {
+                throw new InvalidArgumentException('Désactivez l’affectation avant de modifier son répertoire');
+            }
+            $statement = $this->db->prepare('UPDATE dm_deployment SET workspace_path=? WHERE id=?');
+            $statement->execute([$workspacePath, $id]);
+            $this->audit('deployment.update_path', 'deployment', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
     private function audit(string $event, string $type, string $id): void
     {
         $statement = $this->db->prepare(
