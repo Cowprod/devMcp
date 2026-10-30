@@ -293,6 +293,10 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 /* Shared master/detail layout for registry views */
 .registry-layout{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:1rem;align-items:start}
 .registry-sidebar{background:#192238;border:1px solid #36405a;border-radius:.65rem;padding:.8rem;position:sticky;top:1rem;max-height:75vh;overflow:auto}
+.registry-sidebar .btn-success.active{box-shadow:inset 0 0 0 2px #fff}
+.registry-detail>.card .row{margin-left:0;margin-right:0}
+.registry-detail>.card .row>[class*="col-"]{width:100%;max-width:none;padding:0}
+.registry-detail>.card .card{box-shadow:none}
 .registry-sidebar h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:#b5bdd0;margin:.2rem .5rem .8rem}
 .registry-entry{display:block;width:100%;border:0;border-radius:.45rem;background:transparent;color:#e9edf8;text-align:left;padding:.7rem .75rem;margin-bottom:.3rem;overflow-wrap:anywhere}
 .registry-entry:hover,.registry-entry:focus-visible{background:#303c59;color:#fff}
@@ -635,7 +639,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
 </script>
 
 <script>
-/* Read-only registry drill-down. Existing POST forms, CSRF, and overview tables remain intact. */
+/* Registry master/detail: creation in sidebar; edits in selected detail. */
 (function () {
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
@@ -653,19 +657,36 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     const rows=Array.from(table.querySelectorAll('tbody tr')).filter(tr=>tr.cells.length===spec.columns.length);
     const layout=el('div','registry-layout'), side=el('aside','registry-sidebar'), content=el('div','registry-detail');
     side.appendChild(el('h3','',spec.title));
+    // Reuse the existing PHP-rendered creation form, without duplicating CSRF fields.
+    const operations={machines:'machine.create',projects:'project.create',deployments:'deployment.create'};
+    const creationForm=Array.from(panel.querySelectorAll('form')).find(f=>f.querySelector('input[name="operation"]')?.value===operations[name]);
+    const creationRoot=creationForm?.closest('.row')||creationForm?.closest('.card');
+    if(!creationRoot)return;
+    creationRoot.remove();
+    const add=el('button','btn btn-success btn-sm w-100 mb-3',name==='machines'?'Ajouter une machine':name==='projects'?'Ajouter un projet':'Ajouter une affectation');
+    add.type='button';add.addEventListener('click',()=>showCreate(name));side.appendChild(add);
     const detail=el('div','card'), body=el('div','card-body');detail.appendChild(body);content.appendChild(detail);
-    const overview=el('details','registry-overview');const summary=el('summary','','Vue globale et formulaires existants');overview.appendChild(summary);
-    const existing=Array.from(panel.children);
-    existing.forEach(node=>overview.appendChild(node));
+    const overview=el('details','registry-overview');const summary=el('summary','','Vue globale');overview.appendChild(summary);
+    Array.from(panel.children).forEach(node=>overview.appendChild(node));
+    const parked=el('div','d-none');parked.appendChild(creationRoot);content.appendChild(parked);
     content.appendChild(overview);layout.append(side,content);panel.appendChild(layout);
-    registry[name]={rows,side,body,spec};
+    registry[name]={rows,side,body,spec,creationRoot,parked,add};
     rows.forEach((tr,i)=>{
       const cells=Array.from(tr.cells), title=cells[spec.key].textContent.trim(), subtitle=cells[spec.sub].textContent.trim();
       const button=el('button','registry-entry');button.type='button';button.dataset.index=String(i);
       button.appendChild(el('span','',title));button.appendChild(el('small','',subtitle));
       button.addEventListener('click',()=>select(name,i));side.appendChild(button);
     });
-    if(rows.length)select(name,0);else body.appendChild(el('p','text-secondary','Aucun élément enregistré.'));
+    if(rows.length)select(name,0);else showCreate(name);
+  }
+  function showCreate(name) {
+    const state=registry[name];if(!state)return;
+    state.side.querySelectorAll('.registry-entry').forEach(button=>{button.classList.remove('active');button.setAttribute('aria-pressed','false');});
+    state.add.classList.add('active');state.add.setAttribute('aria-pressed','true');
+    state.body.replaceChildren();
+    state.body.appendChild(el('h2','h5 mb-3',state.add.textContent.trim()));
+    state.body.appendChild(state.creationRoot);
+    state.creationRoot.querySelector('input:not([type="hidden"]),select')?.focus();
   }
   function link(name,index,label) {
     const b=el('button','btn btn-sm btn-secondary',label);b.type='button';
@@ -687,9 +708,12 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
   function select(name,index){
     const state=registry[name];if(!state||!state.rows[index])return;
     state.side.querySelectorAll('.registry-entry').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',i===index?'true':'false');});
-    const row=state.rows[index],body=state.body;body.replaceChildren();
+    const row=state.rows[index],body=state.body;
+    state.add.classList.remove('active');state.add.setAttribute('aria-pressed','false');
+    state.parked.appendChild(state.creationRoot);
+    body.replaceChildren();
     const header=el('div','registry-toolbar');header.appendChild(el('h2','h5 mb-0',row.cells[state.spec.key].textContent.trim()));
-    const edit=el('button','btn btn-sm btn-secondary','Afficher les formulaires');edit.type='button';edit.addEventListener('click',()=>{const d=body.closest('.registry-detail').querySelector('details.registry-overview');d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});});header.appendChild(edit);body.appendChild(header);
+    body.appendChild(header);
     const fields=el('dl','registry-fields mt-3');
     Array.from(row.cells).forEach((cell,i)=>{fields.appendChild(el('dt','',state.spec.columns[i]));const dd=el('dd');if(cell.querySelector('form,button,input,select')){dd.textContent=cell.textContent.trim()||'Voir la vue globale';}else{dd.textContent=cell.textContent.trim()||'—';}fields.appendChild(dd);});body.appendChild(fields);
     // Editable registry metadata only; local projects and enabled deployments remain read-only.
