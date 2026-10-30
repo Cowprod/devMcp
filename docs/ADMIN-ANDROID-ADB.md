@@ -9,7 +9,10 @@ Le navigateur (PHP-FPM sous www-data) n'exécute jamais ADB. Un service systemd
 sous devmcp publie, à fréquence bornée, un instantané JSON des appareils.
 Le tableau indique le numéro de série, le modèle, la version Android, l'état
 ADB, le pourcentage de batterie et l'espace libre disponible (si ces deux
-mesures sont accessibles).
+mesures sont accessibles). L'état **MultiCam actif / inactif** est déduit de
+`adb shell pidof fr.emmanuel.multicam` et affiche le PID du processus courant.
+Il s'agit d'une photographie périodique, pas d'une garantie que l'application
+est toujours active au moment où un diagnostic est demandé.
 
 Le bouton Capture d'écran crée un fichier `.req` vide, nommé avec un identifiant
 aléatoire et un numéro de série autorisé par l'inventaire récent. Le service
