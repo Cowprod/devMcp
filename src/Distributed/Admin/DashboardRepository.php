@@ -27,6 +27,26 @@ final class DashboardRepository
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Recent remote read-only actions for the project detail view.
+     * Never select arguments_json or result_json: these can contain file contents.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function recentRemoteReadonlyJobs(int $limit = 100): array
+    {
+        $limit = max(1, min(100, $limit));
+        return $this->db->query(
+            'SELECT dm_remote_readonly_job.id, dm_remote_readonly_job.deployment_id, '
+            . 'dm_deployment.project_id, dm_remote_readonly_job.action_name, '
+            . 'dm_remote_readonly_job.state, dm_remote_readonly_job.created_at, '
+            . 'dm_remote_readonly_job.finished_at '
+            . 'FROM dm_remote_readonly_job '
+            . 'INNER JOIN dm_deployment ON dm_deployment.id = dm_remote_readonly_job.deployment_id '
+            . 'ORDER BY dm_remote_readonly_job.created_at DESC, dm_remote_readonly_job.id DESC LIMIT ' . $limit
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** @return array<string,int> */
     public function jobCounts(): array
     {
