@@ -196,7 +196,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 if (($_POST['action_name'] ?? '') === 'workspace.find') {
                     $args['filter'] = (string) ($_POST['filter'] ?? 'all');
                 }
-                enqueueRemoteReadonlyJob($writer, (string) ($_POST['deployment_id'] ?? ''),
+                $queuedDeployment = (string) ($_POST['deployment_id'] ?? '');
+                enqueueRemoteReadonlyJob($writer, $queuedDeployment,
                     (string) ($_POST['action_name'] ?? ''), $args);
                 break;
             case 'deployment.create':
@@ -209,9 +210,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
                 'project.local_metadata.create' => 'projects',
-                'deployment.update_path' => 'deployments', default => 'dashboard'
+                'deployment.update_path' => 'deployments',
+                'remote.readonly.enqueue' => 'projects', default => 'dashboard'
             };
-            header('Location: /?created=1#' . $section, true, 303);
+            $location = '/?created=1';
+            if (isset($queuedDeployment)) {
+                $location .= '&queued_deployment=' . rawurlencode($queuedDeployment);
+            }
+            header('Location: ' . $location . '#' . $section, true, 303);
             exit;
         }
     } catch (Throwable $exception) {
@@ -250,6 +256,15 @@ try {
 } catch (Throwable $exception) {
     http_response_code(503);
     exit('Dashboard temporarily unavailable');
+}
+// History is optional if the read-only SQL account has not yet been granted SELECT.
+$remoteJobs = [];
+$remoteHistoryAvailable = true;
+try {
+    $remoteJobs = $dashboard->recentRemoteReadonlyJobs();
+} catch (PDOException $exception) {
+    $remoteHistoryAvailable = false;
+    error_log('devmcp-admin remote action history unavailable: ' . get_class($exception));
 }
 // Keep distributed registry writes separate from local runtime definitions.
 $projectRows = [];
@@ -426,7 +441,8 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <?php endforeach; ?>
 </tbody></table></div>
 </section>
-<section class="admin-panel" id="panel-projects" data-panel="projects"><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
+<section class="admin-panel" id="panel-projects" data-panel="projects">
+<?php if (!$remoteHistoryAvailable): ?><div class="alert alert-warning">Historique des actions distantes indisponible : vérifier les droits SQL en lecture seule et la migration 005. Les autorisations des agents ne sont pas affectées.</div><?php endif; ?><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter un projet</h2>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
@@ -709,6 +725,9 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
 <script>
 /* Registry master/detail: creation in sidebar; edits in selected detail. */
 (function () {
+  // Only bounded job metadata is embedded. Never expose arguments_json or result_json.
+  const remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
+  const remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
     projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
@@ -883,6 +902,26 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           const index=registry.deployments.rows.indexOf(deployment);
           top.appendChild(link('deployments',index,'Voir l’affectation'));
           box.appendChild(top);
+          const history=remoteJobHistory.filter(job=>job.deployment_id===deployment.dataset.recordId).slice(0,5);
+          const historyBox=el('div','mt-2 mb-3');
+          historyBox.appendChild(el('h5','small mb-2','Dernières demandes distantes'));
+          if(!remoteHistoryAvailable){
+            historyBox.appendChild(el('p','small text-warning mb-0','Historique SQL indisponible.'));
+          }else if(!history.length){
+            historyBox.appendChild(el('p','small text-secondary mb-0','Aucune demande parmi les 100 dernières du registre.'));
+          }else{
+            const labels={queued:'En file',claimed:'Prise en charge',succeeded:'Réussie (agent)',failed:'Échec (agent)',expired:'Expirée'};
+            const classes={queued:'bg-warning text-dark',claimed:'bg-info text-dark',succeeded:'bg-success',failed:'bg-danger',expired:'bg-secondary'};
+            history.forEach(job=>{
+              const entry=el('div','d-flex flex-wrap gap-2 align-items-center small mb-1');
+              entry.appendChild(el('code','',job.action_name));
+              entry.appendChild(el('span','badge '+(classes[job.state]||'bg-secondary'),labels[job.state]||'État inconnu'));
+              entry.appendChild(el('span','text-secondary',String(job.created_at)+' UTC'));
+              entry.appendChild(el('span','text-secondary','Réf. '+String(job.id).slice(0,8)));
+              historyBox.appendChild(entry);
+            });
+          }
+          box.appendChild(historyBox);
           if(!enabled||!approved){
             box.appendChild(el('p','small text-secondary mb-0','Aucune action ne peut être mise en file sur cette affectation dans son état actuel.'));
             list.appendChild(box);return;
@@ -948,6 +987,15 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   Object.keys(specs).forEach(build);
   // Cross-record links are only complete once all three registries exist.
   Object.keys(specs).forEach(name=>{if(registry[name]?.rows.length)select(name,0);});
+  const queuedId=new URLSearchParams(location.search).get('queued_deployment');
+  if(queuedId && registry.deployments && registry.projects){
+    const deployment=registry.deployments.rows.find(row=>row.dataset.recordId===queuedId);
+    if(deployment){
+      const projectId=deployment.cells[0].textContent.trim();
+      const index=registry.projects.rows.findIndex(row=>row.cells[0].textContent.trim()===projectId);
+      if(index>=0)select('projects',index);
+    }
+  }
 })();
 </script>
 </body></html>
