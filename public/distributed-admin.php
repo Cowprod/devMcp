@@ -265,7 +265,10 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .admin-panel .card{margin-bottom:1rem}
 .admin-panel .input-group-text{min-width:24%;justify-content:flex-start}
 .admin-panel .table-responsive{max-width:100%}
-.admin-panel .table{vertical-align:middle}
+.admin-panel .table{vertical-align:middle;--bs-table-color:#fff;--bs-table-bg:rgba(20,27,49,.36);--bs-table-striped-bg:rgba(20,27,49,.50);--bs-table-hover-bg:rgba(20,27,49,.65);--bs-table-border-color:rgba(255,255,255,.18)}
+.admin-panel .table th{color:#fff;font-weight:600}
+.admin-panel .table td{color:#fff}
+.admin-panel .table code{color:#ffe08a}
 .admin-panel .table td{white-space:normal}
 @media(min-width:1200px){.admin-panel[data-panel="dashboard"]>.row>.col-lg-6{min-width:0}}
 </style>
@@ -279,7 +282,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <a class="td-tab" href="#deployments" data-td-view="deployments"><i class="fa-solid fa-diagram-project me-1" aria-hidden="true"></i> Affectations</a>
 <a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
 </div></nav>
-<main class="container-fluid py-3" id="admin-main">
+<main class="container-fluid py-3" id="admin-main"><section class="admin-panel active" id="panel-dashboard" data-panel="dashboard">
 <section class="card mb-4"><div class="card-body">
 <h2 class="h5">Action distante en lecture seule</h2>
 <p class="text-secondary">Nécessite une machine active, un déploiement activé et une politique locale correspondante.</p>
@@ -325,8 +328,16 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <small>Attention : le jeton intégré peut être conservé dans l'historique shell. Exécution distante désactivée avant approbation.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
 <?php if ($error !== null): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <?php if (isset($_GET['created'])): ?><div class="alert alert-success">Enregistrement effectué.</div><?php endif; ?>
-<section class="row g-3 mb-4">
-<div class="col-lg-6"><div class="card"><div class="card-body">
+<h2 class="h5">Derniers jobs</h2>
+<div class="table-responsive"><table class="table table-sm table-striped table-hover">
+<thead><tr><th>Création UTC</th><th>Machine</th><th>Projet</th><th>Action</th><th>État</th></tr></thead><tbody>
+<?php foreach ($jobs as $job): ?>
+<tr><td><?= e($job['created_at']) ?></td><td><?= e($job['machine_name']) ?></td><td><?= e($job['project_id']) ?></td><td><?= e($job['action_id']) ?></td><td><span class="badge text-bg-secondary"><?= e($job['status']) ?></span></td></tr>
+<?php endforeach; ?>
+</tbody></table></div>
+</section>
+<section class="admin-panel" id="panel-machines" data-panel="machines"><section class="row g-3 mb-4">
+<div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter une machine</h2>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
@@ -336,8 +347,21 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="input-group mb-3"><span class="input-group-text">Architecture</span><select class="form-select" name="architecture"><option value="x86_64">x86_64</option><option value="aarch64">aarch64</option><option value="armv7">armv7</option></select></div>
 <div class="btn-group"><button class="btn btn-success" type="submit">Ajouter</button></div>
 </form><small class="text-secondary">Machine créée en attente, sans autorisation d'exécution.</small>
-</div></div></div>
-<div class="col-lg-6"><div class="card"><div class="card-body">
+</div></div></div></section><h2 class="h5">Machines</h2>
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
+<thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
+<?php if ($localSnapshot['ok']): ?>
+<tr><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
+<td><?= e($localSnapshot['host']['architecture']) ?></td><td><span class="badge bg-info">Local</span></td>
+<td><span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Hôte local' : 'Instantané périmé' ?></span></td><td>—</td>
+<td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
+<?php endif; ?>
+<?php foreach ($machines as $machine): ?>
+<tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
+<?php endforeach; ?>
+</tbody></table></div>
+</section>
+<section class="admin-panel" id="panel-projects" data-panel="projects"><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter un projet</h2>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
@@ -347,8 +371,26 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="input-group mb-3"><span class="input-group-text">Dépôt HTTPS</span><input class="form-control" name="repository_url" type="url"></div>
 <div class="btn-group"><button class="btn btn-success" type="submit">Ajouter</button></div>
 </form></div></div></div>
+</section><h2 class="h5">Projets (locaux et distribués)</h2>
+<?php if (!$localSnapshot['ok']): ?>
+<div class="alert alert-warning">Catalogue local indisponible : <?= e($localSnapshot['reason']) ?>. Les projets distribués restent visibles. Aucun accès direct à la configuration privée depuis le serveur web.</div>
+<?php else: ?>
+<p class="small text-secondary">Catalogue local publié le <?= e($localSnapshot['generated_at_utc']) ?> UTC
+<span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Actualisé' : 'Périmé' ?></span>.
+Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
+<?php endif; ?>
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
+<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
+<?php foreach ($projectRows as $project): ?>
+<tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
+<td><code><?= e($project['workspace'] ?: '—') ?></code></td>
+<td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
+<td><?= e($project['repository_url'] ?: '—') ?></td></tr>
+<?php endforeach; ?>
+</tbody></table></div>
 </section>
-<section class="card mb-4"><div class="card-body">
+<section class="admin-panel" id="panel-deployments" data-panel="deployments"><section class="card mb-4"><div class="card-body">
 <h2 class="h5">Affecter un projet à une machine</h2>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
@@ -359,7 +401,12 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="btn-group"><button class="btn btn-success" type="submit" <?= !$projects || !$machines ? 'disabled' : '' ?>>Associer (exécution désactivée)</button></div>
 </form><small class="text-secondary">Association enregistrée sans démarrage de jobs. Le répertoire sera vérifié sur l'agent avant toute activation.</small>
 </div></section>
-<h2 class="h5" id="android-adb">Android / ADB sur touchdeck</h2>
+<h2 class="h5">Affectations</h2>
+<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th><th>Diagnostic</th><th>Branche</th><th>Commit</th><th>Contrôle UTC</th></tr></thead><tbody>
+<?php foreach ($deployments as $deployment): ?><tr><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
+</tbody></table></div>
+</section>
+<section class="admin-panel" id="panel-android" data-panel="android"><h2 class="h5" id="android-adb">Android / ADB sur touchdeck</h2>
 <div class="card mb-4"><div class="card-body">
 <?php if (!$androidSnapshot['ok']): ?>
 <div class="alert alert-warning">Inventaire ADB indisponible. Le service de publication doit être installé sur touchdeck.</div>
@@ -415,88 +462,14 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
 </tbody></table></div>
 <?php endif; ?>
 </div></div>
-<h2 class="h5">Machines</h2>
-<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
-<?php if ($localSnapshot['ok']): ?>
-<tr><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
-<td><?= e($localSnapshot['host']['architecture']) ?></td><td><span class="badge bg-info">Local</span></td>
-<td><span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Hôte local' : 'Instantané périmé' ?></span></td><td>—</td>
-<td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
-<?php endif; ?>
-<?php foreach ($machines as $machine): ?>
-<tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
-<?php endforeach; ?>
-</tbody></table></div>
-<h2 class="h5">Projets (locaux et distribués)</h2>
-<?php if (!$localSnapshot['ok']): ?>
-<div class="alert alert-warning">Catalogue local indisponible : <?= e($localSnapshot['reason']) ?>. Les projets distribués restent visibles. Aucun accès direct à la configuration privée depuis le serveur web.</div>
-<?php else: ?>
-<p class="small text-secondary">Catalogue local publié le <?= e($localSnapshot['generated_at_utc']) ?> UTC
-<span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Actualisé' : 'Périmé' ?></span>.
-Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
-<?php endif; ?>
-<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
-<?php foreach ($projectRows as $project): ?>
-<tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
-<td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
-<td><code><?= e($project['workspace'] ?: '—') ?></code></td>
-<td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
-<td><?= e($project['repository_url'] ?: '—') ?></td></tr>
-<?php endforeach; ?>
-</tbody></table></div>
-<h2 class="h5">Affectations</h2>
-<div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th><th>Diagnostic</th><th>Branche</th><th>Commit</th><th>Contrôle UTC</th></tr></thead><tbody>
-<?php foreach ($deployments as $deployment): ?><tr><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
-</tbody></table></div>
-<h2 class="h5">Derniers jobs</h2>
-<div class="table-responsive"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Création UTC</th><th>Machine</th><th>Projet</th><th>Action</th><th>État</th></tr></thead><tbody>
-<?php foreach ($jobs as $job): ?>
-<tr><td><?= e($job['created_at']) ?></td><td><?= e($job['machine_name']) ?></td><td><?= e($job['project_id']) ?></td><td><?= e($job['action_id']) ?></td><td><span class="badge text-bg-secondary"><?= e($job['status']) ?></span></td></tr>
-<?php endforeach; ?>
-</tbody></table></div>
+</section>
 <script>
-/* Keep the existing PHP forms, CSRF checks and tables; reorganize their
-   top-level blocks into TouchDeck-style views without duplicating content. */
 (function(){
- const main=document.getElementById('admin-main');
- const children=Array.from(main.children);
- const sections={
-   dashboard:document.createElement('section'),
-   machines:document.createElement('section'),
-   projects:document.createElement('section'),
-   deployments:document.createElement('section'),
-   android:document.createElement('section')
- };
- Object.entries(sections).forEach(function(entry){
-   entry[1].className='admin-panel';
-   entry[1].dataset.panel=entry[0];
-   entry[1].id='panel-'+entry[0];
- });
- let current='dashboard';
- children.forEach(function(node){
-   // Sections have a heading nested in their first card or table wrapper.
-   // Inspect text from the actual heading, not the section's whole content.
-   const heading=node.querySelector && node.querySelector('h2.h5');
-   const title=heading ? heading.textContent.trim() : '';
-   if(node.querySelector && node.querySelector('#android-adb'))current='android';
-   else if(title==='Machines')current='machines';
-   else if(title==='Projets (locaux et distribués)')current='projects';
-   else if(title==='Affectations')current='deployments';
-   else if(title==='Derniers jobs')current='dashboard';
-   else if(title==='Ajouter une machine')current='machines';
-   else if(title==='Ajouter un projet')current='projects';
-   else if(title==='Affecter un projet à une machine')current='deployments';
-   sections[current].appendChild(node);
- });
- Object.values(sections).forEach(function(panel){main.appendChild(panel);});
  const names={'android-adb':'android',android:'android',machines:'machines',projects:'projects',deployments:'deployments',dashboard:'dashboard'};
  function activate(){
    const key=location.hash.slice(1);
    const selected=names[key]||'dashboard';
-   Object.entries(sections).forEach(function(entry){entry[1].classList.toggle('active',entry[0]===selected);});
+   document.querySelectorAll('.admin-panel').forEach(function(panel){panel.classList.toggle('active',panel.dataset.panel===selected);});
    document.querySelectorAll('.td-tab').forEach(function(tab){
      const active=tab.dataset.tdView===selected;
      tab.classList.toggle('active',active);
