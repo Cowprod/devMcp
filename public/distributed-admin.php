@@ -140,6 +140,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
                 $editor->approveMachine((string) ($_POST['machine_id'] ?? ''));
                 break;
+            case 'machine.update':
+                $editor->updateMachine((string) ($_POST['machine_id'] ?? ''), (string) ($_POST['name'] ?? ''),
+                    (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
+                break;
+            case 'project.update':
+                $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
+                    (string) ($_POST['repository_url'] ?? ''));
+                break;
+            case 'deployment.update_path':
+                $editor->updateDeploymentPath((string) ($_POST['deployment_id'] ?? ''),
+                    (string) ($_POST['workspace_path'] ?? ''));
+                break;
             case 'project.create':
                 $editor->createProject((string) ($_POST['id'] ?? ''), (string) ($_POST['description'] ?? ''), (string) ($_POST['repository_url'] ?? ''));
                 break;
@@ -162,7 +174,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 throw new InvalidArgumentException('Unknown operation');
         }
         if ($invitation === null) {
-            header('Location: /?created=1', true, 303);
+            $section = match ((string) ($_POST['operation'] ?? '')) {
+                'machine.update' => 'machines', 'project.update' => 'projects',
+                'deployment.update_path' => 'deployments', default => 'dashboard'
+            };
+            header('Location: /?created=1#' . $section, true, 303);
             exit;
         }
     } catch (Throwable $exception) {
@@ -299,7 +315,9 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <a class="td-tab" href="#deployments" data-td-view="deployments"><i class="fa-solid fa-diagram-project me-1" aria-hidden="true"></i> Affectations</a>
 <a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
 </div></nav>
-<main class="container-fluid py-3" id="admin-main"><section class="admin-panel active" id="panel-dashboard" data-panel="dashboard">
+<main class="container-fluid py-3" id="admin-main"><?php if ($error !== null): ?><div class="alert alert-danger" role="alert"><?= e($error) ?></div><?php endif; ?>
+<?php if (isset($_GET['created'])): ?><div class="alert alert-success" role="status">Enregistrement effectué.</div><?php endif; ?>
+<section class="admin-panel active" id="panel-dashboard" data-panel="dashboard">
 
 <section class="row g-3 mb-4">
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) + ($localSnapshot['ok'] ? 1 : 0) ?></div></div></div></div>
@@ -324,8 +342,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 });
 </script>
 <small>Attention : le jeton intégré peut être conservé dans l'historique shell. Exécution distante désactivée avant approbation.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
-<?php if ($error !== null): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
-<?php if (isset($_GET['created'])): ?><div class="alert alert-success">Enregistrement effectué.</div><?php endif; ?>
+
 <h2 class="h5">Derniers jobs</h2>
 <div class="table-responsive"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Création UTC</th><th>Machine</th><th>Projet</th><th>Action</th><th>État</th></tr></thead><tbody>
@@ -355,7 +372,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
 <?php endif; ?>
 <?php foreach ($machines as $machine): ?>
-<tr><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
+<tr data-record-id="<?= e($machine['id']) ?>"><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 </section>
@@ -380,7 +397,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= isset($project['id']) && array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -422,7 +439,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 </div></section>
 <h2 class="h5">Affectations</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th><th>Diagnostic</th><th>Branche</th><th>Commit</th><th>Contrôle UTC</th></tr></thead><tbody>
-<?php foreach ($deployments as $deployment): ?><tr><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
+<?php foreach ($deployments as $deployment): ?><tr data-record-id="<?= e($deployment['id']) ?>" data-enabled="<?= $deployment['enabled'] ? '1' : '0' ?>"><td><?= e($deployment['project_id']) ?></td><td><?= e($deployment['machine_name']) ?></td><td><code><?= e($deployment['workspace_path']) ?></code></td><td><span class="badge <?= $deployment['enabled'] ? 'bg-warning' : 'bg-secondary' ?>"><?= $deployment['enabled'] ? 'Activée' : 'Désactivée' ?></span></td><td><?= e($deployment['diagnostic_status'] ?? 'En attente') ?></td><td><?= e($deployment['diagnostic_branch'] ?? '—') ?></td><td><code><?= e($deployment['diagnostic_commit'] ?? '—') ?></code></td><td><?= e($deployment['diagnostic_at'] ?? 'Jamais') ?></td></tr><?php endforeach; ?>
 </tbody></table></div>
 </section>
 <section class="admin-panel" id="panel-android" data-panel="android"><h2 class="h5" id="android-adb">Android / ADB sur touchdeck</h2>
@@ -675,6 +692,47 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     const edit=el('button','btn btn-sm btn-secondary','Afficher les formulaires');edit.type='button';edit.addEventListener('click',()=>{const d=body.closest('.registry-detail').querySelector('details.registry-overview');d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});});header.appendChild(edit);body.appendChild(header);
     const fields=el('dl','registry-fields mt-3');
     Array.from(row.cells).forEach((cell,i)=>{fields.appendChild(el('dt','',state.spec.columns[i]));const dd=el('dd');if(cell.querySelector('form,button,input,select')){dd.textContent=cell.textContent.trim()||'Voir la vue globale';}else{dd.textContent=cell.textContent.trim()||'—';}fields.appendChild(dd);});body.appendChild(fields);
+    // Editable registry metadata only; local projects and enabled deployments remain read-only.
+    const id=row.dataset.recordId||'', csrf=document.querySelector('input[name="csrf"]')?.value;
+    const canEdit=!!csrf && ((name==='machines'&&!!id)
+        || (name==='projects'&&row.dataset.registryEditable==='1')
+        || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
+    if(canEdit){
+      const card=el('div','border rounded p-3 mt-3'), title=el('h3','h6','Modifier les métadonnées');
+      const form=el('form','');form.method='post';form.action='/';
+      function hidden(key,value){const input=el('input');input.type='hidden';input.name=key;input.value=value;form.appendChild(input);}
+      function field(label,key,value,type,max){
+        const group=el('div','input-group mb-2'), lbl=el('span','input-group-text',label), input=el('input','form-control');
+        input.name=key;input.value=value;input.type=type||'text';input.required=key!=='repository_url';
+        if(max)input.maxLength=max;group.append(lbl,input);form.appendChild(group);
+      }
+      function choice(label,key,current,items){
+        const group=el('div','input-group mb-2'), lbl=el('span','input-group-text',label), select=el('select','form-select');select.name=key;
+        items.forEach(v=>{const option=el('option','',v);option.value=v;select.appendChild(option);});
+        select.value=current;group.append(lbl,select);form.appendChild(group);
+      }
+      hidden('csrf',csrf);
+      if(name==='machines'){
+        hidden('operation','machine.update');hidden('machine_id',id);
+        field('Nom','name',row.cells[0].textContent.trim(),'text',128);
+        choice('OS','os',row.cells[1].textContent.trim(),['linux','windows','macos']);
+        choice('Architecture','architecture',row.cells[2].textContent.trim(),['x86_64','aarch64','armv7']);
+      }else if(name==='projects'){
+        hidden('operation','project.update');hidden('project_id',row.cells[0].textContent.trim());
+        field('Description','description',row.cells[1].textContent.trim(),'text',255);
+        field('Dépôt HTTPS','repository_url',row.cells[5].textContent.trim()==='—'?'':row.cells[5].textContent.trim(),'url',1024);
+      }else{
+        hidden('operation','deployment.update_path');hidden('deployment_id',id);
+        field('Répertoire','workspace_path',row.cells[2].textContent.trim(),'text',1024);
+        card.appendChild(el('p','small text-secondary','Modification autorisée uniquement si l’affectation est désactivée.'));
+      }
+      const submit=el('button','btn btn-success','Enregistrer');submit.type='submit';form.appendChild(submit);
+      card.append(title,form);body.appendChild(card);
+    }else if(name==='projects'&&row.dataset.registryEditable!=='1'){
+      body.appendChild(el('p','small text-secondary mt-3','Projet local : modification exclusivement via la configuration devMcp.'));
+    }else if(name==='deployments'&&row.dataset.enabled==='1'){
+      body.appendChild(el('p','small text-secondary mt-3','Affectation active : édition du répertoire verrouillée.'));
+    }
     related(name,row,body);
     if(name==='deployments'){
       const action=body.closest('.registry-detail').querySelector('form input[name="operation"][value="remote.readonly.enqueue"]');
