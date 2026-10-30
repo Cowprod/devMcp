@@ -365,7 +365,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
 <input type="hidden" name="operation" value="android.label.save">
 <input type="hidden" name="device" value="<?= e($serial) ?>">
-<input type="text" class="form-control form-control-sm" name="label" maxlength="80" aria-label="Libellé local de <?= e($serial) ?>" placeholder="Master, Capture, Storage…" value="<?= e(AndroidDeviceLabel::read($serial)) ?>">
+<input type="text" class="form-control form-control-sm" name="label" maxlength="80" aria-label="Libellé local de <?= e($serial) ?>" placeholder="Nom personnalisé" value="<?= e(AndroidDeviceLabel::read($serial)) ?>">
 <button type="submit" class="btn btn-sm btn-success" title="Enregistrer le libellé"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
 </form></td>
 <td>
