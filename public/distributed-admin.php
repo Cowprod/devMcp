@@ -94,7 +94,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 throw new RuntimeException('Impossible de mettre la capture en file.');
             }
             fclose($handle);
-            header('Location: /?adb_pending=' . rawurlencode($serial), true, 303);
+            header('Location: /?adb_pending=' . rawurlencode($serial) . '#android-adb', true, 303);
             exit;
         }
         if (!isset($config['writer_username'], $config['writer_password'])) {
@@ -311,7 +311,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="btn-group"><button class="btn btn-success" type="submit" <?= !$projects || !$machines ? 'disabled' : '' ?>>Associer (exécution désactivée)</button></div>
 </form><small class="text-secondary">Association enregistrée sans démarrage de jobs. Le répertoire sera vérifié sur l'agent avant toute activation.</small>
 </div></section>
-<h2 class="h5">Android / ADB sur touchdeck</h2>
+<h2 class="h5" id="android-adb">Android / ADB sur touchdeck</h2>
 <div class="card mb-4"><div class="card-body">
 <?php if (!$androidSnapshot['ok']): ?>
 <div class="alert alert-warning">Inventaire ADB indisponible. Le service de publication doit être installé sur touchdeck.</div>
@@ -341,7 +341,7 @@ $pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?
 <td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
 <td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
-<?php if (is_file($shot) && !is_link($shot)): ?><a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="/?adb_image=<?= rawurlencode($serial) ?>">Voir (<?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC)</a><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
+<?php if (is_file($shot) && !is_link($shot)): ?><button type="button" class="btn btn-link p-0 adb-preview" data-url="/?adb_image=<?= rawurlencode($serial) ?>" data-serial="<?= e($serial) ?>" title="Agrandir la capture"><img src="/?adb_image=<?= rawurlencode($serial) ?>" alt="Capture de <?= e($serial) ?>" loading="lazy" style="max-width:72px;max-height:100px;object-fit:contain;border-radius:4px"></button><div class="small"><?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC</div><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
 <?php endforeach; ?>
 <?php if (!$androidSnapshot['devices']): ?><tr><td colspan="8">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
 </tbody></table></div>
@@ -390,4 +390,21 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <?php endforeach; ?>
 </tbody></table></div>
 </main>
+<dialog id="adb-dialog" aria-label="Capture Android" style="max-width:96vw;max-height:95vh;padding:1rem;border-radius:10px;background:#222;color:white"><div class="d-flex justify-content-between align-items-center gap-3 mb-2"><strong id="adb-dialog-title">Capture Android</strong><button type="button" id="adb-close" class="btn btn-sm btn-secondary">Fermer</button></div><img id="adb-dialog-img" alt="Capture agrandie" style="display:block;max-width:90vw;max-height:75vh;object-fit:contain;margin:auto"><div class="mt-3"><a id="adb-download" class="btn btn-success" download>Télécharger le PNG</a></div></dialog>
+<script>
+(function () {
+ const dialog=document.getElementById('adb-dialog'), img=document.getElementById('adb-dialog-img'), download=document.getElementById('adb-download');
+ document.querySelectorAll('.adb-preview').forEach(function (button) {
+   button.addEventListener('click',function () {
+     const url=button.dataset.url, serial=button.dataset.serial;
+     img.src=url; download.href=url; download.download='capture-'+serial+'.png';
+     document.getElementById('adb-dialog-title').textContent='Capture Android — '+serial;
+     dialog.showModal();
+   });
+ });
+ document.getElementById('adb-close').addEventListener('click',function () {dialog.close();});
+ dialog.addEventListener('click',function (event) {if(event.target===dialog)dialog.close();});
+ dialog.addEventListener('close',function () {img.removeAttribute('src');});
+})();
+</script>
 </body></html>
