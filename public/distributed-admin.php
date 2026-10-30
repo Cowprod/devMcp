@@ -310,6 +310,14 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .registry-overview{margin-top:1rem}.registry-overview summary{cursor:pointer;padding:.7rem;color:#c5d0e5}
 .registry-related button{margin:.2rem}.registry-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
 @media(max-width:750px){.registry-layout{grid-template-columns:1fr}.registry-sidebar{position:static;max-height:220px}.registry-fields{grid-template-columns:1fr}.registry-fields dt{margin-top:.4rem}}
+
+/* High-contrast Quartz details: light labels need dark ink; translucent cards need light metadata. */
+.registry-detail .registry-fields dt{color:#f1f4ff;font-weight:500}
+.registry-detail .input-group-text{color:#192238!important;background:rgba(239,245,255,.86);font-weight:600}
+.registry-detail .form-control,.registry-detail .form-select{color:#fff;background-color:rgba(28,39,69,.35);border-color:rgba(255,255,255,.45)}
+.registry-detail .form-control::placeholder{color:#e0e5f1;opacity:1}
+.registry-detail .form-control:focus,.registry-detail .form-select:focus{color:#fff;background-color:rgba(28,39,69,.6)}
+.registry-detail .form-select option{color:#192238;background:#fff}
 </style>
 </head>
 <body>
