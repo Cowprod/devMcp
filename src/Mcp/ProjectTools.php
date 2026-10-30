@@ -7,6 +7,7 @@ namespace Cowprod\DevMcp\Mcp;
 use Cowprod\DevMcp\Audit\AuditLogger;
 use Cowprod\DevMcp\Execution\ActionRunner;
 use Cowprod\DevMcp\Execution\JobManager;
+use Cowprod\DevMcp\GitHub\PrivateRepositoryCreator;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\ProjectCreationPreview;
 use InvalidArgumentException;
@@ -20,6 +21,7 @@ final class ProjectTools
         private readonly AuditLogger $audit,
         private readonly HostTools $hostTools = new HostTools(),
         private readonly ?RemoteTools $remoteTools = null,
+        private readonly ?PrivateRepositoryCreator $githubCreator = null,
     ) {
     }
 
@@ -101,6 +103,49 @@ final class ProjectTools
         ];
         $preview['next_step'] = 'Provisioning disabled: approve separate GitHub and machine policies before mutation';
         return $preview;
+    }
+
+    /**
+     * Explicit, opt-in GitHub mutation only. Creating a repository never
+     * creates a workspace, registers a project, or activates agent actions.
+     */
+    public function githubRepositoryCreate(string $repository, string $confirmation): array
+    {
+        if ($this->githubCreator === null) {
+            throw new InvalidArgumentException('Creation GitHub desactivee par la politique centrale');
+        }
+        if (strlen($repository) > 140) {
+            throw new InvalidArgumentException('Nom GitHub trop long');
+        }
+        // Audit before the external side effect. Never record a token or HTTP body.
+        $this->audit->append([
+            'project' => '_github',
+            'action' => 'github.repository.create',
+            'repository' => $repository,
+            'outcome' => 'requested',
+        ]);
+        try {
+            $created = $this->githubCreator->create($repository, $confirmation);
+        } catch (\Throwable $error) {
+            $this->audit->append([
+                'project' => '_github', 'action' => 'github.repository.create',
+                'repository' => $repository, 'outcome' => 'failed',
+                'error_class' => get_class($error),
+            ]);
+            throw $error;
+        }
+        try {
+            $this->audit->append([
+                'project' => '_github', 'action' => 'github.repository.create',
+                'repository' => $created['repository'], 'outcome' => 'created',
+                'github_id' => $created['github_id'],
+            ]);
+            $created['audit_confirmed'] = true;
+        } catch (\Throwable) {
+            // Do not report a failed operation when GitHub already created it.
+            $created['audit_confirmed'] = false;
+        }
+        return $created;
     }
 
     /**

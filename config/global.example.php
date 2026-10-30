@@ -21,6 +21,13 @@ return [
         'max_job_log_bytes' => 4 * 1024 * 1024,
         'max_artifact_chunk_bytes' => 262144,
     ],
+    // OFF by default; enabling requires a private, single-organisation token.
+    // The MCP worker must be able to read the file; never expose it to PHP-FPM.
+    'github_repository_creation' => [
+        'enabled' => false,
+        'organization' => 'Cowprod',
+        'token_file' => '/etc/devmcp/github-repository-token',
+    ],
     'projects' => [
         'devmcp' => [
             'description' => 'Serveur devMcp lui-même',
