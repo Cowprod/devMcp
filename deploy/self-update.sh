@@ -18,10 +18,13 @@ export GIT_CONFIG_VALUE_0=/opt/devmcp
 git fetch --no-tags origin main
 old=$(git rev-parse HEAD)
 new=$(git rev-parse refs/remotes/origin/main)
-[ "$old" = "$new" ] && { echo "devMcp already up to date: $old"; exit 0; }
+if [ "$old" = "$new" ]; then
+    echo "devMcp core already up to date: $old"
+else
 git merge-base --is-ancestor "$old" "$new" || { echo "Non fast-forward update: abort" >&2; exit 1; }
 git diff --name-only "$old" "$new" | grep -Eq '^(config/|src/|bin/|public/|vendor/|composer\.(json|lock)|deploy/)' || echo "Documentation-only update"
 git merge --ff-only "$new"
+fi
 if [ -f /opt/devmcp/bin/devmcp-touchdeck-ota ]; then
     /bin/sh /opt/devmcp/deploy/install-touchdeck-ota.sh
 fi
@@ -31,5 +34,13 @@ if [ -f composer.lock ]; then
     composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 fi
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
-systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
-echo "devMcp updated: $old -> $new"
+if [ "$old" != "$new" ]; then
+    systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
+fi
+# The web admin has a separate checkout; sync it on every scheduled run,
+# including when the core is already current. The bridge deployer validates
+# origins, clean worktrees, ancestry, PHP syntax and service permissions.
+if [ -d /opt/devmcp-admin/.git ]; then
+    /bin/bash /opt/devmcp/deploy/distributed/apply-local-admin-bridge.sh
+fi
+echo "devMcp update check completed: $old -> $new"
