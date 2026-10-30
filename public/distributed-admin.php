@@ -250,13 +250,36 @@ function e(mixed $value): string
 <link rel="icon" type="image/webp" href="/devmcp-icon-512.webp">
 <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/quartz/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+<style>
+/* Shared navigation design from Cowprod/touchDeck server/public/admin.html. */
+.td-nav{position:sticky;top:0;z-index:1050;background:rgba(24,30,49,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.14);box-shadow:0 4px 22px rgba(0,0,0,.14)}
+.td-nav .container-fluid{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.7rem 1.5rem}
+.td-brand{font-size:1.15rem;font-weight:700;color:#fff;text-decoration:none;margin-right:1rem}
+.td-nav .td-tab{border:0;border-radius:.65rem;padding:.65rem 1rem;background:transparent;color:#d6e0f4;font-weight:600;text-decoration:none}
+.td-nav .td-tab:hover{background:rgba(255,255,255,.09);color:#fff}
+.td-nav .td-tab.active{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 -3px 0 var(--bs-primary)}
+main.container-fluid{max-width:1800px;padding:12px!important}
+.admin-panel{display:none}
+.admin-panel.active{display:block}
+.admin-panel>.table-responsive,.admin-panel>.card{margin-bottom:1rem}
+.admin-panel .card{margin-bottom:1rem}
+.admin-panel .input-group-text{min-width:24%;justify-content:flex-start}
+.admin-panel .table-responsive{max-width:100%}
+.admin-panel .table{vertical-align:middle}
+.admin-panel .table td{white-space:normal}
+@media(min-width:1200px){.admin-panel[data-panel="dashboard"]>.row>.col-lg-6{min-width:0}}
+</style>
 </head>
 <body>
-<main class="container py-4">
-<header class="d-flex justify-content-between align-items-center mb-4">
-<h1 class="h3 mb-0">devMcp <span class="text-secondary">/ Distribué</span></h1>
-<span class="badge bg-secondary ms-2 border border-light">Registre</span>
-</header>
+<nav class="td-nav" aria-label="Navigation principale"><div class="container-fluid">
+<a class="td-brand" href="#dashboard"><i class="fa-solid fa-server me-2" aria-hidden="true"></i>devMcp</a>
+<a class="td-tab active" href="#dashboard" data-td-view="dashboard"><i class="fa-solid fa-gauge-high me-1" aria-hidden="true"></i> Tableau de bord</a>
+<a class="td-tab" href="#machines" data-td-view="machines"><i class="fa-solid fa-computer me-1" aria-hidden="true"></i> Machines</a>
+<a class="td-tab" href="#projects" data-td-view="projects"><i class="fa-solid fa-folder-tree me-1" aria-hidden="true"></i> Projets</a>
+<a class="td-tab" href="#deployments" data-td-view="deployments"><i class="fa-solid fa-diagram-project me-1" aria-hidden="true"></i> Affectations</a>
+<a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
+</div></nav>
+<main class="container-fluid py-3" id="admin-main">
 <section class="card mb-4"><div class="card-body">
 <h2 class="h5">Action distante en lecture seule</h2>
 <p class="text-secondary">Nécessite une machine active, un déploiement activé et une politique locale correspondante.</p>
@@ -434,6 +457,57 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <tr><td><?= e($job['created_at']) ?></td><td><?= e($job['machine_name']) ?></td><td><?= e($job['project_id']) ?></td><td><?= e($job['action_id']) ?></td><td><span class="badge text-bg-secondary"><?= e($job['status']) ?></span></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
+<script>
+/* Keep the existing PHP forms, CSRF checks and tables; reorganize their
+   top-level blocks into TouchDeck-style views without duplicating content. */
+(function(){
+ const main=document.getElementById('admin-main');
+ const children=Array.from(main.children);
+ const sections={
+   dashboard:document.createElement('section'),
+   machines:document.createElement('section'),
+   projects:document.createElement('section'),
+   deployments:document.createElement('section'),
+   android:document.createElement('section')
+ };
+ Object.entries(sections).forEach(function(entry){
+   entry[1].className='admin-panel';
+   entry[1].dataset.panel=entry[0];
+   entry[1].id='panel-'+entry[0];
+ });
+ let current='dashboard';
+ children.forEach(function(node){
+   // Sections have a heading nested in their first card or table wrapper.
+   // Inspect text from the actual heading, not the section's whole content.
+   const heading=node.querySelector && node.querySelector('h2.h5');
+   const title=heading ? heading.textContent.trim() : '';
+   if(node.querySelector && node.querySelector('#android-adb'))current='android';
+   else if(title==='Machines')current='machines';
+   else if(title==='Projets (locaux et distribués)')current='projects';
+   else if(title==='Affectations')current='deployments';
+   else if(title==='Derniers jobs')current='dashboard';
+   else if(title==='Ajouter une machine')current='machines';
+   else if(title==='Ajouter un projet')current='projects';
+   else if(title==='Affecter un projet à une machine')current='deployments';
+   sections[current].appendChild(node);
+ });
+ Object.values(sections).forEach(function(panel){main.appendChild(panel);});
+ const names={'android-adb':'android',android:'android',machines:'machines',projects:'projects',deployments:'deployments',dashboard:'dashboard'};
+ function activate(){
+   const key=location.hash.slice(1);
+   const selected=names[key]||'dashboard';
+   Object.entries(sections).forEach(function(entry){entry[1].classList.toggle('active',entry[0]===selected);});
+   document.querySelectorAll('.td-tab').forEach(function(tab){
+     const active=tab.dataset.tdView===selected;
+     tab.classList.toggle('active',active);
+     if(active)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current');
+   });
+   if(key==='android-adb')window.scrollTo(0,0);
+ }
+ window.addEventListener('hashchange',activate);
+ activate();
+})();
+</script>
 </main>
 <dialog id="adb-dialog" aria-label="Capture Android" style="max-width:96vw;max-height:95vh;padding:1rem;border-radius:10px;background:#222;color:white"><div class="d-flex justify-content-between align-items-center gap-3 mb-2"><strong id="adb-dialog-title">Capture Android</strong><button type="button" id="adb-close" class="btn btn-sm btn-secondary">Fermer</button></div><img id="adb-dialog-img" alt="Capture agrandie" style="display:block;max-width:90vw;max-height:75vh;object-fit:contain;margin:auto"><div class="mt-3"><a id="adb-download" class="btn btn-success" download>Télécharger le PNG</a></div></dialog>
 <script>
