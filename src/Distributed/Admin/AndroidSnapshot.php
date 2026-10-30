@@ -49,6 +49,8 @@ final class AndroidSnapshot
                 'battery_percent' => null,
                 'storage_free_gb' => null,
                 'multicam_pid' => null,
+                'multicam_version_name' => null,
+                'multicam_version_code' => null,
             ];
         }
         return array_values($devices);
@@ -89,6 +91,12 @@ final class AndroidSnapshot
             // Lightweight, read-only process status; the process may exit between snapshots.
             $pidOutput = self::run([self::ADB, '-s', $serial, 'shell', 'pidof', self::DIAGNOSTIC_PACKAGE], 4);
             $device['multicam_pid'] = is_string($pidOutput) ? self::parseMainPid($pidOutput) : null;
+            // Version réellement installée sur chaque tablette : utile pour identifier
+            // les écarts d'APK sans installer, arrêter ou modifier l'application.
+            $package = self::run([self::ADB, '-s', $serial, 'shell', 'dumpsys', 'package', self::DIAGNOSTIC_PACKAGE], 5);
+            $version = is_string($package) ? self::parsePackageVersion($package) : null;
+            $device['multicam_version_name'] = $version['version_name'] ?? null;
+            $device['multicam_version_code'] = $version['version_code'] ?? null;
         }
         unset($device);
         return ['schema_version' => 1, 'generated_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
@@ -179,6 +187,36 @@ final class AndroidSnapshot
         $parts = preg_split('/\s+/', $output);
         $pid = $parts[0] ?? '';
         return strlen($pid) <= 10 && (int) $pid > 0 ? $pid : null;
+    }
+
+    /**
+     * Parse the targeted package section only; never report an unrelated app's version.
+     *
+     * @return array{version_name:?string,version_code:?string}|null
+     */
+    public static function parsePackageVersion(string $output): ?array
+    {
+        $packageHeader = '/^[ \\t]*Package \\[' . preg_quote(self::DIAGNOSTIC_PACKAGE, '/') . '\\][^\\r\\n]*$/m';
+        if (!preg_match($packageHeader, $output, $matches, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+        $start = $matches[0][1] + strlen($matches[0][0]);
+        $section = substr($output, $start, 32768);
+        if (preg_match('/^[ \\t]*Package \\[/m', $section, $next, PREG_OFFSET_CAPTURE)) {
+            $section = substr($section, 0, $next[0][1]);
+        }
+        $name = null;
+        if (preg_match('/^[ \\t]*versionName=([^\\r\\n]*)/m', $section, $nameMatch)) {
+            $value = trim($nameMatch[1]);
+            if ($value !== '' && $value !== 'null') {
+                $name = substr($value, 0, 80);
+            }
+        }
+        $code = null;
+        if (preg_match('/^[ \\t]*versionCode=(\\d+)(?:[ \\t]|$)/m', $section, $codeMatch)) {
+            $code = substr($codeMatch[1], 0, 20);
+        }
+        return ['version_name' => $name, 'version_code' => $code];
     }
 
     /** Read-only, application-scoped diagnostic. Does not clear logcat or stop the app. */
