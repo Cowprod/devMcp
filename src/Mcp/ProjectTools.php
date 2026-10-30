@@ -114,6 +114,9 @@ final class ProjectTools
         if ($this->githubCreator === null) {
             throw new InvalidArgumentException('Creation GitHub desactivee par la politique centrale');
         }
+        if (strlen($repository) > 140) {
+            throw new InvalidArgumentException('Nom GitHub trop long');
+        }
         // Audit before the external side effect. Never record a token or HTTP body.
         $this->audit->append([
             'project' => '_github',
