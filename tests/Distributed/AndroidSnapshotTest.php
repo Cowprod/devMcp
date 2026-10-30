@@ -27,8 +27,8 @@ final class AndroidSnapshotTest extends TestCase
 
     public function testAcceptsOnlyNumericPidOutputAndSelectsMainPid(): void
     {
-        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234\\n"));
-        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234 5678\\n"));
+        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234\n"));
+        self::assertSame('1234', AndroidSnapshot::parseMainPid("1234 5678\n"));
         self::assertNull(AndroidSnapshot::parseMainPid("1234; reboot"));
         self::assertNull(AndroidSnapshot::parseMainPid("not running"));
         self::assertNull(AndroidSnapshot::parseMainPid("0"));
