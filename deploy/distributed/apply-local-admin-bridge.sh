@@ -15,8 +15,11 @@ for checkout in /opt/devmcp /opt/devmcp-admin; do
     [[ -d "$checkout/.git" ]] || { echo "Checkout Git absent : $checkout" >&2; exit 1; }
     [[ "$(git -C "$checkout" rev-parse --show-toplevel)" == "$checkout" ]] \
         || { echo "Mauvaise racine Git : $checkout" >&2; exit 1; }
-    [[ "$(git -C "$checkout" branch --show-current)" == "main" ]] \
-        || { echo "Branche non main : $checkout" >&2; exit 1; }
+    # Local installations can be pinned to a detached commit by the deployment workflow.
+    # Accept main or a detached HEAD only if HEAD is a strict ancestor of origin/main.
+    branch="$(git -C "$checkout" branch --show-current)"
+    [[ -z "$branch" || "$branch" == "main" ]] \
+        || { echo "Branche inattendue ($branch) : $checkout" >&2; exit 1; }
     [[ -z "$(git -C "$checkout" status --porcelain --untracked-files=no)" ]] \
         || { echo "Modifications suivies présentes : $checkout" >&2; exit 1; }
     remote="$(git -C "$checkout" remote get-url origin)"
