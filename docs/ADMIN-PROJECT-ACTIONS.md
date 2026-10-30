@@ -36,6 +36,18 @@ un résultat de `workspace.read` peut contenir des données sensibles.
 `succeeded` signifie que la file a enregistré un succès rapporté par l'agent,
 et ne constitue pas une validation des permissions pour des demandes futures.
 
+L'onglet **Projets** actualise ces seuls états toutes les 15 secondes tant qu'il
+est visible, sans recharger la page ni effacer les paramètres d'une action en
+cours de préparation. La route GET `/?remote_jobs=1` exige le même HTTPS et
+l'authentification du proxy que l'interface ; elle utilise le compte SQL
+**lecture seule**, renvoie au plus 100 enregistrements et ne projette que
+`id`, `deployment_id`, `project_id`, `action_name`, `state`,
+`created_at` et `finished_at`. Aucun contenu de fichier, argument,
+résultat ou politique d'agent n'est exposé. La réponse est non mise en cache.
+Si le rafraîchissement échoue, l'interface garde les derniers états mais
+les signale comme potentiellement anciens. Il ne s'agit pas d'un flux
+temps réel ni d'une preuve d'exécution autorisée.
+
 Si la migration 005 ou le droit SQL SELECT manque, l'historique affiche un
 avertissement sans rendre les autres écrans indisponibles. Le nombre de demandes
 affichées est borné ; l'absence de demande n'implique pas l'absence d'anciens
