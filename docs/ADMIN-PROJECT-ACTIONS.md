@@ -21,3 +21,23 @@ La lecture accepte l'ancien instantané dépourvu de `action_details`. Elle refu
 L'édition des métadonnées d'un projet dans le registre SQL ne modifie **jamais** ses actions exécutables. Un futur formulaire de création/modification/suppression d'action devra passer par un protocole privilégié, spécifique et audité, validé indépendamment par l'agent : approbation, portée machine/projet, contrôle des changements et possibilité de révocation. L'interface ne doit pas permettre d'accorder une nouvelle autorisation simplement en insérant ou en mettant à jour un enregistrement MySQL.
 
 Le formulaire de lecture distante ne constitue pas un éditeur de politique. Aucune capacité d'écriture sur les agents n'est activée par les informations descriptives de cette fonctionnalité.
+
+## Suivi des actions distantes depuis la fiche Projet
+
+La fiche **Projets** affiche, pour chaque affectation, jusqu'à cinq demandes
+parmi les 100 derniers jobs de consultation distante du registre, avec action,
+état (`queued`, `claimed`, `succeeded`, `failed`, `expired`), date UTC et
+référence courte. Après une mise en file réussie, le navigateur revient à la
+fiche du projet correspondant plutôt qu'au tableau de bord.
+
+Ce suivi lit seulement les métadonnées SQL (`dm_remote_readonly_job` et
+`dm_deployment`). Il ne charge **ni les arguments**, **ni `result_json`** :
+un résultat de `workspace.read` peut contenir des données sensibles.
+`succeeded` signifie que la file a enregistré un succès rapporté par l'agent,
+et ne constitue pas une validation des permissions pour des demandes futures.
+
+Si la migration 005 ou le droit SQL SELECT manque, l'historique affiche un
+avertissement sans rendre les autres écrans indisponibles. Le nombre de demandes
+affichées est borné ; l'absence de demande n'implique pas l'absence d'anciens
+jobs. Aucun changement de politique, aucune permission ajoutée, aucune
+mutation du workspace distant ne découle de ce suivi.
