@@ -1,0 +1,12 @@
+[Unit]
+Description=Actualise le catalogue local de devMcp
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=120s
+AccuracySec=15s
+Persistent=true
+Unit=devmcp-admin-projects.service
+
+[Install]
+WantedBy=timers.target

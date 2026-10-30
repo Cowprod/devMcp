@@ -1,0 +1,77 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$base = dirname(AndroidSnapshot::DEFAULT_PATH);
+foreach ([$base, AndroidSnapshot::REQUEST_DIRECTORY, AndroidSnapshot::SCREENSHOT_DIRECTORY] as $dir) {
+    if (!is_dir($dir)) {
+        fwrite(STDERR, "Répertoire de service absent\n");
+        exit(1);
+    }
+}
+try {
+    $snapshot = AndroidSnapshot::inspect();
+    $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $temp = tempnam($base, '.android-');
+    if ($temp === false) {
+        throw new RuntimeException('Impossible de créer le fichier temporaire');
+    }
+    try {
+        if (file_put_contents($temp, $json . "\n", LOCK_EX) === false
+            || !chmod($temp, 0640)
+            || !rename($temp, AndroidSnapshot::DEFAULT_PATH)) {
+            throw new RuntimeException('Impossible de publier les appareils');
+        }
+    } finally {
+        if (is_file($temp)) {
+            unlink($temp);
+        }
+    }
+
+    $connected = [];
+    foreach ($snapshot['devices'] as $device) {
+        if ($device['state'] === 'device') {
+            $connected[] = $device['serial'];
+        }
+    }
+    $requests = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.req') ?: [];
+    foreach (array_slice($requests, 0, 4) as $request) {
+        if (is_link($request) || !is_file($request)) {
+            continue;
+        }
+        $filename = basename($request);
+        if (preg_match('/^[a-f0-9]{32}-([A-Za-z0-9_.:-]{1,128})\.req$/D', $filename, $match) !== 1) {
+            continue;
+        }
+        if (filemtime($request) < time() - 900) {
+            unlink($request);
+            continue;
+        }
+        $serial = $match[1];
+        $errorFile = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error';
+        $success = AndroidSnapshot::capture($serial, $connected);
+        if ($success) {
+            if (is_file($errorFile)) {
+                unlink($errorFile);
+            }
+        } else {
+            $tempError = tempnam(AndroidSnapshot::SCREENSHOT_DIRECTORY, '.error-');
+            if ($tempError !== false) {
+                file_put_contents($tempError, "Capture impossible (appareil déconnecté ou refus ADB)\n");
+                chmod($tempError, 0640);
+                rename($tempError, $errorFile);
+            }
+        }
+        unlink($request);
+    }
+    echo 'OK: ', count($snapshot['devices']), " appareil(s) ADB, ",
+        count($requests), " demande(s) en file\n";
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Inventaire ADB impossible: ' . $error->getMessage() . "\n");
+    exit(1);
+}

@@ -1,0 +1,47 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$configPath = getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php';
+if (!is_file($configPath) || !is_readable($configPath)) {
+    fwrite(STDERR, "Configuration locale indisponible\n");
+    exit(1);
+}
+$config = require $configPath;
+if (!is_array($config)) {
+    fwrite(STDERR, "Configuration locale invalide\n");
+    exit(1);
+}
+try {
+    $snapshot = LocalProjectSnapshot::export($config);
+    $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $output = LocalProjectSnapshot::DEFAULT_PATH;
+    $directory = dirname($output);
+    if (!is_dir($directory) || !is_writable($directory)) {
+        throw new RuntimeException('Répertoire de publication indisponible');
+    }
+    $temp = tempnam($directory, '.projects-');
+    if ($temp === false) {
+        throw new RuntimeException('Impossible de préparer le fichier temporaire');
+    }
+    try {
+        if (file_put_contents($temp, $json . "\n", LOCK_EX) === false
+            || !chmod($temp, 0640)
+            || !rename($temp, $output)) {
+            throw new RuntimeException('Publication atomique impossible');
+        }
+    } finally {
+        if (is_file($temp)) {
+            unlink($temp);
+        }
+    }
+    echo 'OK: ', count($snapshot['projects']), " projet(s) locaux publiés\n";
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Export impossible: ' . $error->getMessage() . "\n");
+    exit(1);
+}

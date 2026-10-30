@@ -1,0 +1,16 @@
+[Unit]
+Description=Publie le catalogue local devMcp pour l'administration HTTPS
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=devmcp
+Group=devmcp
+UMask=0027
+Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-admin-projects-export
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/devmcp-admin-bridge
+ProtectHome=yes
+PrivateTmp=yes
