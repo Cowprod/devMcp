@@ -12,9 +12,9 @@ use Symfony\Component\Process\Process;
  */
 final class AndroidSnapshot
 {
-    public const DEFAULT_PATH = '/var/lib/devmcp/admin-share/android.json';
-    public const REQUEST_DIRECTORY = '/var/lib/devmcp/admin-share/requests';
-    public const SCREENSHOT_DIRECTORY = '/var/lib/devmcp/admin-share/screenshots';
+    public const DEFAULT_PATH = '/var/lib/devmcp-admin-bridge/android.json';
+    public const REQUEST_DIRECTORY = '/var/lib/devmcp-admin-bridge/requests';
+    public const SCREENSHOT_DIRECTORY = '/var/lib/devmcp-admin-bridge/screenshots';
     private const ADB = '/usr/bin/adb';
 
     public static function validSerial(string $serial): bool
