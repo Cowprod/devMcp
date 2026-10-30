@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+use Cowprod\DevMcp\Distributed\Admin\AndroidDeviceLabel;
 use Cowprod\DevMcp\Distributed\Admin\DashboardRepository;
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
 use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
@@ -52,6 +53,19 @@ if (isset($_GET['adb_image'])) {
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $androidSnapshot = AndroidSnapshot::read();
+if (isset($_GET['adb_status'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $serial = (string) $_GET['adb_status'];
+    $known = AndroidSnapshot::validSerial($serial)
+        && in_array($serial, array_column($androidSnapshot['devices'], 'serial'), true);
+    if (!$known) {
+        http_response_code(404);
+        echo '{"error":"Appareil inconnu"}';
+        exit;
+    }
+    echo json_encode(AndroidSnapshot::screenshotStatus($serial), JSON_THROW_ON_ERROR);
+    exit;
+}
 $adbFresh = $androidSnapshot['ok']
     && strtotime($androidSnapshot['generated_at_utc']) >= time() - 120;
 $error = null;
@@ -65,6 +79,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit('Invalid CSRF token');
     }
     try {
+        if (($_POST['operation'] ?? '') === 'android.label.save') {
+            $serial = (string) ($_POST['device'] ?? '');
+            $known = AndroidSnapshot::validSerial($serial)
+                && in_array($serial, array_column($androidSnapshot['devices'], 'serial'), true);
+            if (!$known) {
+                throw new InvalidArgumentException('Appareil Android inconnu.');
+            }
+            AndroidDeviceLabel::save($serial, (string) ($_POST['label'] ?? ''));
+            header('Location: /?label_saved=' . rawurlencode($serial) . '#android-adb', true, 303);
+            exit;
+        }
         if (($_POST['operation'] ?? '') === 'android.screenshot.request') {
             $serial = (string) ($_POST['device'] ?? '');
             $online = false;
@@ -320,30 +345,50 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <span class="badge <?= $adbFresh ? 'bg-success' : 'bg-warning' ?>"><?= $adbFresh ? 'Actualisé' : 'Périmé' ?></span>
 <?php if (!$androidSnapshot['adb_available']): ?> · ADB indisponible sur l'hôte.<?php endif; ?>
 </p>
-<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
-<div class="table-responsive"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th></tr></thead>
+<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée : la vignette se mettra à jour automatiquement. Le bouton d'actualisation reste disponible.</div><?php endif; ?>
+<?php if (isset($_GET['label_saved'])): ?><div class="alert alert-success">Libellé enregistré sur le serveur.</div><?php endif; ?>
+<div class="table-responsive"><table class="table table-sm table-striped table-hover align-middle">
+<thead><tr><th>Actions</th><th>Libellé local / rôle</th><th>Nom Android / hôte</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture</th></tr></thead>
 <tbody>
 <?php foreach ($androidSnapshot['devices'] as $device): ?>
-<?php $serial = $device['serial']; $shot = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
-$pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?: []; ?>
-<tr><td>
-<form method="post" action="/" class="d-inline">
+<?php $serial = $device['serial']; $status = AndroidSnapshot::screenshotStatus($serial);
+$shotUrl = '/?adb_image=' . rawurlencode($serial) . '&v=' . ($status['mtime'] ?? 0);
+$host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?>
+<tr>
+<td><form method="post" action="/" class="d-inline">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
 <input type="hidden" name="operation" value="android.screenshot.request">
 <input type="hidden" name="device" value="<?= e($serial) ?>">
-<button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera"></i> Capture</button>
+<button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera" aria-hidden="true"></i> Capture</button>
 </form></td>
+<td><form method="post" action="/" class="d-flex gap-1" style="min-width:155px">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="android.label.save">
+<input type="hidden" name="device" value="<?= e($serial) ?>">
+<input type="text" class="form-control form-control-sm" name="label" maxlength="80" aria-label="Libellé local de <?= e($serial) ?>" placeholder="Master, Capture, Storage…" value="<?= e(AndroidDeviceLabel::read($serial)) ?>">
+<button type="submit" class="btn btn-sm btn-success" title="Enregistrer le libellé"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
+</form></td>
+<td>
+<?php if ($deviceName !== ''): ?><div><?= e($deviceName) ?> <small class="text-secondary">(nom Android)</small></div><?php endif; ?>
+<?php if ($host !== ''): ?><div><code><?= e($host) ?></code> <small class="text-secondary">(hôte)</small></div><?php endif; ?>
+<?php if ($deviceName === '' && $host === ''): ?>—<?php endif; ?>
+</td>
 <td><code><?= e($serial) ?></code></td>
 <td><span class="badge <?= $device['state'] === 'device' && $adbFresh ? 'bg-success' : 'bg-secondary' ?>"><?= e($device['state']) ?></span></td>
 <td><?= e($device['model'] ?: $device['product']) ?></td>
 <td><?= e($device['android_version'] ?: '—') ?></td>
 <td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
-<td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
-<?php if (is_file($shot) && !is_link($shot)): ?><button type="button" class="btn btn-link p-0 adb-preview" data-url="/?adb_image=<?= rawurlencode($serial) ?>" data-serial="<?= e($serial) ?>" title="Agrandir la capture"><img src="/?adb_image=<?= rawurlencode($serial) ?>" alt="Capture de <?= e($serial) ?>" loading="lazy" style="max-width:72px;max-height:100px;object-fit:contain;border-radius:4px"></button><div class="small"><?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC</div><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
+<td class="adb-capture-cell" data-serial="<?= e($serial) ?>" data-pending="<?= $status['pending'] ? '1' : '0' ?>">
+<?php if ($status['pending']): ?><span class="badge bg-warning">En attente</span>
+<button type="button" class="btn btn-sm btn-secondary adb-refresh" title="Actualiser la capture" aria-label="Actualiser la capture de <?= e($serial) ?>"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i></button><?php endif; ?>
+<?php if ($status['error']): ?><span class="badge bg-danger">Échec</span><?php endif; ?>
+<?php if ($status['ready']): ?>
+<button type="button" class="btn btn-link p-0 adb-preview" data-url="<?= e($shotUrl) ?>" data-serial="<?= e($serial) ?>" title="Agrandir la capture"><img src="<?= e($shotUrl) ?>" alt="Capture de <?= e($serial) ?>" loading="lazy" style="max-width:72px;max-height:100px;object-fit:contain;border-radius:4px"></button><div class="small"><?= e(gmdate('d/m H:i', (int) $status['mtime'])) ?> UTC</div>
+<?php elseif (!$status['pending'] && !$status['error']): ?>—<?php endif; ?>
+</td></tr>
 <?php endforeach; ?>
-<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="8">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
+<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="10">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
 </tbody></table></div>
 <?php endif; ?>
 </div></div>
