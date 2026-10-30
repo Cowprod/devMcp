@@ -77,6 +77,7 @@ final class PrivateRepositoryCreator
         }
         $result = json_decode($reply['body'] ?? '', true);
         if (!is_array($result) || ($result['private'] ?? null) !== true
+            || ($result['visibility'] ?? null) !== 'private'
             || !is_int($result['id'] ?? null)
             || strcasecmp((string) ($result['name'] ?? ''), $name) !== 0
             || strcasecmp((string) ($result['owner']['login'] ?? ''), $this->organization) !== 0) {
