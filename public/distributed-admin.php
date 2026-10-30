@@ -12,6 +12,7 @@ use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Registry\RegistryRepository;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/bin/remote-job-policy.php';
 
 header('Cache-Control: no-store');
 $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
@@ -748,6 +749,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   // Only bounded job metadata is embedded. Never expose arguments_json or result_json.
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
+  const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
     projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
@@ -970,7 +972,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           hidden('deployment_id',deployment.dataset.recordId);
           const actionGroup=el('div','input-group input-group-sm mb-2');
           const actions=el('select','form-select');actions.name='action_name';
-          ['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'].forEach(name=>{
+          Object.keys(remoteActionCatalog).forEach(name=>{
             const option=el('option','',name);option.value=name;actions.appendChild(option);
           });
           actionGroup.append(el('span','input-group-text','Action'),actions);
@@ -983,13 +985,16 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             const option=el('option','',name);option.value=name;filter.appendChild(option);
           });
           filterGroup.append(el('span','input-group-text','Filtre'),filter);
+          const actionHelp=el('p','small text-secondary mb-2');
           const updateFields=()=>{
-            pathGroup.classList.toggle('d-none',actions.value==='git.head');
-            filterGroup.classList.toggle('d-none',actions.value!=='workspace.find');
+            const spec=remoteActionCatalog[actions.value];
+            pathGroup.classList.toggle('d-none',!spec?.needs_path);
+            filterGroup.classList.toggle('d-none',!spec?.supports_filter);
+            actionHelp.textContent=spec?.description||'Action indisponible';
           };
           actions.addEventListener('change',updateFields);updateFields();
           const submit=el('button','btn btn-success btn-sm','Mettre en file');submit.type='submit';
-          form.append(actionGroup,pathGroup,filterGroup,submit);
+          form.append(actionGroup,actionHelp,pathGroup,filterGroup,submit);
           box.appendChild(form);
           list.appendChild(box);
         });
