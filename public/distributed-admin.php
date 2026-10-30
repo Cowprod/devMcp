@@ -679,7 +679,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     parked.appendChild(creationView);
     const remoteAction=name==='deployments'?parked.querySelector('input[name="operation"][value="remote.readonly.enqueue"]')?.closest('section.card'):null;
     content.appendChild(parked);layout.append(side,content);panel.appendChild(layout);
-    registry[name]={rows,side,body,spec,creationView,parked,add,remoteAction};
+    registry[name]={rows,side,body,spec,creationView,parked,add,remoteAction,enrollmentForms:[]};
     rows.forEach((tr,i)=>{
       const cells=Array.from(tr.cells), title=cells[spec.key].textContent.trim(), subtitle=cells[spec.sub].textContent.trim();
       const button=el('button','registry-entry');button.type='button';button.dataset.index=String(i);
@@ -693,6 +693,8 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     state.side.querySelectorAll('.registry-entry').forEach(button=>{button.classList.remove('active');button.setAttribute('aria-pressed','false');});
     state.add.classList.add('active');state.add.setAttribute('aria-pressed','true');
     if(state.remoteAction)state.parked.appendChild(state.remoteAction);
+    state.enrollmentForms.forEach(({form,cell})=>cell.appendChild(form));
+    state.enrollmentForms=[];
     state.body.replaceChildren();
     state.body.appendChild(el('h2','h5 mb-3',state.add.textContent.trim()));
     state.body.appendChild(state.creationView);
@@ -722,8 +724,8 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     state.add.classList.remove('active');state.add.setAttribute('aria-pressed','false');
     state.parked.appendChild(state.creationView);
     if(state.remoteAction)state.parked.appendChild(state.remoteAction);
-    // Return any machine-specific enrollment controls before switching the selected record.
-    state.parked.querySelectorAll('table tbody tr').forEach(tr=>{if(tr.dataset.enrollmentMoved==='1'){const form=state.parked.querySelector('[data-enrollment-for="'+tr.dataset.recordId+'"]');if(form){tr.lastElementChild?.appendChild(form);form.removeAttribute('data-enrollment-for');}delete tr.dataset.enrollmentMoved;}});
+    state.enrollmentForms.forEach(({form,cell})=>cell.appendChild(form));
+    state.enrollmentForms=[];
     body.replaceChildren();
     const header=el('div','registry-toolbar');header.appendChild(el('h2','h5 mb-0',row.cells[state.spec.key].textContent.trim()));
     body.appendChild(header);
@@ -774,12 +776,14 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     if(name==='machines'){
       // Enrollment and approval remain associated with their own machine, not a global list.
       const enrollment=row.querySelectorAll('form');
-      enrollment.forEach(form=>{form.dataset.enrollmentFor=id;row.dataset.enrollmentMoved='1';body.appendChild(form);});
+      enrollment.forEach(form=>{state.enrollmentForms.push({form,cell:form.parentElement});body.appendChild(form);});
     }
     if(name==='deployments'&&state.remoteAction){
       const section=state.remoteAction;
-      section.classList.remove('remote-action-card');
+      section.classList.remove('card','remote-action-card');
       section.classList.add('mt-4');
+      const inner=section.querySelector('.card-body');
+      if(inner)inner.classList.remove('card-body');
       body.appendChild(section);
       const action=section.querySelector('form input[name="operation"][value="remote.readonly.enqueue"]');
       if(action){const select=action.closest('form').querySelector('select[name="deployment_id"]');if(select){const label=row.cells[0].textContent.trim()+' / '+row.cells[1].textContent.trim();const option=Array.from(select.options).find(o=>o.textContent.trim()===label);if(option)select.value=option.value;}}
