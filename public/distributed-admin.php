@@ -68,6 +68,26 @@ if (isset($_GET['adb_log'])) {
 }
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+// Read-only metadata endpoint for project job polling: identical HTTPS and proxy auth.
+if (isset($_GET['remote_jobs']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    try {
+        $readDb = DatabaseConnection::connect(
+            (string) ($config['dsn'] ?? ''),
+            (string) ($config['username'] ?? ''),
+            (string) ($config['password'] ?? ''),
+        );
+        $recent = (new DashboardRepository($readDb))->recentRemoteReadonlyJobs();
+        echo json_encode(['jobs' => $recent], JSON_HEX_TAG | JSON_HEX_AMP
+            | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+    } catch (Throwable $exception) {
+        error_log('devmcp-admin remote job polling unavailable: ' . get_class($exception));
+        http_response_code(503);
+        echo '{"error":"Historique temporairement indisponible"}';
+    }
+    exit;
+}
 $localSnapshot = LocalProjectSnapshot::read(LocalProjectSnapshot::DEFAULT_PATH);
 $localFresh = $localSnapshot['ok'] && strtotime($localSnapshot['generated_at_utc']) >= time() - 600;
 $androidSnapshot = AndroidSnapshot::read();
@@ -726,8 +746,8 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
 /* Registry master/detail: creation in sidebar; edits in selected detail. */
 (function () {
   // Only bounded job metadata is embedded. Never expose arguments_json or result_json.
-  const remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
-  const remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
+  let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
+  let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
     projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
@@ -801,6 +821,35 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       if(projects)projects.rows.forEach((r,i)=>{if(r.cells[0].textContent.trim()===projectName)area.appendChild(link('projects',i,'Projet : '+projectName));});
     }
     if(area.children.length){body.append(heading,area);}else if(name!=='deployments'){body.append(heading,el('p','text-secondary small','Aucune affectation enregistrée.'));}
+  }
+  // Repaint status-only metadata, never the surrounding action forms.
+  let lastRemoteJobRefresh = null;
+  let remotePollError = false;
+  function renderRemoteHistory(box, deploymentId) {
+    box.replaceChildren(el('h5','small mb-2','Dernières demandes distantes'));
+    const history=remoteJobHistory.filter(job=>job.deployment_id===deploymentId).slice(0,5);
+    if(!remoteHistoryAvailable){
+      box.appendChild(el('p','small text-warning mb-0','Historique SQL indisponible.'));
+    }else if(!history.length){
+      box.appendChild(el('p','small text-secondary mb-0','Aucune demande parmi les 100 dernières du registre.'));
+    }else{
+      const labels={queued:'En file',claimed:'Prise en charge',succeeded:'Réussie (agent)',failed:'Échec (agent)',expired:'Expirée'};
+      const classes={queued:'bg-warning text-dark',claimed:'bg-info text-dark',succeeded:'bg-success',failed:'bg-danger',expired:'bg-secondary'};
+      history.forEach(job=>{
+        const entry=el('div','d-flex flex-wrap gap-2 align-items-center small mb-1');
+        entry.appendChild(el('code','',job.action_name));
+        entry.appendChild(el('span','badge '+(classes[job.state]||'bg-secondary'),labels[job.state]||'État inconnu'));
+        entry.appendChild(el('span','text-secondary',String(job.created_at)+' UTC'));
+        entry.appendChild(el('span','text-secondary','Réf. '+String(job.id).slice(0,8)));
+        box.appendChild(entry);
+      });
+    }
+    const note=remotePollError
+      ? 'Actualisation indisponible : les états affichés peuvent être anciens.'
+      : lastRemoteJobRefresh
+        ? 'Statuts actualisés à '+lastRemoteJobRefresh.toLocaleTimeString('fr-FR')+'.'
+        : 'Statuts au chargement ; actualisation automatique toutes les 15 s sur cet onglet.';
+    box.appendChild(el('p','small '+(remotePollError?'text-warning':'text-secondary')+' mt-2 mb-0',note));
   }
   function select(name,index){
     const state=registry[name];if(!state||!state.rows[index])return;
@@ -902,25 +951,9 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           const index=registry.deployments.rows.indexOf(deployment);
           top.appendChild(link('deployments',index,'Voir l’affectation'));
           box.appendChild(top);
-          const history=remoteJobHistory.filter(job=>job.deployment_id===deployment.dataset.recordId).slice(0,5);
-          const historyBox=el('div','mt-2 mb-3');
-          historyBox.appendChild(el('h5','small mb-2','Dernières demandes distantes'));
-          if(!remoteHistoryAvailable){
-            historyBox.appendChild(el('p','small text-warning mb-0','Historique SQL indisponible.'));
-          }else if(!history.length){
-            historyBox.appendChild(el('p','small text-secondary mb-0','Aucune demande parmi les 100 dernières du registre.'));
-          }else{
-            const labels={queued:'En file',claimed:'Prise en charge',succeeded:'Réussie (agent)',failed:'Échec (agent)',expired:'Expirée'};
-            const classes={queued:'bg-warning text-dark',claimed:'bg-info text-dark',succeeded:'bg-success',failed:'bg-danger',expired:'bg-secondary'};
-            history.forEach(job=>{
-              const entry=el('div','d-flex flex-wrap gap-2 align-items-center small mb-1');
-              entry.appendChild(el('code','',job.action_name));
-              entry.appendChild(el('span','badge '+(classes[job.state]||'bg-secondary'),labels[job.state]||'État inconnu'));
-              entry.appendChild(el('span','text-secondary',String(job.created_at)+' UTC'));
-              entry.appendChild(el('span','text-secondary','Réf. '+String(job.id).slice(0,8)));
-              historyBox.appendChild(entry);
-            });
-          }
+          const historyBox=el('div','mt-2 mb-3 remote-job-history');
+          historyBox.dataset.deploymentId=deployment.dataset.recordId;
+          renderRemoteHistory(historyBox,deployment.dataset.recordId);
           box.appendChild(historyBox);
           if(!enabled||!approved){
             box.appendChild(el('p','small text-secondary mb-0','Aucune action ne peut être mise en file sur cette affectation dans son état actuel.'));
@@ -996,6 +1029,37 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       if(index>=0)select('projects',index);
     }
   }
+  // Poll while the project tab is visible; never rerender unsent forms.
+  let remotePollInProgress=false;
+  async function pollRemoteJobs() {
+    if(remotePollInProgress || document.hidden
+      || !document.getElementById('panel-projects')?.classList.contains('active')
+      || !document.querySelector('#panel-projects .remote-job-history')) return;
+    remotePollInProgress=true;
+    try {
+      const response=await fetch('/?remote_jobs=1',{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      const payload=await response.json();
+      if(!payload || !Array.isArray(payload.jobs) || payload.jobs.length>100
+        || !payload.jobs.every(job=>job && typeof job.id==='string'
+          && typeof job.deployment_id==='string' && typeof job.action_name==='string'
+          && typeof job.state==='string' && typeof job.created_at==='string')){
+        throw new Error('Invalid remote job metadata');
+      }
+      remoteJobHistory=payload.jobs;
+      remoteHistoryAvailable=true;
+      remotePollError=false;
+      lastRemoteJobRefresh=new Date();
+    }catch(_){
+      remotePollError=true;
+    }finally{
+      remotePollInProgress=false;
+    }
+    document.querySelectorAll('#panel-projects .remote-job-history').forEach(box=>{
+      renderRemoteHistory(box,box.dataset.deploymentId||'');
+    });
+  }
+  window.setInterval(pollRemoteJobs,15000);
 })();
 </script>
 </body></html>
