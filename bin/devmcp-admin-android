@@ -96,6 +96,10 @@ try {
                 unlink($errorFile);
             }
         } else {
+            $previousLog = AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.log';
+            if (!is_link($previousLog) && is_file($previousLog)) {
+                unlink($previousLog);
+            }
             $tempError = tempnam(AndroidSnapshot::LOG_DIRECTORY, '.error-');
             if ($tempError !== false) {
                 file_put_contents($tempError, "Journal indisponible (MultiCam inactive ou refus ADB)\n");
