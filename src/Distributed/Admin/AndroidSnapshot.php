@@ -44,6 +44,7 @@ final class AndroidSnapshot
                 'model' => $model[1] ?? '',
                 'product' => $product[1] ?? '',
                 'android_version' => '',
+                'device_name' => '',
                 'hostname' => '',
                 'device_name' => '',
                 'battery_percent' => null,
@@ -75,6 +76,12 @@ final class AndroidSnapshot
             $device['hostname'] = self::cleanDeviceName($host);
             $settingsName = self::run([self::ADB, '-s', $serial, 'shell', 'settings', 'get', 'global', 'device_name'], 4);
             $device['device_name'] = self::cleanDeviceName($settingsName);
+            $name = self::run([self::ADB, '-s', $serial, 'shell', 'settings', 'get', 'global', 'device_name'], 4);
+            if (!is_string($name) || trim($name) === '' || trim($name) === 'null') {
+                $name = self::run([self::ADB, '-s', $serial, 'shell', 'settings', 'get', 'secure', 'bluetooth_name'], 4);
+            }
+            $device['device_name'] = is_string($name) && trim($name) !== 'null'
+                ? substr(trim($name), 0, 100) : '';
             $battery = self::run([self::ADB, '-s', $serial, 'shell', 'dumpsys', 'battery'], 4);
             if (is_string($battery)
                 && preg_match('/^\s*level:\s*(\d+)/m', $battery, $level)
@@ -163,7 +170,8 @@ final class AndroidSnapshot
                 || !self::validSerial($device['serial'])
                 || !in_array($device['state'] ?? null, ['device','unauthorized','offline','recovery','sideload'], true)
                 || !is_string($device['model'] ?? null)
-                || !is_string($device['android_version'] ?? null)) {
+                || !is_string($device['android_version'] ?? null)
+                || !is_string($device['device_name'] ?? null)) {
                 return $empty;
             }
         }
