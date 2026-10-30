@@ -53,7 +53,7 @@ final class PrivateRepositoryCreatorTest extends TestCase
                 'auto_init' => true,
             ], $body);
             return ['status' => 201, 'body' => json_encode([
-                'id' => 42, 'private' => true, 'name' => 'demo-new',
+                'id' => 42, 'private' => true, 'visibility' => 'private', 'name' => 'demo-new',
                 'owner' => ['login' => 'Cowprod'],
             ], JSON_THROW_ON_ERROR)];
         };
