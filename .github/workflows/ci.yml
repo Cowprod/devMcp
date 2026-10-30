@@ -26,12 +26,18 @@ jobs:
           php -l bin/devmcp-pm2-service
           php -l bin/devmcp-touchdeck-ota
           php -l public/index.php
+          php -l public/distributed-admin.php
+          php -l src/Distributed/Admin/LocalProjectSnapshot.php
+          php -l src/Distributed/Admin/AndroidSnapshot.php
+          php -l bin/devmcp-admin-projects-export
+          php -l bin/devmcp-admin-android
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Lint deployment scripts
         run: |
           sh -n deploy/install-platformio.sh
           sh -n deploy/apply-vm-runtime.sh
           sh -n deploy/install-touchdeck-ota.sh
+          bash -n deploy/distributed/install-local-admin-bridge.sh
       - name: Smoke-test workspace inspection boundaries
         run: |
           mkdir -p /tmp/devmcp-inspect-fixture/sub
