@@ -69,6 +69,7 @@ final class LocalProjectSnapshotTest extends TestCase
                 'action_count' => 0, 'actions' => []];
             file_put_contents($file, json_encode([
                 'schema_version' => 1,
+                'host' => ['name' => 'touchdeck', 'os' => 'linux', 'architecture' => 'x86_64'],
                 'generated_at_utc' => '2026-10-30T09:00:00Z',
                 'projects' => [$row, $row],
             ], JSON_THROW_ON_ERROR));
