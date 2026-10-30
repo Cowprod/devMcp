@@ -56,5 +56,24 @@ final class DashboardRepositoryTest extends TestCase
         }
         self::assertSame(['0003'], array_column($repo->recentRemoteReadonlyJobs(0), 'id'));
         self::assertCount(2, $repo->recentRemoteReadonlyJobs(2));
+        // Repeated reads used by HTTPS polling must observe state transitions
+        // without accidentally serializing the stored arguments or results.
+        $db->exec("UPDATE dm_remote_readonly_job SET state='succeeded', "
+            . "finished_at='2026-10-30 12:02:00' WHERE id='0002'");
+        $refreshed = $repo->recentRemoteReadonlyJobs();
+        self::assertSame('succeeded', $refreshed[1]['state']);
+        self::assertSame('2026-10-30 12:02:00', $refreshed[1]['finished_at']);
+        $json = json_encode(['jobs' => $refreshed], JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString('private-args', $json);
+        self::assertStringNotContainsString('private-result', $json);
+        self::assertStringContainsString('"state":"succeeded"', $json);
+
+        // The polling response is always limited to 100 metadata records.
+        for ($i = 4; $i <= 112; $i++) {
+            $id = sprintf('%04d', $i);
+            $db->exec("INSERT INTO dm_remote_readonly_job VALUES "
+                . "('$id','d1','git.head','queued','2026-10-30 13:00:00',NULL,NULL,NULL)");
+        }
+        self::assertCount(100, $repo->recentRemoteReadonlyJobs(1000));
     }
 }
