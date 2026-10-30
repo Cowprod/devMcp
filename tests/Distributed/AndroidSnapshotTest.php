@@ -37,6 +37,36 @@ final class AndroidSnapshotTest extends TestCase
         self::assertNull(AndroidSnapshot::parseMainPid("9999999999999999"));
     }
 
+    public function testReadsInstalledMulticamVersionWithoutMixingPackageSections(): void
+    {
+        $dump = "Packages:\n"
+            . "  Package [unrelated.app] (a1):\n"
+            . "    versionCode=999 minSdk=21\n"
+            . "    versionName=9.9.9\n"
+            . "  Package [fr.emmanuel.multicam] (b2):\n"
+            . "    userId=10102\n"
+            . "    versionCode=46 minSdk=24 targetSdk=35\n"
+            . "    versionName=1.6.0\n"
+            . "  Package [another.app] (c3):\n"
+            . "    versionCode=888\n"
+            . "    versionName=8.8.8\n";
+        self::assertSame(
+            ['version_name' => '1.6.0', 'version_code' => '46'],
+            AndroidSnapshot::parsePackageVersion($dump),
+        );
+        self::assertNull(AndroidSnapshot::parsePackageVersion(
+            "Unable to find package: fr.emmanuel.multicam\n",
+        ));
+        self::assertSame(
+            ['version_name' => null, 'version_code' => null],
+            AndroidSnapshot::parsePackageVersion("Package [fr.emmanuel.multicam] (b2):\n    userId=10102\n"),
+        );
+        self::assertSame(
+            ['version_name' => null, 'version_code' => '1'],
+            AndroidSnapshot::parsePackageVersion("Package [fr.emmanuel.multicam] (b2):\n    versionCode=1\n    versionName=null\n"),
+        );
+    }
+
     public function testRejectsSerialInjectionAndMalformedSnapshots(): void
     {
         self::assertFalse(AndroidSnapshot::validSerial('../bad/serial'));
