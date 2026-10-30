@@ -326,6 +326,9 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .registry-detail .form-control::placeholder{color:#e0e5f1;opacity:1}
 .registry-detail .form-control:focus,.registry-detail .form-select:focus{color:#fff;background-color:rgba(28,39,69,.6)}
 .registry-detail .form-select option{color:#192238;background:#fff}
+.registry-action-entry{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.45rem .65rem;margin:.3rem 0;background:rgba(22,32,57,.4);border-radius:.4rem;flex-wrap:wrap}
+.registry-action-entry code{color:#f5f7ff;overflow-wrap:anywhere}
+.registry-actions{margin-top:.6rem}
 </style>
 </head>
 <body>
@@ -787,6 +790,38 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
       body.appendChild(el('p','small text-secondary mt-3','Inventaire local indisponible ou périmé : édition momentanément inaccessible.'));
     }else if(name==='deployments'&&row.dataset.enabled==='1'){
       body.appendChild(el('p','small text-secondary mt-3','Affectation active : édition du répertoire verrouillée.'));
+    }
+    if(name==='projects'){
+      const heading=el('h3','h6 mt-4','Actions du projet');
+      const list=el('div','registry-actions');
+      const localActions=Array.from(row.cells[4].querySelectorAll('details')).flatMap(d=>
+        (d.querySelector('.small')?.textContent||'').split(',').map(v=>v.trim()).filter(Boolean));
+      const projectId=row.cells[0].textContent.trim();
+      const deployments=registry.deployments?.rows.filter(r=>r.cells[0].textContent.trim()===projectId)||[];
+      if(localActions.length){
+        const label=el('h4','small text-secondary mt-3','Actions locales déclarées');
+        list.appendChild(label);
+        localActions.forEach(action=>{
+          const line=el('div','registry-action-entry');
+          line.appendChild(el('code','',action));
+          line.appendChild(el('span','badge bg-secondary','Configuration locale'));
+          list.appendChild(line);
+        });
+      }
+      if(deployments.length){
+        list.appendChild(el('h4','small text-secondary mt-3','Actions distantes possibles (liste de lecture seule)'));
+        ['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'].forEach(action=>{
+          const line=el('div','registry-action-entry');
+          line.appendChild(el('code','',action));
+          line.appendChild(el('span','badge bg-info text-dark','Soumise à la politique de la machine'));
+          list.appendChild(line);
+        });
+        list.appendChild(el('p','small text-secondary mt-2','La disponibilité effective dépend de l’affectation, de l’état de la machine et de sa politique locale.'));
+      }
+      if(!localActions.length&&!deployments.length){
+        list.appendChild(el('p','text-secondary small','Aucune action publiée pour ce projet.'));
+      }
+      body.append(heading,list);
     }
     related(name,row,body);
     if(name==='machines'){
