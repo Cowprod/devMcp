@@ -266,6 +266,8 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .admin-panel .input-group-text{min-width:24%;justify-content:flex-start}
 .admin-panel .table-responsive{max-width:100%}
 .admin-panel .table{vertical-align:middle;--bs-table-color:#fff;--bs-table-bg:rgba(20,27,49,.36);--bs-table-striped-bg:rgba(20,27,49,.50);--bs-table-hover-bg:rgba(20,27,49,.65);--bs-table-border-color:rgba(255,255,255,.18)}
+.admin-panel .remote-action-card{max-width:1050px}
+.admin-panel .remote-action-card .input-group-text{min-width:160px;width:25%}
 .admin-panel .table th{color:#fff;font-weight:600}
 .admin-panel .table td{color:#fff}
 .admin-panel .table code{color:#ffe08a}
@@ -283,26 +285,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
 </div></nav>
 <main class="container-fluid py-3" id="admin-main"><section class="admin-panel active" id="panel-dashboard" data-panel="dashboard">
-<section class="card mb-4"><div class="card-body">
-<h2 class="h5">Action distante en lecture seule</h2>
-<p class="text-secondary">Nécessite une machine active, un déploiement activé et une politique locale correspondante.</p>
-<form method="post" action="/">
-<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
-<input type="hidden" name="operation" value="remote.readonly.enqueue">
-<div class="input-group mb-2"><span class="input-group-text">Déploiement</span><select class="form-select" name="deployment_id" required>
-<?php foreach ($deployments as $deployment): ?>
-<option value="<?= e($deployment['id']) ?>"><?= e($deployment['project_id'] . ' / ' . $deployment['machine_name']) ?></option>
-<?php endforeach; ?></select></div>
-<div class="input-group mb-2"><span class="input-group-text">Action</span><select class="form-select" name="action_name">
-<?php foreach (['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'] as $action): ?>
-<option value="<?= e($action) ?>"><?= e($action) ?></option>
-<?php endforeach; ?></select></div>
-<div class="input-group mb-2"><span class="input-group-text">Chemin</span><input class="form-control" name="path" value="."></div>
-<div class="input-group mb-3"><span class="input-group-text">Filtre</span><select class="form-select" name="filter">
-<?php foreach (['all','php','js','json','md'] as $filter): ?><option value="<?= e($filter) ?>"><?= e($filter) ?></option><?php endforeach; ?>
-</select></div>
-<div class="btn-group"><button type="submit" class="btn btn-success">Mettre en file</button></div>
-</form></div></section>
+
 <section class="row g-3 mb-4">
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Machines</div><div class="fs-3"><?= count($machines) + ($localSnapshot['ok'] ? 1 : 0) ?></div></div></div></div>
 <div class="col-md-4"><div class="card"><div class="card-body"><div class="text-secondary">Projets</div><div class="fs-3"><?= count($projectRows) ?></div></div></div></div>
@@ -390,7 +373,28 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <?php endforeach; ?>
 </tbody></table></div>
 </section>
-<section class="admin-panel" id="panel-deployments" data-panel="deployments"><section class="card mb-4"><div class="card-body">
+<section class="admin-panel" id="panel-deployments" data-panel="deployments">
+<section class="card mb-4 remote-action-card"><div class="card-body">
+<h2 class="h5">Exécuter une action sur une affectation</h2>
+<p class="text-secondary">Nécessite une machine active, un déploiement activé et une politique locale correspondante.</p>
+<form method="post" action="/">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="remote.readonly.enqueue">
+<div class="input-group mb-2"><span class="input-group-text">Déploiement</span><select class="form-select" name="deployment_id" required>
+<?php foreach ($deployments as $deployment): ?>
+<option value="<?= e($deployment['id']) ?>"><?= e($deployment['project_id'] . ' / ' . $deployment['machine_name']) ?></option>
+<?php endforeach; ?></select></div>
+<div class="input-group mb-2"><span class="input-group-text">Action</span><select class="form-select" name="action_name">
+<?php foreach (['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'] as $action): ?>
+<option value="<?= e($action) ?>"><?= e($action) ?></option>
+<?php endforeach; ?></select></div>
+<div class="input-group mb-2"><span class="input-group-text">Chemin</span><input class="form-control" name="path" value="."></div>
+<div class="input-group mb-3"><span class="input-group-text">Filtre</span><select class="form-select" name="filter">
+<?php foreach (['all','php','js','json','md'] as $filter): ?><option value="<?= e($filter) ?>"><?= e($filter) ?></option><?php endforeach; ?>
+</select></div>
+<div class="btn-group"><button type="submit" class="btn btn-success">Mettre en file</button></div>
+</form></div></section>
+<section class="card mb-4"><div class="card-body">
 <h2 class="h5">Affecter un projet à une machine</h2>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
