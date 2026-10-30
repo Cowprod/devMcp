@@ -33,15 +33,16 @@ final class LocalProjectSnapshot
         }
         return [
             'schema_version' => 1,
+            'host' => ['name' => gethostname() ?: 'devmcp-local', 'os' => strtolower(PHP_OS_FAMILY), 'architecture' => php_uname('m')],
             'generated_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
             'projects' => $projects,
         ];
     }
 
-    /** @return array{ok:bool,reason:string,generated_at_utc:string,projects:list<array<string,mixed>>} */
+    /** @return array{ok:bool,reason:string,generated_at_utc:string,host:array<string,string>,projects:list<array<string,mixed>>} */
     public static function read(string $path): array
     {
-        $empty = ['ok' => false, 'reason' => 'instantané indisponible', 'generated_at_utc' => '', 'projects' => []];
+        $empty = ['ok' => false, 'reason' => 'instantané indisponible', 'generated_at_utc' => '', 'host' => [], 'projects' => []];
         if ($path === '' || is_link($path) || !is_file($path) || !is_readable($path)) {
             return $empty;
         }
@@ -61,6 +62,10 @@ final class LocalProjectSnapshot
         }
         if (!is_array($data) || ($data['schema_version'] ?? null) !== 1
             || !is_string($data['generated_at_utc'] ?? null)
+            || !is_array($data['host'] ?? null)
+            || !is_string($data['host']['name'] ?? null)
+            || !is_string($data['host']['os'] ?? null)
+            || !is_string($data['host']['architecture'] ?? null)
             || !is_array($data['projects'] ?? null) || !array_is_list($data['projects'])
             || count($data['projects']) > 100) {
             $empty['reason'] = 'instantané invalide';
@@ -97,6 +102,9 @@ final class LocalProjectSnapshot
             'ok' => true,
             'reason' => '',
             'generated_at_utc' => $data['generated_at_utc'],
+            'host' => ['name' => substr($data['host']['name'], 0, 128),
+                'os' => substr($data['host']['os'], 0, 32),
+                'architecture' => substr($data['host']['architecture'], 0, 32)],
             'projects' => array_values($projects),
         ];
     }
