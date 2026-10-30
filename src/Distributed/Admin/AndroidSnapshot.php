@@ -124,7 +124,7 @@ final class AndroidSnapshot
         $size = $ready ? filesize($shot) : false;
         $ready = $ready && is_int($size) && $size >= 64 && $size <= 12582912;
         $signature = $ready ? file_get_contents($shot, false, null, 0, 8) : false;
-        $ready = $ready && $signature === "\\x89PNG\\r\\n\\x1a\\n";
+        $ready = $ready && $signature === "\x89PNG\r\n\x1a\n";
         $mtime = $ready ? filemtime($shot) : false;
         $error = $screenshotDirectory . '/' . $serial . '.error';
         return [
