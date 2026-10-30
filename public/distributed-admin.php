@@ -52,6 +52,8 @@ if (isset($_GET['adb_image'])) {
 }
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+$localSnapshot = LocalProjectSnapshot::read(LocalProjectSnapshot::DEFAULT_PATH);
+$localFresh = $localSnapshot['ok'] && strtotime($localSnapshot['generated_at_utc']) >= time() - 600;
 $androidSnapshot = AndroidSnapshot::read();
 if (isset($_GET['adb_status'])) {
     header('Content-Type: application/json; charset=utf-8');
@@ -148,6 +150,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
                     (string) ($_POST['repository_url'] ?? ''));
                 break;
+            case 'project.local_metadata.create':
+                $projectId = (string) ($_POST['project_id'] ?? '');
+                if (!$localFresh || !in_array($projectId, array_column($localSnapshot['projects'], 'id'), true)) {
+                    throw new InvalidArgumentException('Projet local absent ou inventaire local périmé.');
+                }
+                $editor->registerLocalProjectMetadata($projectId, (string) ($_POST['description'] ?? ''),
+                    (string) ($_POST['repository_url'] ?? ''));
+                break;
             case 'deployment.update_path':
                 $editor->updateDeploymentPath((string) ($_POST['deployment_id'] ?? ''),
                     (string) ($_POST['workspace_path'] ?? ''));
@@ -176,6 +186,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
+                'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments', default => 'dashboard'
             };
             header('Location: /?created=1#' . $section, true, 303);
@@ -219,9 +230,6 @@ try {
     exit('Dashboard temporarily unavailable');
 }
 // Keep distributed registry writes separate from local runtime definitions.
-$localSnapshot = LocalProjectSnapshot::read(LocalProjectSnapshot::DEFAULT_PATH);
-$localFresh = $localSnapshot['ok']
-    && strtotime($localSnapshot['generated_at_utc']) >= time() - 600;
 $projectRows = [];
 foreach ($projects as $project) {
     $projectRows[$project['id']] = [
@@ -236,7 +244,7 @@ foreach ($projects as $project) {
 foreach ($localSnapshot['projects'] as $project) {
     $id = $project['id'];
     if (isset($projectRows[$id])) {
-        $projectRows[$id]['origin'] = 'Local + distribué';
+        $projectRows[$id]['origin'] = 'Local + registre';
     } else {
         $projectRows[$id] = [
             'id' => $id,
@@ -258,7 +266,7 @@ function e(mixed $value): string
 }
 ?>
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-local-inventory-fresh="<?= $localFresh ? '1' : '0' ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -411,7 +419,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= isset($project['id']) && array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -742,7 +750,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
     // Editable registry metadata only; local projects and enabled deployments remain read-only.
     const id=row.dataset.recordId||'', csrf=document.querySelector('input[name="csrf"]')?.value;
     const canEdit=!!csrf && ((name==='machines'&&!!id)
-        || (name==='projects'&&row.dataset.registryEditable==='1')
+        || (name==='projects'&&(row.dataset.registryEditable==='1'||(row.dataset.localProject==='1'&&document.documentElement.dataset.localInventoryFresh==='1')))
         || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
     if(canEdit){
       const card=el('div','mt-4'), title=el('h3','h6','Modifier les métadonnées');
@@ -765,7 +773,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
         choice('OS','os',row.cells[1].textContent.trim(),['linux','windows','macos']);
         choice('Architecture','architecture',row.cells[2].textContent.trim(),['x86_64','aarch64','armv7']);
       }else if(name==='projects'){
-        hidden('operation','project.update');hidden('project_id',row.cells[0].textContent.trim());
+        hidden('operation',row.dataset.registryEditable==='1'?'project.update':'project.local_metadata.create');hidden('project_id',row.cells[0].textContent.trim());
         field('Description','description',row.cells[1].textContent.trim(),'text',255);
         field('Dépôt HTTPS','repository_url',row.cells[5].textContent.trim()==='—'?'':row.cells[5].textContent.trim(),'url',1024);
       }else{
@@ -776,7 +784,7 @@ $host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?
       const submit=el('button','btn btn-success','Enregistrer');submit.type='submit';form.appendChild(submit);
       card.append(title,form);body.appendChild(card);
     }else if(name==='projects'&&row.dataset.registryEditable!=='1'){
-      body.appendChild(el('p','small text-secondary mt-3','Projet local : modification exclusivement via la configuration devMcp.'));
+      body.appendChild(el('p','small text-secondary mt-3','Inventaire local indisponible ou périmé : édition momentanément inaccessible.'));
     }else if(name==='deployments'&&row.dataset.enabled==='1'){
       body.appendChild(el('p','small text-secondary mt-3','Affectation active : édition du répertoire verrouillée.'));
     }

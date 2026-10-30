@@ -138,6 +138,38 @@ final class RegistryEditor
         }
     }
 
+    /**
+     * Register metadata for a project already proven to exist in the local snapshot.
+     * This only updates dm_project; it never changes executable PHP configuration,
+     * action allowlists, agents, or the project's local workspace.
+     */
+    public function registerLocalProjectMetadata(string $id, string $description, string $repositoryUrl): void
+    {
+        $description = trim($description);
+        $repositoryUrl = trim($repositoryUrl);
+        if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $id) !== 1
+            || $description === '' || strlen($description) > 255
+            || strlen($repositoryUrl) > 1024
+            || ($repositoryUrl !== '' && (!filter_var($repositoryUrl, FILTER_VALIDATE_URL)
+                || parse_url($repositoryUrl, PHP_URL_SCHEME) !== 'https'))) {
+            throw new InvalidArgumentException('Paramètres projet invalides');
+        }
+        $this->db->beginTransaction();
+        try {
+            // Do not overwrite an existing distributed project: the normal edit
+            // operation owns existing registry records.
+            $statement = $this->db->prepare(
+                'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
+            );
+            $statement->execute([$id, $description, $repositoryUrl === '' ? null : $repositoryUrl]);
+            $this->audit('project.local_metadata.create', 'project', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
     public function updateProject(string $id, string $description, string $repositoryUrl): void
     {
         $description = trim($description);
