@@ -53,6 +53,19 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $githubRepositoryCreateSchema = [
+            'type' => 'object',
+            'properties' => [
+                'repository' => ['type' => 'string', 'description' => 'Organisation autorisee/nom (ex: Cowprod/new-project).'],
+                'confirmation' => [
+                    'type' => 'string', 'enum' => ['CREATE_PRIVATE_REPOSITORY'],
+                    'description' => 'Confirmation explicite pour creer un depot prive sur GitHub.',
+                ],
+            ],
+            'required' => ['repository', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -61,6 +74,12 @@ final class ServerFactory
             )
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
+            ->addTool(
+                [$tools, 'githubRepositoryCreate'],
+                'github_repository_create',
+                description: 'Cree un depot GitHub prive uniquement si la politique centrale est activee. Ne cree ni projet ni workspace.',
+                inputSchema: $githubRepositoryCreateSchema,
+            )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
                 [$tools, 'projectCreatePreview'],
