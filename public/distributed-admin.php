@@ -477,14 +477,18 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
  });
  let current='dashboard';
  children.forEach(function(node){
-   if(node.id==='android-adb')current='android';
-   else if(node.tagName==='H2'){
-     const title=node.textContent.trim();
-     if(title==='Machines')current='machines';
-     else if(title==='Projets (locaux et distribués)')current='projects';
-     else if(title==='Affectations')current='deployments';
-     else if(title==='Derniers jobs')current='dashboard';
-   }
+   // Sections have a heading nested in their first card or table wrapper.
+   // Inspect text from the actual heading, not the section's whole content.
+   const heading=node.querySelector && node.querySelector('h2.h5');
+   const title=heading ? heading.textContent.trim() : '';
+   if(node.querySelector && node.querySelector('#android-adb'))current='android';
+   else if(title==='Machines')current='machines';
+   else if(title==='Projets (locaux et distribués)')current='projects';
+   else if(title==='Affectations')current='deployments';
+   else if(title==='Derniers jobs')current='dashboard';
+   else if(title==='Ajouter une machine')current='machines';
+   else if(title==='Ajouter un projet')current='projects';
+   else if(title==='Affecter un projet à une machine')current='deployments';
    sections[current].appendChild(node);
  });
  Object.values(sections).forEach(function(panel){main.appendChild(panel);});
