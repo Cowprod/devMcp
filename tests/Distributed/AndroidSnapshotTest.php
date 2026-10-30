@@ -21,6 +21,8 @@ final class AndroidSnapshotTest extends TestCase
         self::assertSame('61d54bba7d91', $devices[0]['serial']);
         self::assertSame('24075RP89G', $devices[0]['model']);
         self::assertSame('SM_X110', $devices[1]['model']);
+        self::assertArrayHasKey('multicam_pid', $devices[1]);
+        self::assertNull($devices[1]['multicam_pid']);
         self::assertSame('offline', $devices[2]['state']);
         self::assertSame('unauthorized', $devices[3]['state']);
     }
