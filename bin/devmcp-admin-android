@@ -8,7 +8,7 @@ use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $base = dirname(AndroidSnapshot::DEFAULT_PATH);
-foreach ([$base, AndroidSnapshot::REQUEST_DIRECTORY, AndroidSnapshot::SCREENSHOT_DIRECTORY] as $dir) {
+foreach ([$base, AndroidSnapshot::REQUEST_DIRECTORY, AndroidSnapshot::SCREENSHOT_DIRECTORY, AndroidSnapshot::LOG_DIRECTORY] as $dir) {
     if (!is_dir($dir)) {
         fwrite(STDERR, "Répertoire de service absent\n");
         exit(1);
@@ -69,8 +69,48 @@ try {
         }
         unlink($request);
     }
+    // Log files are deliberately short-lived because application diagnostics can be sensitive.
+    foreach (glob(AndroidSnapshot::LOG_DIRECTORY . '/*') ?: [] as $old) {
+        if (!is_link($old) && is_file($old) && filemtime($old) < time() - 900) {
+            unlink($old);
+        }
+    }
+    $logRequests = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*.logreq') ?: [];
+    foreach (array_slice($logRequests, 0, 4) as $request) {
+        if (is_link($request) || !is_file($request)) {
+            continue;
+        }
+        $filename = basename($request);
+        if (preg_match('/^[a-f0-9]{32}-([A-Za-z0-9_.:-]{1,128})\.logreq$/D', $filename, $match) !== 1) {
+            continue;
+        }
+        if (filemtime($request) < time() - 900) {
+            unlink($request);
+            continue;
+        }
+        $serial = $match[1];
+        $errorFile = AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.error';
+        $success = AndroidSnapshot::captureLog($serial, $connected);
+        if ($success) {
+            if (is_file($errorFile)) {
+                unlink($errorFile);
+            }
+        } else {
+            $previousLog = AndroidSnapshot::LOG_DIRECTORY . '/' . $serial . '.log';
+            if (!is_link($previousLog) && is_file($previousLog)) {
+                unlink($previousLog);
+            }
+            $tempError = tempnam(AndroidSnapshot::LOG_DIRECTORY, '.error-');
+            if ($tempError !== false) {
+                file_put_contents($tempError, "Journal indisponible (MultiCam inactive ou refus ADB)\n");
+                chmod($tempError, 0640);
+                rename($tempError, $errorFile);
+            }
+        }
+        unlink($request);
+    }
     echo 'OK: ', count($snapshot['devices']), " appareil(s) ADB, ",
-        count($requests), " demande(s) en file\n";
+        count($requests) + count($logRequests), " demande(s) en file\n";
 } catch (Throwable $error) {
     fwrite(STDERR, 'Inventaire ADB impossible: ' . $error->getMessage() . "\n");
     exit(1);
