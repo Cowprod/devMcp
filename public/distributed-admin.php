@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+use Cowprod\DevMcp\Distributed\Admin\AndroidDeviceLabel;
 use Cowprod\DevMcp\Distributed\Admin\DashboardRepository;
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
 use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
@@ -52,6 +53,19 @@ if (isset($_GET['adb_image'])) {
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $androidSnapshot = AndroidSnapshot::read();
+if (isset($_GET['adb_status'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $serial = (string) $_GET['adb_status'];
+    $known = AndroidSnapshot::validSerial($serial)
+        && in_array($serial, array_column($androidSnapshot['devices'], 'serial'), true);
+    if (!$known) {
+        http_response_code(404);
+        echo '{"error":"Appareil inconnu"}';
+        exit;
+    }
+    echo json_encode(AndroidSnapshot::screenshotStatus($serial), JSON_THROW_ON_ERROR);
+    exit;
+}
 $adbFresh = $androidSnapshot['ok']
     && strtotime($androidSnapshot['generated_at_utc']) >= time() - 120;
 $error = null;
@@ -65,6 +79,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         exit('Invalid CSRF token');
     }
     try {
+        if (($_POST['operation'] ?? '') === 'android.label.save') {
+            $serial = (string) ($_POST['device'] ?? '');
+            $known = AndroidSnapshot::validSerial($serial)
+                && in_array($serial, array_column($androidSnapshot['devices'], 'serial'), true);
+            if (!$known) {
+                throw new InvalidArgumentException('Appareil Android inconnu.');
+            }
+            AndroidDeviceLabel::save($serial, (string) ($_POST['label'] ?? ''));
+            header('Location: /?label_saved=' . rawurlencode($serial) . '#android-adb', true, 303);
+            exit;
+        }
         if (($_POST['operation'] ?? '') === 'android.screenshot.request') {
             $serial = (string) ($_POST['device'] ?? '');
             $online = false;
@@ -320,30 +345,50 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <span class="badge <?= $adbFresh ? 'bg-success' : 'bg-warning' ?>"><?= $adbFresh ? 'Actualisé' : 'Périmé' ?></span>
 <?php if (!$androidSnapshot['adb_available']): ?> · ADB indisponible sur l'hôte.<?php endif; ?>
 </p>
-<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée. Actualiser cette page après le prochain passage du service ADB.</div><?php endif; ?>
-<div class="table-responsive"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Actions</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture précédente</th></tr></thead>
+<?php if (isset($_GET['adb_pending'])): ?><div class="alert alert-info">Capture demandée : la vignette se mettra à jour automatiquement. Le bouton d'actualisation reste disponible.</div><?php endif; ?>
+<?php if (isset($_GET['label_saved'])): ?><div class="alert alert-success">Libellé enregistré sur le serveur.</div><?php endif; ?>
+<div class="table-responsive"><table class="table table-sm table-striped table-hover align-middle">
+<thead><tr><th>Actions</th><th>Libellé local / rôle</th><th>Nom Android / hôte</th><th>Série</th><th>État ADB</th><th>Modèle</th><th>Android</th><th>Batterie</th><th>Stockage libre</th><th>Capture</th></tr></thead>
 <tbody>
 <?php foreach ($androidSnapshot['devices'] as $device): ?>
-<?php $serial = $device['serial']; $shot = AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.png';
-$pending = glob(AndroidSnapshot::REQUEST_DIRECTORY . '/*-' . $serial . '.req') ?: []; ?>
-<tr><td>
-<form method="post" action="/" class="d-inline">
+<?php $serial = $device['serial']; $status = AndroidSnapshot::screenshotStatus($serial);
+$shotUrl = '/?adb_image=' . rawurlencode($serial) . '&v=' . ($status['mtime'] ?? 0);
+$host = $device['hostname'] ?? ''; $deviceName = $device['device_name'] ?? ''; ?>
+<tr>
+<td><form method="post" action="/" class="d-inline">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
 <input type="hidden" name="operation" value="android.screenshot.request">
 <input type="hidden" name="device" value="<?= e($serial) ?>">
-<button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera"></i> Capture</button>
+<button type="submit" class="btn btn-sm btn-success" title="Capture d'écran" <?= (!$adbFresh || $device['state'] !== 'device') ? 'disabled' : '' ?>><i class="fa-solid fa-camera" aria-hidden="true"></i> Capture</button>
 </form></td>
+<td><form method="post" action="/" class="d-flex gap-1" style="min-width:155px">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="android.label.save">
+<input type="hidden" name="device" value="<?= e($serial) ?>">
+<input type="text" class="form-control form-control-sm" name="label" maxlength="80" aria-label="Libellé local de <?= e($serial) ?>" placeholder="Master, Capture, Storage…" value="<?= e(AndroidDeviceLabel::read($serial)) ?>">
+<button type="submit" class="btn btn-sm btn-success" title="Enregistrer le libellé"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
+</form></td>
+<td>
+<?php if ($deviceName !== ''): ?><div><?= e($deviceName) ?> <small class="text-secondary">(nom Android)</small></div><?php endif; ?>
+<?php if ($host !== ''): ?><div><code><?= e($host) ?></code> <small class="text-secondary">(hôte)</small></div><?php endif; ?>
+<?php if ($deviceName === '' && $host === ''): ?>—<?php endif; ?>
+</td>
 <td><code><?= e($serial) ?></code></td>
 <td><span class="badge <?= $device['state'] === 'device' && $adbFresh ? 'bg-success' : 'bg-secondary' ?>"><?= e($device['state']) ?></span></td>
 <td><?= e($device['model'] ?: $device['product']) ?></td>
 <td><?= e($device['android_version'] ?: '—') ?></td>
 <td><?= $device['battery_percent'] === null ? '—' : e($device['battery_percent']) . '%' ?></td>
 <td><?= $device['storage_free_gb'] === null ? '—' : e($device['storage_free_gb']) . ' Go' ?></td>
-<td><?php if ($pending): ?><span class="badge bg-warning">En attente</span><?php endif; ?>
-<?php if (is_file($shot) && !is_link($shot)): ?><button type="button" class="btn btn-link p-0 adb-preview" data-url="/?adb_image=<?= rawurlencode($serial) ?>" data-serial="<?= e($serial) ?>" title="Agrandir la capture"><img src="/?adb_image=<?= rawurlencode($serial) ?>" alt="Capture de <?= e($serial) ?>" loading="lazy" style="max-width:72px;max-height:100px;object-fit:contain;border-radius:4px"></button><div class="small"><?= e(gmdate('d/m H:i', (int) filemtime($shot))) ?> UTC</div><?php elseif (is_file(AndroidSnapshot::SCREENSHOT_DIRECTORY . '/' . $serial . '.error')): ?><span class="badge bg-danger">Échec</span><?php else: ?>—<?php endif; ?></td></tr>
+<td class="adb-capture-cell" data-serial="<?= e($serial) ?>" data-pending="<?= $status['pending'] ? '1' : '0' ?>">
+<?php if ($status['pending']): ?><span class="badge bg-warning">En attente</span>
+<button type="button" class="btn btn-sm btn-secondary adb-refresh" title="Actualiser la capture" aria-label="Actualiser la capture de <?= e($serial) ?>"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i></button><?php endif; ?>
+<?php if ($status['error']): ?><span class="badge bg-danger">Échec</span><?php endif; ?>
+<?php if ($status['ready']): ?>
+<button type="button" class="btn btn-link p-0 adb-preview" data-url="<?= e($shotUrl) ?>" data-serial="<?= e($serial) ?>" title="Agrandir la capture"><img src="<?= e($shotUrl) ?>" alt="Capture de <?= e($serial) ?>" loading="lazy" style="max-width:72px;max-height:100px;object-fit:contain;border-radius:4px"></button><div class="small"><?= e(gmdate('d/m H:i', (int) $status['mtime'])) ?> UTC</div>
+<?php elseif (!$status['pending'] && !$status['error']): ?>—<?php endif; ?>
+</td></tr>
 <?php endforeach; ?>
-<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="8">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
+<?php if (!$androidSnapshot['devices']): ?><tr><td colspan="10">Aucun appareil ADB détecté au dernier contrôle.</td></tr><?php endif; ?>
 </tbody></table></div>
 <?php endif; ?>
 </div></div>
@@ -393,18 +438,116 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <dialog id="adb-dialog" aria-label="Capture Android" style="max-width:96vw;max-height:95vh;padding:1rem;border-radius:10px;background:#222;color:white"><div class="d-flex justify-content-between align-items-center gap-3 mb-2"><strong id="adb-dialog-title">Capture Android</strong><button type="button" id="adb-close" class="btn btn-sm btn-secondary">Fermer</button></div><img id="adb-dialog-img" alt="Capture agrandie" style="display:block;max-width:90vw;max-height:75vh;object-fit:contain;margin:auto"><div class="mt-3"><a id="adb-download" class="btn btn-success" download>Télécharger le PNG</a></div></dialog>
 <script>
 (function () {
- const dialog=document.getElementById('adb-dialog'), img=document.getElementById('adb-dialog-img'), download=document.getElementById('adb-download');
- document.querySelectorAll('.adb-preview').forEach(function (button) {
-   button.addEventListener('click',function () {
-     const url=button.dataset.url, serial=button.dataset.serial;
-     img.src=url; download.href=url; download.download='capture-'+serial+'.png';
-     document.getElementById('adb-dialog-title').textContent='Capture Android — '+serial;
-     dialog.showModal();
-   });
- });
- document.getElementById('adb-close').addEventListener('click',function () {dialog.close();});
- dialog.addEventListener('click',function (event) {if(event.target===dialog)dialog.close();});
- dialog.addEventListener('close',function () {img.removeAttribute('src');});
+  const dialog = document.getElementById('adb-dialog');
+  const image = document.getElementById('adb-dialog-img');
+  const download = document.getElementById('adb-download');
+
+  function badge(text, color) {
+    const item = document.createElement('span');
+    item.className = 'badge ' + color + ' me-1';
+    item.textContent = text;
+    return item;
+  }
+
+  function drawCapture(cell, status) {
+    const serial = cell.dataset.serial;
+    const fragment = document.createDocumentFragment();
+    if (status.pending) {
+      fragment.appendChild(badge('En attente', 'bg-warning'));
+      const refresh = document.createElement('button');
+      refresh.type = 'button';
+      refresh.className = 'btn btn-sm btn-secondary adb-refresh';
+      refresh.title = 'Actualiser la capture';
+      refresh.setAttribute('aria-label', 'Actualiser la capture de ' + serial);
+      const icon = document.createElement('i');
+      icon.className = 'fa-solid fa-arrows-rotate';
+      icon.setAttribute('aria-hidden', 'true');
+      refresh.appendChild(icon);
+      fragment.appendChild(refresh);
+    }
+    if (status.error) fragment.appendChild(badge('Échec', 'bg-danger'));
+    if (status.ready) {
+      const url = '/?adb_image=' + encodeURIComponent(serial) + '&v=' + encodeURIComponent(status.mtime || 0) + '&r=' + Date.now();
+      const preview = document.createElement('button');
+      preview.type = 'button';
+      preview.className = 'btn btn-link p-0 adb-preview';
+      preview.title = 'Agrandir la capture';
+      preview.dataset.url = url;
+      preview.dataset.serial = serial;
+      const thumb = document.createElement('img');
+      thumb.src = url;
+      thumb.alt = 'Capture de ' + serial;
+      thumb.loading = 'lazy';
+      thumb.style.cssText = 'max-width:72px;max-height:100px;object-fit:contain;border-radius:4px';
+      preview.appendChild(thumb);
+      fragment.appendChild(preview);
+      if (Number.isInteger(status.mtime)) {
+        const date = document.createElement('div');
+        date.className = 'small';
+        date.textContent = new Date(status.mtime * 1000).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
+        }) + ' UTC';
+        fragment.appendChild(date);
+      }
+    } else if (!status.pending && !status.error) {
+      fragment.appendChild(document.createTextNode('—'));
+    }
+    cell.replaceChildren(fragment);
+    cell.dataset.pending = status.pending ? '1' : '0';
+    cell.dataset.signature = [status.pending, status.ready, status.error, status.mtime].join(':');
+  }
+
+  async function refreshCapture(cell) {
+    if (cell.dataset.loading === '1') return;
+    cell.dataset.loading = '1';
+    const button = cell.querySelector('.adb-refresh');
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch('/?adb_status=' + encodeURIComponent(cell.dataset.serial), {
+        cache: 'no-store', credentials: 'same-origin', headers: {'Accept':'application/json'}
+      });
+      if (!response.ok) throw new Error('Statut indisponible');
+      const status = await response.json();
+      const signature = [status.pending, status.ready, status.error, status.mtime].join(':');
+      if (cell.dataset.signature !== signature) drawCapture(cell, status);
+    } catch (error) {
+      // The retry button stays available; an ADB or network failure cannot stop the page.
+    } finally {
+      cell.dataset.loading = '0';
+      if (button && button.isConnected) button.disabled = false;
+    }
+  }
+
+  document.addEventListener('click', function (event) {
+    const preview = event.target.closest('.adb-preview');
+    if (preview) {
+      const url = preview.dataset.url, serial = preview.dataset.serial;
+      image.src = url;
+      download.href = url;
+      download.download = 'capture-' + serial + '.png';
+      document.getElementById('adb-dialog-title').textContent = 'Capture Android — ' + serial;
+      dialog.showModal();
+      return;
+    }
+    const refresh = event.target.closest('.adb-refresh');
+    if (refresh) refreshCapture(refresh.closest('.adb-capture-cell'));
+  });
+  document.getElementById('adb-close').addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (event) { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', function () { image.removeAttribute('src'); });
+
+  let polling = 0;
+  async function pollPending() {
+    const pending = Array.from(document.querySelectorAll('.adb-capture-cell[data-pending="1"]'));
+    if (!pending.length || polling++ >= 80) return;
+    await Promise.all(pending.map(refreshCapture));
+    if (document.querySelector('.adb-capture-cell[data-pending="1"]')) {
+      window.setTimeout(pollPending, 3000);
+    }
+  }
+  if (document.querySelector('.adb-capture-cell[data-pending="1"]')) {
+    window.setTimeout(pollPending, 2500);
+  }
 })();
 </script>
 </body></html>

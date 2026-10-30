@@ -49,4 +49,43 @@ final class AndroidSnapshotTest extends TestCase
             unlink($file);
         }
     }
+    public function testDeviceNamesAreSanitized(): void
+    {
+        self::assertSame('', AndroidSnapshot::cleanDeviceName(null));
+        self::assertSame('', AndroidSnapshot::cleanDeviceName("null\n"));
+        self::assertSame('Studio Tablet', AndroidSnapshot::cleanDeviceName(" Studio\nTablet "));
+        self::assertSame('R83Y106V1HF', AndroidSnapshot::cleanDeviceName('R83Y106V1HF'));
+    }
+
+    public function testScreenshotStatusTransitionsFromQueuedToReady(): void
+    {
+        $root = sys_get_temp_dir() . '/devmcp-screen-' . bin2hex(random_bytes(6));
+        mkdir($root);
+        mkdir($root . '/requests');
+        mkdir($root . '/screenshots');
+        try {
+            $serial = 'R83Y106V1HF';
+            $request = $root . '/requests/' . str_repeat('a', 32) . '-' . $serial . '.req';
+            file_put_contents($request, '');
+            $pending = AndroidSnapshot::screenshotStatus($serial, $root . '/requests', $root . '/screenshots');
+            self::assertTrue($pending['pending']);
+            self::assertFalse($pending['ready']);
+            file_put_contents($root . '/screenshots/' . $serial . '.png', "\x89PNG\r\n\x1a\n" . str_repeat('x', 70));
+            unlink($request);
+            $done = AndroidSnapshot::screenshotStatus($serial, $root . '/requests', $root . '/screenshots');
+            self::assertFalse($done['pending']);
+            self::assertTrue($done['ready']);
+            self::assertIsInt($done['mtime']);
+            file_put_contents($root . '/screenshots/' . $serial . '.error', "Capture impossible\n");
+            self::assertTrue(AndroidSnapshot::screenshotStatus($serial, $root . '/requests', $root . '/screenshots')['error']);
+            self::assertFalse(AndroidSnapshot::screenshotStatus('../bad', $root . '/requests', $root . '/screenshots')['ready']);
+        } finally {
+            foreach (glob($root . '/requests/*') ?: [] as $file) unlink($file);
+            foreach (glob($root . '/screenshots/*') ?: [] as $file) unlink($file);
+            rmdir($root . '/requests');
+            rmdir($root . '/screenshots');
+            rmdir($root);
+        }
+    }
+
 }
