@@ -138,6 +138,51 @@ final class ProjectTools
         return $created;
     }
 
+    /**
+     * Single MCP operation: GitHub private repository, central registration,
+     * local workspace and automatic lifecycle activation.
+     * Never deletes a repository or workspace on partial failure.
+     */
+    public function projectCreate(string $project_id, string $description, string $confirmation): array
+    {
+        if ($confirmation !== 'CREATE_PROJECT') {
+            throw new InvalidArgumentException('Confirmation explicite requise');
+        }
+        if ($this->githubCreator === null || $this->localProvisioner === null
+            || $this->provisioning === null || $this->remoteTools === null) {
+            throw new InvalidArgumentException('Creation integree non configuree');
+        }
+        $repository = $this->githubCreator->organization() . '/' . $project_id;
+        // Validate all local and central preconditions before GitHub mutation.
+        $this->projectCreatePreview(
+            $project_id, $description, $repository, 'create',
+            'local', 'local', '/srv/devmcp/workspaces/' . $project_id
+        );
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.create',
+            'project_id' => $project_id, 'outcome' => 'requested',
+        ]);
+        $github = $this->githubRepositoryCreate($repository, 'CREATE_PRIVATE_REPOSITORY');
+        try {
+            $project = $this->projectRegister(
+                $project_id, $description, $repository, 'create', 'REGISTER_PROJECT'
+            );
+        } catch (\Throwable $error) {
+            $this->audit->append([
+                'project' => '_provisioning', 'action' => 'project.create',
+                'project_id' => $project_id, 'outcome' => 'partial_failure',
+                'repository' => $repository, 'error_class' => get_class($error),
+            ]);
+            throw $error;
+        }
+        return [
+            'project' => $project,
+            'github' => $github,
+            'state' => 'active',
+            'actions_authorized' => false,
+        ];
+    }
+
     public function projectRepositoryConfirm(string $project_id, string $repository, int $revision, string $confirmation): array
     {
         if ($confirmation !== 'CONFIRM_REPOSITORY_READY') {
