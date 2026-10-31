@@ -27,6 +27,8 @@ Le formulaire de lecture distante ne constitue pas un éditeur de politique. Auc
 
 La fiche **Projets** présente pour chaque affectation un catalogue repliable des cinq actions distantes de consultation, avec leur description et les paramètres `path` (chemin relatif) et `filter` (énumération) lorsqu'ils s'appliquent. Il reste consultable pour les affectations désactivées et les machines non approuvées, **sans rendre le formulaire de mise en file disponible**. Le formulaire historique des affectations et celui des projets utilisent la même liste descriptive centrale `remoteReadonlyActionCatalog()` ; seul `remoteJobAllowed()` puis la politique de l'agent déterminent ce qui est accepté. Ce catalogue n'affiche aucune permission effective et ne donne accès ni aux actions d'écriture ni aux politiques privées des machines.
 
+Les options du filtre de `workspace.find` (`all`, `php`, `js`, `json`, `md`) proviennent maintenant du même catalogue PHP que la validation de la file. Les formulaires de la fiche Projet et de l'affectation utilisent également le même mécanisme pour afficher les champs `path` et `filter` applicables à l'action sélectionnée. Il s'agit d'une synchronisation d'interface, pas d'une extension des filtres ou des autorisations : la requête reste contrôlée par `remoteJobAllowed()` puis par l'agent.
+
 ## Suivi des actions distantes depuis la fiche Projet
 
 La fiche **Projets** affiche, pour chaque affectation, jusqu'à cinq demandes
