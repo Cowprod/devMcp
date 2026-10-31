@@ -17,8 +17,7 @@ final class ProvisioningState
         'planned' => ['repository_ready', 'registered'],
         'repository_ready' => ['registered', 'machine_assigned'],
         'registered' => ['repository_ready', 'machine_assigned'],
-        'machine_assigned' => ['workspace_ready'],
-        'workspace_ready' => ['active'],
+        'machine_assigned' => ['active'],
         'active' => ['machine_assigned'],
     ];
 
@@ -64,7 +63,7 @@ final class ProvisioningState
             $record['workspace_path'] = null;
             $record['actions_enabled'] = false;
         }
-        if ($next === 'workspace_ready') {
+        if ($next === 'active') {
             $path = $details['workspace_path'] ?? null;
             if (!is_string($path) || strlen($path) > 1024
                 || preg_match('~^/[A-Za-z0-9_./-]+$~D', $path) !== 1
@@ -74,9 +73,7 @@ final class ProvisioningState
                 throw new InvalidArgumentException('Workspace non canonique');
             }
             $record['workspace_path'] = $path;
-        }
-        if ($next === 'active') {
-            // Activation is not authorization: the agent policy must approve actions separately.
+            // A ready workspace is active immediately; execution permissions remain separate.
             $record['actions_enabled'] = false;
         }
         $record['state'] = $next;
