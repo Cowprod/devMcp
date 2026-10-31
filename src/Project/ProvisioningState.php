@@ -14,9 +14,9 @@ use InvalidArgumentException;
 final class ProvisioningState
 {
     private const TRANSITIONS = [
-        'planned' => ['repository_ready'],
-        'repository_ready' => ['registered'],
-        'registered' => ['machine_assigned'],
+        'planned' => ['repository_ready', 'registered'],
+        'repository_ready' => ['registered', 'machine_assigned'],
+        'registered' => ['repository_ready'],
         'machine_assigned' => ['workspace_ready'],
         'workspace_ready' => ['active'],
         'active' => ['machine_assigned'],
