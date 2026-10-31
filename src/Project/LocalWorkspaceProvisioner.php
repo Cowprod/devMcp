@@ -21,6 +21,22 @@ final class LocalWorkspaceProvisioner
         }
     }
 
+    /**
+     * Read-only preflight before an external GitHub repository is created.
+     * The check is repeated immediately before cloning; it is not a lock.
+     */
+    public function assertDestinationAvailable(string $projectId): void
+    {
+        if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $projectId) !== 1
+            || in_array($projectId, ['.', '..'], true)) {
+            throw new InvalidArgumentException('Invalid project');
+        }
+        $path = $this->root . '/' . $projectId;
+        if (file_exists($path) || is_link($path)) {
+            throw new RuntimeException('Workspace already exists: refusing to overwrite');
+        }
+    }
+
     public function provision(string $projectId, string $repository): array
     {
         if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $projectId) !== 1
@@ -28,10 +44,8 @@ final class LocalWorkspaceProvisioner
             || preg_match('~^[A-Za-z0-9-]{1,39}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$~D', $repository) !== 1) {
             throw new InvalidArgumentException('Invalid project or repository');
         }
+        $this->assertDestinationAvailable($projectId);
         $path = $this->root . '/' . $projectId;
-        if (file_exists($path) || is_link($path)) {
-            throw new RuntimeException('Workspace already exists: refusing to overwrite');
-        }
         // Require a canonical SSH host key trust configuration supplied by the operator.
         // Git must not prompt or silently accept an unknown host key.
         $url = 'git@github.com:' . $repository . '.git';
