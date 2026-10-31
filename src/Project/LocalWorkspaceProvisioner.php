@@ -34,7 +34,7 @@ final class LocalWorkspaceProvisioner
         }
         $url = 'git@github.com:' . $repository . '.git';
         $process = new Process(
-            ['git', '-c', 'core.hooksPath=/dev/null', 'clone', '--no-checkout', '--', $url, $path],
+            ['git', '-c', 'core.hooksPath=/dev/null', 'clone', '--', $url, $path],
             $this->root,
             ['GIT_TERMINAL_PROMPT' => '0', 'GIT_CONFIG_NOSYSTEM' => '1']
         );
