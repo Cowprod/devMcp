@@ -1088,8 +1088,32 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           const actionHelp=el('p','small text-secondary mb-2');
           bindRemoteFields(actions,pathGroup,filterGroup,actionHelp);
           const submit=el('button','btn btn-success btn-sm','Mettre en file');submit.type='submit';
-          form.append(actionGroup,actionHelp,pathGroup,filterGroup,submit);
+          const preparedNote=el('p','small text-info mb-2 d-none');
+          preparedNote.setAttribute('role','status');
+          actions.addEventListener('change',()=>preparedNote.classList.add('d-none'));
+          form.append(actionGroup,actionHelp,pathGroup,filterGroup,preparedNote,submit);
           box.appendChild(form);
+          // The catalogue only preselects an action in the existing POST form.
+          // No request is submitted until the operator explicitly clicks submit.
+          // Disabled deployments, unapproved machines and absent CSRF never get this control.
+          catalogue.querySelectorAll('[data-remote-action]').forEach(entry=>{
+            const action=entry.dataset.remoteAction;
+            if(!Object.prototype.hasOwnProperty.call(remoteActionCatalog,action))return;
+            const prepare=el('button','btn btn-success btn-sm flex-shrink-0','Préparer');
+            prepare.type='button';
+            prepare.dataset.prepareRemoteAction=action;
+            prepare.setAttribute('aria-label','Préparer '+action+' sur '+machine);
+            prepare.addEventListener('click',()=>{
+              actions.value=action;
+              actions.dispatchEvent(new Event('change',{bubbles:true}));
+              preparedNote.textContent='Action '+action+' sélectionnée. Vérifiez les paramètres puis utilisez « Mettre en file ».';
+              preparedNote.classList.remove('d-none');
+              form.scrollIntoView({behavior:'smooth',block:'nearest'});
+              if(remoteActionCatalog[action].needs_path)path.focus({preventScroll:true});
+              else actions.focus({preventScroll:true});
+            });
+            entry.prepend(prepare);
+          });
           list.appendChild(box);
         });
         list.appendChild(el('p','small text-secondary mt-2','La mise en file reste soumise aux contrôles serveur et à la politique locale de chaque agent. « Éligible côté registre » ne garantit ni exécution ni disponibilité de l’agent.'));
