@@ -153,6 +153,40 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertSame(5, count(\remoteReadonlyActionCatalog()));
     }
 
+    public function testProjectCatalogueSearchIncludesOnlyPublishedParameterNamesAndTypes(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+
+        // Local lookup draws from the typed, sanitized metadata, not argv,
+        // enum options or an executable configuration.
+        self::assertStringContainsString(
+            "const searchableParts=[action,typeof detail?.description==='string'?detail.description:''];",
+            $source,
+        );
+        self::assertStringContainsString('searchableParts.push(...parameterNames);', $source);
+        self::assertStringContainsString("line.dataset.actionSearch=searchableParts.join(' ');", $source);
+
+        // Remote lookup uses the same public, read-only catalogue used for rendering.
+        self::assertStringContainsString(
+            "(spec.needs_path?' path relative_path':'')",
+            $source,
+        );
+        self::assertStringContainsString(
+            "(spec.supports_filter?' filter enum':'')",
+            $source,
+        );
+        self::assertStringContainsString(
+            "filterInput.placeholder='Nom, description ou paramètre';",
+            $source,
+        );
+
+        // Filtering only changes presentation; submission and execution remain gated.
+        self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
+        self::assertSame(5, count(\\remoteReadonlyActionCatalog()));
+    }
+
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
     {
         $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
