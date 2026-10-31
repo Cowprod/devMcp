@@ -187,6 +187,9 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertSame('active', $result['project']['state']);
         self::assertTrue($result['actions_authorized']);
         self::assertTrue($result['github']['private']);
+        self::assertTrue($result['github']['project_registered']);
+        self::assertTrue($result['github']['workspace_created']);
+        self::assertTrue($result['github']['actions_authorized']);
         self::assertSame('Cowprod/bakery-e2e', $result['github']['repository']);
 
         $workspace = $this->sandbox . '/workspaces/bakery-e2e';
