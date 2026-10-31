@@ -31,6 +31,7 @@ final class ProjectCreationEndToEndTest extends TestCase
 {
     private string $sandbox = '';
     private array $previousGitConfig = [];
+    private array $previousPhpEnv = [];
     private PDO $db;
     private ProjectTools $tools;
     private ProvisioningStore $store;
@@ -64,11 +65,19 @@ final class ProjectCreationEndToEndTest extends TestCase
         foreach (['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_ALLOW_PROTOCOL'] as $name) {
             $value = getenv($name);
             $this->previousGitConfig[$name] = $value === false ? null : $value;
+            $this->previousPhpEnv[$name] = array_key_exists($name, $_ENV)
+                ? ['present' => true, 'value' => $_ENV[$name]] : ['present' => false];
         }
         putenv('GIT_CONFIG_COUNT=1');
         putenv('GIT_CONFIG_KEY_0=url.file://' . $this->sandbox . '/upstream/.insteadOf');
         putenv('GIT_CONFIG_VALUE_0=git@github.com:Cowprod/');
         putenv('GIT_ALLOW_PROTOCOL=file');
+        // Symfony Process composes subprocess environments from $_ENV and
+        // $_SERVER as well as getenv(). Putenv() alone is insufficient in CI.
+        $_ENV['GIT_CONFIG_COUNT'] = '1';
+        $_ENV['GIT_CONFIG_KEY_0'] = 'url.file://' . $this->sandbox . '/upstream/.insteadOf';
+        $_ENV['GIT_CONFIG_VALUE_0'] = 'git@github.com:Cowprod/';
+        $_ENV['GIT_ALLOW_PROTOCOL'] = 'file';
 
         $this->db = new PDO('sqlite::memory:');
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -126,6 +135,12 @@ final class ProjectCreationEndToEndTest extends TestCase
     {
         foreach ($this->previousGitConfig as $name => $value) {
             putenv($value === null ? $name : $name . '=' . $value);
+            $previous = $this->previousPhpEnv[$name] ?? ['present' => false];
+            if ($previous['present']) {
+                $_ENV[$name] = $previous['value'];
+            } else {
+                unset($_ENV[$name]);
+            }
         }
         if ($this->sandbox !== '' && is_dir($this->sandbox)) {
             $iterator = new \RecursiveIteratorIterator(
