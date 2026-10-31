@@ -29,11 +29,6 @@ try {
     if (!is_array($legacyProjects) || !is_array($legacyActions)) {
         throw new RuntimeException('projects/shared_actions doivent être des tableaux');
     }
-    // Validate the legacy registry before the first SQL write.
-    ProjectRegistry::fromConfig([
-        'projects' => $legacyProjects,
-        'shared_actions' => $legacyActions,
-    ]);
     $db = DatabaseConnection::connect(
         (string) $distributed['dsn'],
         (string) $distributed['writer_username'],
@@ -44,6 +39,8 @@ try {
         echo "SQL project registry already active; nothing imported.\n";
         exit(0);
     }
+    // Legacy definitions are verified below together with active provisioned
+    // projects, before the import transaction is committed.
     // DDL auto-commits in MariaDB. The readiness flag remains unset until all
     // project/template rows have been inserted in one subsequent transaction.
     $migration = file_get_contents(dirname(__DIR__) . '/migrations/20261031_sql_project_registry.sql');
