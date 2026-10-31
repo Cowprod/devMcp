@@ -130,7 +130,7 @@ final class ProvisioningStore
                 // An inactive/reassigned workspace must no longer be executable.
                 $sql->deactivateLocalProject($id);
             }
-            if ($next === 'active') {
+            if ($next === 'active' && $sql->isReady()) {
                 // SQL definition + actions_enabled + state transition are atomic.
                 $sql->activateLocalProject($updated);
                 $updated['actions_enabled'] = true;
