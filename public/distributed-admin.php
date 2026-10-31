@@ -928,6 +928,13 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           if(detail && typeof detail.description==='string'){
             description.appendChild(el('div','small text-secondary',detail.description));
           }
+          // Parameters are a read-only projection of the privileged local registry:
+          // no enum choices, executable templates or execution rights are exposed.
+          if(detail && Array.isArray(detail.parameters) && detail.parameters.length){
+            const parameterNames=detail.parameters.map(parameter=>parameter.id+' ('+parameter.type+')');
+            description.appendChild(el('div','small text-info',
+              'Paramètres requis : '+parameterNames.join(', ')));
+          }
           line.appendChild(description);
           if(detail && Number.isInteger(detail.timeout_seconds) && typeof detail.sync_allowed==='boolean'){
             line.appendChild(el('span','badge bg-info text-dark',detail.sync_allowed?'Synchrone autorisé':'Asynchrone uniquement'));
