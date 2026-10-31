@@ -135,6 +135,23 @@ final class ProjectTools
         if ($confirmation !== 'ASSIGN_MACHINE' || $this->provisioning === null || $this->remoteTools === null) {
             throw new InvalidArgumentException('Affectation indisponible ou non confirmee');
         }
+        if ($machine === 'local') {
+            if ($this->localProvisioner === null) {
+                throw new InvalidArgumentException('Provisionnement local non configure');
+            }
+            $hostname = gethostname();
+            if (!is_string($hostname) || $hostname === '') {
+                throw new InvalidArgumentException('Hostname local indisponible');
+            }
+            $updated = $this->provisioning->advance(
+                $project_id, $revision, 'machine_assigned', ['machine' => $hostname]
+            );
+            $this->audit->append([
+                'project' => '_provisioning', 'action' => 'project.machine.assign',
+                'project_id' => $project_id, 'machine_id' => $hostname, 'outcome' => 'assigned',
+            ]);
+            return $updated;
+        }
         $resolved = $this->remoteTools->machineForProvisioningPreview($machine);
         if ($resolved['status'] !== 'active') {
             throw new InvalidArgumentException('Machine non active');
