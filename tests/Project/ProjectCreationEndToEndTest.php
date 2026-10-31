@@ -215,6 +215,28 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertSame('https://github.com/Cowprod/bakery-e2e', $webCatalogue['bakery-e2e']['repository_url']);
     }
 
+    public function testReassignmentRevokesPreviouslyActiveSqlActions(): void
+    {
+        $this->tools->projectCreate('bakery-e2e', 'Bakery orders', 'CREATE_PROJECT');
+        self::assertCount(
+            count(SqlProjectConfiguration::DEFAULT_ACTIONS),
+            $this->tools->actionList('bakery-e2e')['actions']
+        );
+
+        $record = $this->store->get('bakery-e2e');
+        $updated = $this->store->advance(
+            'bakery-e2e', $record['revision'], 'machine_assigned',
+            ['machine' => 'other-host']
+        );
+        self::assertFalse($updated['actions_enabled']);
+        self::assertSame([], $this->tools->actionList('bakery-e2e')['actions']);
+        self::assertSame(0, (int) $this->db->query(
+            "SELECT COUNT(*) FROM dm_local_project_config WHERE project_id='bakery-e2e'"
+        )->fetchColumn());
+        $this->expectException(InvalidArgumentException::class);
+        $this->tools->actionRun('bakery-e2e', 'git.status');
+    }
+
     public function testMissingGitOriginLeavesVisibleInactiveProjectWithoutActionGrant(): void
     {
         // No bare Git fixture exists for this repository: the non-network clone
