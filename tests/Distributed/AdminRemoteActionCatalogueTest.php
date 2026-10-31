@@ -167,7 +167,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));", $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
-        self::assertSame(5, count(\\remoteReadonlyActionCatalog()));
+        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testProjectCatalogueSearchIncludesOnlyPublishedParameterNamesAndTypes(): void
