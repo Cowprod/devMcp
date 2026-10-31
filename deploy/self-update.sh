@@ -45,7 +45,7 @@ fi
 # closed when a required SQL permission or action template is missing.
 update_stage=sql-import
 sql_import_output=$(/usr/bin/php /opt/devmcp/bin/import-global-projects-to-sql.php --execute MIGRATE_PROJECTS_TO_SQL)
-printf '%s\\n' "$sql_import_output"
+printf '%s\n' "$sql_import_output"
 sql_cutover=0
 case "$sql_import_output" in
     *"SQL registry READY"*) sql_cutover=1 ;;
