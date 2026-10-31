@@ -98,7 +98,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString('entry.dataset.actionSearch=', $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));", $source);
-        self::assertStringContainsString('bindProjectActionFilter(filterInput,list,counter,empty);', $source);
+        self::assertStringContainsString('bindProjectActionFilter(filterInput,originSelect,list,counter,empty);', $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertStringContainsString('Conditionnel : politique agent', $source);
     }
