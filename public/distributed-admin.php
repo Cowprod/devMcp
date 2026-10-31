@@ -917,6 +917,21 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));
         if(terms.length&&hasMatch)catalogue.open=true;
       });
+      // Hide context and entire deployment cards that have no visible action.
+      // This only changes presentation: prepared forms and history remain in the DOM
+      // with their current values, and all server/agent authorization gates still apply.
+      const hasLocal=entries.some(entry=>entry.dataset.actionOrigin==='local'&&!entry.classList.contains('d-none'));
+      const hasRemote=entries.some(entry=>entry.dataset.actionOrigin==='remote'&&!entry.classList.contains('d-none'));
+      list.querySelectorAll('.registry-local-actions-context').forEach(element=>{
+        element.classList.toggle('d-none',!hasLocal);
+      });
+      list.querySelectorAll('.registry-remote-actions-context').forEach(element=>{
+        element.classList.toggle('d-none',!hasRemote);
+      });
+      list.querySelectorAll('.registry-remote-action-box').forEach(box=>{
+        const hasMatch=!!box.querySelector('.registry-action-entry[data-action-origin="remote"]:not(.d-none)');
+        box.classList.toggle('d-none',!hasMatch);
+      });
       counter.textContent=matches+' entrée(s) correspondante(s) sur '+entries.length+'.';
       empty.classList.toggle('d-none',matches!==0);
     };
@@ -994,7 +1009,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         // This JSON is validated by LocalProjectSnapshot and HTML-escaped by PHP.
         let actionDetails={};
         try {actionDetails=JSON.parse(row.dataset.actionDetails||'{}');} catch (_) {}
-        list.appendChild(el('h4','small text-secondary mt-3','Actions locales déclarées'));
+        list.appendChild(el('h4','small text-secondary mt-3 registry-local-actions-context','Actions locales déclarées'));
         localActions.forEach(action=>{
           const line=el('div','registry-action-entry');
           line.dataset.actionOrigin='local';
@@ -1023,15 +1038,15 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             document.documentElement.dataset.localInventoryFresh==='1'?'Configuration locale':'Instantané périmé'));
           list.appendChild(line);
         });
-        list.appendChild(el('p','small text-secondary mt-2','Les autorisations locales proviennent de la configuration privée de devMcp ; elles ne sont pas modifiables depuis le registre distribué.'));
+        list.appendChild(el('p','small text-secondary mt-2 registry-local-actions-context','Les autorisations locales proviennent de la configuration privée de devMcp ; elles ne sont pas modifiables depuis le registre distribué.'));
       }
       if(deployments.length){
-        list.appendChild(el('h4','small text-secondary mt-3','Actions distantes par affectation'));
+        list.appendChild(el('h4','small text-secondary mt-3 registry-remote-actions-context','Actions distantes par affectation'));
         deployments.forEach(deployment=>{
           const machine=deployment.cells[1].textContent.trim();
           const enabled=deployment.dataset.enabled==='1';
           const approved=deployment.dataset.machineStatus==='active';
-          const box=el('div','border rounded p-3 mt-2');
+          const box=el('div','border rounded p-3 mt-2 registry-remote-action-box');
           const top=el('div','d-flex align-items-center gap-2 flex-wrap mb-2');
           top.appendChild(el('strong','',machine));
           const status=enabled&&approved?'Éligible côté registre':!enabled?'Affectation désactivée':'Machine non approuvée';
@@ -1130,7 +1145,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           });
           list.appendChild(box);
         });
-        list.appendChild(el('p','small text-secondary mt-2','La mise en file reste soumise aux contrôles serveur et à la politique locale de chaque agent. « Éligible côté registre » ne garantit ni exécution ni disponibilité de l’agent.'));
+        list.appendChild(el('p','small text-secondary mt-2 registry-remote-actions-context','La mise en file reste soumise aux contrôles serveur et à la politique locale de chaque agent. « Éligible côté registre » ne garantit ni exécution ni disponibilité de l’agent.'));
       }
       if(!localActions.length&&!deployments.length){
         list.appendChild(el('p','text-secondary small','Aucune action publiée pour ce projet.'));
