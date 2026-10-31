@@ -145,6 +145,12 @@ final class ProjectCreationEndToEndTest extends TestCase
 
     public function testCreatesPrivateRepositoryIntentAndWorkspaceVisibleInBothCatalogues(): void
     {
+        // Preflight only the temporary file URL, with network protocols denied.
+        $probe = new Process(['git', 'ls-remote', 'git@github.com:Cowprod/bakery-e2e.git'],
+            $this->sandbox . '/workspaces', ['GIT_ALLOW_PROTOCOL' => 'file']);
+        $probe->run();
+        self::assertTrue($probe->isSuccessful(), 'Local Git fixture unavailable: ' . substr($probe->getErrorOutput(), 0, 400));
+
         $result = $this->tools->projectCreate('bakery-e2e', 'Bakery orders', 'CREATE_PROJECT');
 
         self::assertSame(1, $this->githubCalls);
