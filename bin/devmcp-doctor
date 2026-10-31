@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Security\PathGuard;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -43,7 +44,11 @@ if (!is_array($config)) {
 $report('config.array', true);
 
 try {
-    $projects = ProjectRegistry::fromConfig($config);
+    $remote = RemoteTools::fromConfig($config);
+    $sql = $remote?->sqlProjectConfiguration();
+    $projects = $sql !== null && $sql->isReady()
+        ? ProjectRegistry::fromSql($sql)
+        : ProjectRegistry::fromConfig($config);
     $report('projects.registry', true, (string) count($projects->all()));
 } catch (Throwable $exception) {
     $report('projects.registry', false, $exception->getMessage());
