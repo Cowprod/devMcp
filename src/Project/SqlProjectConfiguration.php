@@ -123,6 +123,15 @@ final class SqlProjectConfiguration
         }
     }
 
+    public function deactivateLocalProject(string $projectId): void
+    {
+        if (!$this->isReady()) {
+            return;
+        }
+        $query = $this->db->prepare('DELETE FROM dm_local_project_config WHERE project_id = ?');
+        $query->execute([$projectId]);
+    }
+
     /**
      * @return array<string, mixed>
      */
