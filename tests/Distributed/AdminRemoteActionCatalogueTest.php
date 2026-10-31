@@ -170,6 +170,29 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertSame(5, count(\remoteReadonlyActionCatalog()));
     }
 
+
+    public function testProjectActionFilterHidesEmptyGroupsAndCardsWithoutDiscardingForms(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+
+        // A local-only filter must remove remote cards and their controls from
+        // view, not merely empty the nested catalogue while leaving forms.
+        self::assertStringContainsString('registry-local-actions-context', $source);
+        self::assertStringContainsString('registry-remote-actions-context', $source);
+        self::assertStringContainsString('registry-remote-action-box', $source);
+        self::assertStringContainsString("const hasLocal=entries.some(entry=>entry.dataset.actionOrigin==='local'&&!entry.classList.contains('d-none'));", $source);
+        self::assertStringContainsString("const hasRemote=entries.some(entry=>entry.dataset.actionOrigin==='remote'&&!entry.classList.contains('d-none'));", $source);
+        self::assertStringContainsString("element.classList.toggle('d-none',!hasLocal);", $source);
+        self::assertStringContainsString("element.classList.toggle('d-none',!hasRemote);", $source);
+        self::assertStringContainsString("box.classList.toggle('d-none',!hasMatch);", $source);
+
+        // Hiding an action must not clear prepared values or bypass submission.
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
+        self::assertStringContainsString("submit.type='submit';", $source);
+        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+    }
+
     public function testProjectCatalogueSearchIncludesOnlyPublishedParameterNamesAndTypes(): void
     {
         $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
