@@ -894,26 +894,29 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     box.appendChild(el('p','small '+(remotePollError?'text-warning':'text-secondary')+' mt-2 mb-0',note));
   }
   // UI-only filtering. It never changes the catalogue, queued request or agent policy.
-  function bindProjectActionFilter(input,list,counter,empty) {
+  function bindProjectActionFilter(input,originSelect,list,counter,empty) {
     const entries=Array.from(list.querySelectorAll('.registry-action-entry[data-action-search]'));
     const catalogues=Array.from(list.querySelectorAll('details.registry-remote-catalogue'));
     const update=()=>{
       const query=input.value.trim().toLocaleLowerCase('fr');
+      const origin=originSelect.value;
       let matches=0;
       entries.forEach(entry=>{
-        const matched=!query || (entry.dataset.actionSearch||'').toLocaleLowerCase('fr').includes(query);
+        const matched=(origin==='all'||entry.dataset.actionOrigin===origin)
+          && (!query || (entry.dataset.actionSearch||'').toLocaleLowerCase('fr').includes(query));
         entry.classList.toggle('d-none',!matched);
         if(matched)matches++;
       });
       catalogues.forEach(catalogue=>{
         const hasMatch=!!catalogue.querySelector('.registry-action-entry:not(.d-none)');
-        catalogue.classList.toggle('d-none',!!query&&!hasMatch);
+        catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));
         if(query&&hasMatch)catalogue.open=true;
       });
       counter.textContent=matches+' entrée(s) correspondante(s) sur '+entries.length+'.';
       empty.classList.toggle('d-none',matches!==0);
     };
     input.addEventListener('input',update);
+    originSelect.addEventListener('change',update);
     update();
   }
   function select(name,index){
@@ -989,6 +992,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         list.appendChild(el('h4','small text-secondary mt-3','Actions locales déclarées'));
         localActions.forEach(action=>{
           const line=el('div','registry-action-entry');
+          line.dataset.actionOrigin='local';
           const detail=actionDetails[action];
           line.dataset.actionSearch=action+' '+(typeof detail?.description==='string'?detail.description:'');
           const description=el('div','flex-grow-1');
@@ -1035,6 +1039,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           catalogue.dataset.deploymentId=deployment.dataset.recordId;
           Object.entries(remoteActionCatalog).forEach(([action,spec])=>{
             const entry=el('div','registry-action-entry');
+            entry.dataset.actionOrigin='remote';
             entry.dataset.remoteAction=action;
             entry.dataset.actionSearch=action+' '+spec.description;
             const description=el('div','flex-grow-1');
@@ -1127,11 +1132,16 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         filterInput.autocomplete='off';
         filterInput.placeholder='Nom ou description d’action';
         filterInput.setAttribute('aria-label','Filtrer les actions locales et distantes du projet');
-        group.append(el('span','input-group-text','Filtrer'),filterInput);
+        const originSelect=el('select','form-select');
+        originSelect.setAttribute('aria-label','Origine des actions');
+        [['all','Toutes'],['local','Locales'],['remote','Distantes']].forEach(([value,label])=>{
+          const option=el('option','',label);option.value=value;originSelect.appendChild(option);
+        });
+        group.append(el('span','input-group-text','Filtrer'),filterInput,el('span','input-group-text','Origine'),originSelect);
         const counter=el('p','small text-secondary mb-2');
         const empty=el('p','small text-secondary d-none','Aucune action correspondante.');
         list.prepend(group,counter,empty);
-        bindProjectActionFilter(filterInput,list,counter,empty);
+        bindProjectActionFilter(filterInput,originSelect,list,counter,empty);
       }
       body.append(heading,list);
     }
