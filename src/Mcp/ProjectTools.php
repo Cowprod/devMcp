@@ -193,7 +193,14 @@ final class ProjectTools
         }
         return [
             'project' => $project,
-            'github' => $github,
+            // Normalize the integrated response, not only the intermediate
+            // GitHub-only creation step where registration was still pending.
+            'github' => [
+                ...$github,
+                'project_registered' => true,
+                'workspace_created' => true,
+                'actions_authorized' => (bool) $project['actions_enabled'],
+            ],
             'state' => 'active',
             'actions_authorized' => (bool) $project['actions_enabled'],
         ];
