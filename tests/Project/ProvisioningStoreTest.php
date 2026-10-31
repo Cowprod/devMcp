@@ -22,7 +22,7 @@ final class ProvisioningStoreTest extends TestCase
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $db->exec('CREATE TABLE dm_project_provisioning ('
             . 'project_id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT UNIQUE NOT NULL, '
-            . 'repository_mode TEXT NOT NULL, state TEXT NOT NULL, machine TEXT, workspace_path TEXT, '
+            . 'repository_mode TEXT NOT NULL, state TEXT NOT NULL, repository_confirmed INTEGER NOT NULL DEFAULT 0, machine TEXT, workspace_path TEXT, '
             . 'actions_enabled INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)');
         return new ProvisioningStore($db);
     }
@@ -44,6 +44,7 @@ final class ProvisioningStoreTest extends TestCase
         $next = $store->advance('provision-test', 1, 'repository_ready');
         self::assertSame(2, $next['revision']);
         self::assertSame('repository_ready', $store->get('provision-test')['state']);
+        self::assertTrue($store->get('provision-test')['repository_confirmed']);
         $this->expectException(RuntimeException::class);
         $store->advance('provision-test', 1, 'registered');
     }
