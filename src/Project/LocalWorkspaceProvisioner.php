@@ -32,11 +32,13 @@ final class LocalWorkspaceProvisioner
         if (file_exists($path) || is_link($path)) {
             throw new RuntimeException('Workspace already exists: refusing to overwrite');
         }
+        // Require a canonical SSH host key trust configuration supplied by the operator.
+        // Git must not prompt or silently accept an unknown host key.
         $url = 'git@github.com:' . $repository . '.git';
         $process = new Process(
             ['git', '-c', 'core.hooksPath=/dev/null', 'clone', '--', $url, $path],
             $this->root,
-            ['GIT_TERMINAL_PROMPT' => '0', 'GIT_CONFIG_NOSYSTEM' => '1']
+            ['GIT_TERMINAL_PROMPT' => '0', 'GIT_SSH_COMMAND' => 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10']
         );
         $process->setTimeout(120);
         $process->run();
