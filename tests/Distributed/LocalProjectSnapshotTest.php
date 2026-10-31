@@ -40,6 +40,7 @@ final class LocalProjectSnapshotTest extends TestCase
                 'description' => 'Git head',
                 'sync_allowed' => true,
                 'timeout_seconds' => 30,
+                'parameters' => [],
             ], $snapshot['projects'][0]['action_details']['git.head']);
             self::assertStringNotContainsString('/usr/bin/git', $json);
             self::assertStringNotContainsString('rev-parse', $json);
@@ -108,6 +109,69 @@ final class LocalProjectSnapshotTest extends TestCase
             self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
         } finally {
             unlink($file);
+        }
+    }
+
+
+    public function testTypedParametersAreDescriptiveOnlyAndMalformedShapesFailClosed(): void
+    {
+        $workspace = sys_get_temp_dir() . '/devmcp-params-' . bin2hex(random_bytes(6));
+        mkdir($workspace, 0700);
+        $file = tempnam(sys_get_temp_dir(), 'devmcp-params-json-');
+        try {
+            $snapshot = LocalProjectSnapshot::export([
+                'projects' => [
+                    'demo' => [
+                        'root' => $workspace,
+                        'description' => 'Demo',
+                        'actions' => [
+                            'inspect' => [
+                                'description' => 'Inspect selected mode',
+                                'argv' => ['/usr/bin/git', ['param' => 'mode']],
+                                'parameters' => [
+                                    'mode' => [
+                                        'type' => 'enum',
+                                        'description' => 'Private internal flag',
+                                        'values' => ['secret-option', 'safe'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+            $parameters = $snapshot['projects'][0]['action_details']['inspect']['parameters'];
+            self::assertSame([
+                ['id' => 'mode', 'type' => 'enum', 'required' => true],
+            ], $parameters);
+            $json = json_encode($snapshot, JSON_THROW_ON_ERROR);
+            self::assertStringNotContainsString('secret-option', $json);
+            self::assertStringNotContainsString('Private internal flag', $json);
+            self::assertStringNotContainsString('/usr/bin/git', $json);
+            file_put_contents($file, $json);
+            self::assertTrue(LocalProjectSnapshot::read($file)['ok']);
+
+            $invalidParameters = [
+                [['id' => 'mode', 'type' => 'enum', 'required' => true, 'values' => ['secret-option']]],
+                [['id' => 'mode', 'type' => 'shell', 'required' => true]],
+                [['id' => 'mode', 'type' => 'enum', 'required' => false]],
+                [['id' => 'mode', 'type' => 'enum', 'required' => true],
+                    ['id' => 'mode', 'type' => 'enum', 'required' => true]],
+                ['mode' => ['id' => 'mode', 'type' => 'enum', 'required' => true]],
+            ];
+            foreach ($invalidParameters as $parameters) {
+                $bad = $snapshot;
+                $bad['projects'][0]['action_details']['inspect']['parameters'] = $parameters;
+                file_put_contents($file, json_encode($bad, JSON_THROW_ON_ERROR));
+                self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
+            }
+            $bad = $snapshot;
+            $bad['projects'][0]['action_details']['inspect']['parameters'] = null;
+            file_put_contents($file, json_encode($bad, JSON_THROW_ON_ERROR));
+            self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
+        } finally {
+            unlink($file);
+            rmdir($workspace);
         }
     }
 
