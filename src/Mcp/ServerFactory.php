@@ -102,6 +102,17 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $localProvisionSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['PROVISION_LOCAL_WORKSPACE']],
+            ],
+            'required' => ['project_id', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -134,6 +145,11 @@ final class ServerFactory
                 [$tools, 'projectAssignMachine'], 'project_assign_machine',
                 description: 'Affecte un projet a une machine active du registre, sans deployer ni activer les actions.',
                 inputSchema: $machineAssignSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisionLocal'], 'project_provision_local',
+                description: 'Clone le depot GitHub dans un nouveau workspace local sous la racine autorisee, sans activer les actions.',
+                inputSchema: $localProvisionSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
