@@ -417,7 +417,7 @@ final class ProjectTools
                 if (!$record['actions_enabled']) {
                     return ['project' => $project, 'actions' => []];
                 }
-            } catch (\\RuntimeException) {
+            } catch (\RuntimeException) {
                 // Not a provisioning project; retain legacy lookup behavior.
             }
         }
