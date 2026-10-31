@@ -79,6 +79,29 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $repositoryConfirmSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'repository' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['CONFIRM_REPOSITORY_READY']],
+            ],
+            'required' => ['project_id', 'repository', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+        $machineAssignSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'machine' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['ASSIGN_MACHINE']],
+            ],
+            'required' => ['project_id', 'machine', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -101,6 +124,16 @@ final class ServerFactory
             ->addTool(
                 [$tools, 'projectProvisioningList'], 'project_provisioning_list',
                 description: 'Liste les intentions de provisionnement et leurs etats persistants.',
+            )
+            ->addTool(
+                [$tools, 'projectRepositoryConfirm'], 'project_repository_confirm',
+                description: 'Enregistre une attestation explicite de depot pret. Ne verifie pas GitHub automatiquement.',
+                inputSchema: $repositoryConfirmSchema,
+            )
+            ->addTool(
+                [$tools, 'projectAssignMachine'], 'project_assign_machine',
+                description: 'Affecte un projet a une machine active du registre, sans deployer ni activer les actions.',
+                inputSchema: $machineAssignSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
