@@ -52,11 +52,18 @@ case "$sql_import_output" in
 esac
 update_stage=doctor
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
-# A first-time SQL cutover requires runtime reload even if no Git revision
-# changed. Also retry restarting when a previous updater failed post-migration.
+# Remember the last successfully reloaded revision independently of the Git
+# checkout. If a previous run updated files but failed before reload, retry.
+# /run is root-controlled and resets harmlessly at boot.
 update_stage=restart
-if [ "$old" != "$new" ] || [ "$sql_cutover" -eq 1 ]; then
+deployed_revision_file=/run/devmcp-runtime-revision
+deployed_revision=
+if [ -f "$deployed_revision_file" ]; then
+    deployed_revision=$(cat "$deployed_revision_file")
+fi
+if [ "$old" != "$new" ] || [ "$sql_cutover" -eq 1 ] || [ "$deployed_revision" != "$new" ]; then
     systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
+    printf '%s\n' "$new" > "$deployed_revision_file"
 fi
 # The web admin has a separate checkout; sync it on every scheduled run,
 # including when the core is already current. The bridge deployer validates
