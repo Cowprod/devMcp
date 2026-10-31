@@ -132,7 +132,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
 
         // Neither new action IDs nor a direct execution endpoint are introduced.
         self::assertStringNotContainsString("form.submit()", $source);
-        self::assertSame(5, count(\\remoteReadonlyActionCatalog()));
+        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
