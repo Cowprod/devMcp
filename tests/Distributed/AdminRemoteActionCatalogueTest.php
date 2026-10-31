@@ -47,6 +47,40 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertFalse(\remoteJobAllowed('workspace.write_text', ['path' => 'README.md']));
     }
 
+
+    public function testProjectActionsShowOnlyBoundedLastKnownJobStatus(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        $dashboardSource = file_get_contents(
+            dirname(__DIR__, 2) . '/src/Distributed/Admin/DashboardRepository.php'
+        );
+        self::assertIsString($source);
+        self::assertIsString($dashboardSource);
+
+        // The same server-projected, bounded metadata drives the action and
+        // deployment views. No job argument or result is fetched by this UI.
+        self::assertStringContainsString('function renderRemoteCatalogueStatuses(', $source);
+        self::assertStringContainsString(
+            'remoteJobHistory.find(job=>job.deployment_id===deploymentId && job.action_name===entry.dataset.remoteAction)',
+            $source,
+        );
+        self::assertStringContainsString(
+            'renderRemoteCatalogueStatuses(catalogue,deployment.dataset.recordId);',
+            $source,
+        );
+        self::assertStringContainsString(
+            "document.querySelectorAll('#panel-projects .registry-remote-catalogue').forEach(catalogue=>{",
+            $source,
+        );
+        self::assertStringContainsString('Aucune demande parmi les 100 dernières', $source);
+        self::assertStringContainsString('Historique indisponible', $source);
+        self::assertStringContainsString('ne prouve aucune autorisation actuelle', $source);
+        self::assertStringContainsString('ORDER BY dm_remote_readonly_job.created_at DESC', $dashboardSource);
+        self::assertStringContainsString('LIMIT ', $dashboardSource);
+        self::assertStringNotContainsString('dm_remote_readonly_job.arguments_json', $dashboardSource);
+        self::assertStringNotContainsString('dm_remote_readonly_job.result_json', $dashboardSource);
+    }
+
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
     {
         $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
