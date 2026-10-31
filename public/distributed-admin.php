@@ -504,7 +504,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <option value="<?= e($deployment['id']) ?>"><?= e($deployment['project_id'] . ' / ' . $deployment['machine_name']) ?></option>
 <?php endforeach; ?></select></div>
 <div class="input-group mb-2"><span class="input-group-text">Action</span><select class="form-select" name="action_name">
-<?php foreach (['git.head','workspace.list','workspace.read','workspace.stat','workspace.find'] as $action): ?>
+<?php foreach (array_keys(remoteReadonlyActionCatalog()) as $action): ?>
 <option value="<?= e($action) ?>"><?= e($action) ?></option>
 <?php endforeach; ?></select></div>
 <div class="input-group mb-2"><span class="input-group-text">Chemin</span><input class="form-control" name="path" value="."></div>
@@ -960,6 +960,26 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           const index=registry.deployments.rows.indexOf(deployment);
           top.appendChild(link('deployments',index,'Voir l’affectation'));
           box.appendChild(top);
+          // Purely descriptive: the queue and the agent policy are still authoritative.
+          // Show the same catalogue even when this deployment is disabled.
+          const catalogue=el('details','registry-remote-catalogue mb-2');
+          catalogue.appendChild(el('summary','small text-secondary','Catalogue distant (lecture seule)'));
+          Object.entries(remoteActionCatalog).forEach(([action,spec])=>{
+            const entry=el('div','registry-action-entry');
+            const description=el('div','flex-grow-1');
+            description.appendChild(el('code','d-block',action));
+            description.appendChild(el('div','small text-secondary',spec.description));
+            const parameters=[];
+            if(spec.needs_path)parameters.push('path (relative_path)');
+            if(spec.supports_filter)parameters.push('filter (enum)');
+            if(parameters.length){
+              description.appendChild(el('div','small text-info','Paramètres : '+parameters.join(', ')));
+            }
+            entry.appendChild(description);
+            entry.appendChild(el('span','badge bg-secondary','Conditionnel : politique agent'));
+            catalogue.appendChild(entry);
+          });
+          box.appendChild(catalogue);
           const historyBox=el('div','mt-2 mb-3 remote-job-history');
           historyBox.dataset.deploymentId=deployment.dataset.recordId;
           renderRemoteHistory(historyBox,deployment.dataset.recordId);
