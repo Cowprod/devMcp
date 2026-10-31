@@ -139,7 +139,7 @@ final class ProvisioningStore
     public function list(): array
     {
         $query = $this->db->query(
-            'SELECT project_id, description, repository, state, machine, revision '
+            'SELECT project_id, description, repository, state, machine, workspace_path, revision '
             . 'FROM dm_project_provisioning ORDER BY project_id'
         );
         return $query->fetchAll(PDO::FETCH_ASSOC);
