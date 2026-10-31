@@ -195,6 +195,7 @@ final class ProjectCreationEndToEndTest extends TestCase
 
         $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
         self::assertSame('active', $webCatalogue['bakery-e2e']['provisioning_state']);
+        self::assertSame($workspace, $webCatalogue['bakery-e2e']['workspace']);
         self::assertSame([], $webCatalogue['bakery-e2e']['actions']);
         self::assertSame('https://github.com/Cowprod/bakery-e2e', $webCatalogue['bakery-e2e']['repository_url']);
     }
