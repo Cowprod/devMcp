@@ -507,9 +507,10 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <?php foreach (array_keys(remoteReadonlyActionCatalog()) as $action): ?>
 <option value="<?= e($action) ?>"><?= e($action) ?></option>
 <?php endforeach; ?></select></div>
+<p class="small text-secondary mb-2 remote-action-help"></p>
 <div class="input-group mb-2"><span class="input-group-text">Chemin</span><input class="form-control" name="path" value="."></div>
 <div class="input-group mb-3"><span class="input-group-text">Filtre</span><select class="form-select" name="filter">
-<?php foreach (['all','php','js','json','md'] as $filter): ?><option value="<?= e($filter) ?>"><?= e($filter) ?></option><?php endforeach; ?>
+<?php foreach (remoteReadonlyActionCatalog()['workspace.find']['filter_values'] as $filter): ?><option value="<?= e($filter) ?>"><?= e($filter) ?></option><?php endforeach; ?>
 </select></div>
 <div class="btn-group"><button type="submit" class="btn btn-success">Mettre en file</button></div>
 </form></div></section>
@@ -757,6 +758,26 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   };
   const registry = {};
   function el(tag, cls, text) {const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+  // Both the legacy deployment form and the Project detail form follow the same
+  // descriptive catalogue. The server and agent independently validate requests.
+  function bindRemoteFields(actions,pathGroup,filterGroup,actionHelp) {
+    const update=()=>{
+      const spec=remoteActionCatalog[actions.value];
+      pathGroup.classList.toggle('d-none',!spec?.needs_path);
+      filterGroup.classList.toggle('d-none',!spec?.supports_filter);
+      actionHelp.textContent=spec?.description||'Action indisponible';
+    };
+    actions.addEventListener('change',update);
+    update();
+  }
+  const legacyRemoteForm=document.querySelector('input[name="operation"][value="remote.readonly.enqueue"]')?.closest('form');
+  if(legacyRemoteForm){
+    const actions=legacyRemoteForm.querySelector('select[name="action_name"]');
+    const path=legacyRemoteForm.querySelector('input[name="path"]')?.closest('.input-group');
+    const filter=legacyRemoteForm.querySelector('select[name="filter"]')?.closest('.input-group');
+    const help=legacyRemoteForm.querySelector('.remote-action-help');
+    if(actions && path && filter && help)bindRemoteFields(actions,path,filter,help);
+  }
   function build(name) {
     const panel=document.getElementById('panel-'+name), spec=specs[name];
     if(!panel)return;
@@ -971,7 +992,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             description.appendChild(el('div','small text-secondary',spec.description));
             const parameters=[];
             if(spec.needs_path)parameters.push('path (relative_path)');
-            if(spec.supports_filter)parameters.push('filter (enum)');
+            if(spec.supports_filter)parameters.push('filter (enum : '+(spec.filter_values||[]).join(', ')+')');
             if(parameters.length){
               description.appendChild(el('div','small text-info','Paramètres : '+parameters.join(', ')));
             }
@@ -1008,18 +1029,12 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           pathGroup.append(el('span','input-group-text','Chemin'),path);
           const filterGroup=el('div','input-group input-group-sm mb-2');
           const filter=el('select','form-select');filter.name='filter';
-          ['all','php','js','json','md'].forEach(name=>{
+          remoteActionCatalog['workspace.find'].filter_values.forEach(name=>{
             const option=el('option','',name);option.value=name;filter.appendChild(option);
           });
           filterGroup.append(el('span','input-group-text','Filtre'),filter);
           const actionHelp=el('p','small text-secondary mb-2');
-          const updateFields=()=>{
-            const spec=remoteActionCatalog[actions.value];
-            pathGroup.classList.toggle('d-none',!spec?.needs_path);
-            filterGroup.classList.toggle('d-none',!spec?.supports_filter);
-            actionHelp.textContent=spec?.description||'Action indisponible';
-          };
-          actions.addEventListener('change',updateFields);updateFields();
+          bindRemoteFields(actions,pathGroup,filterGroup,actionHelp);
           const submit=el('button','btn btn-success btn-sm','Mettre en file');submit.type='submit';
           form.append(actionGroup,actionHelp,pathGroup,filterGroup,submit);
           box.appendChild(form);

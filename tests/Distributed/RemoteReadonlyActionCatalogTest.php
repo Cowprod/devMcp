@@ -18,7 +18,12 @@ final class RemoteReadonlyActionCatalogTest extends TestCase
         ], array_keys($catalog));
 
         foreach ($catalog as $action => $spec) {
-            self::assertSame(['description', 'needs_path', 'supports_filter'], array_keys($spec));
+            self::assertSame(
+                $spec['supports_filter']
+                    ? ['description', 'needs_path', 'supports_filter', 'filter_values']
+                    : ['description', 'needs_path', 'supports_filter'],
+                array_keys($spec),
+            );
             self::assertNotSame('', trim($spec['description']));
             self::assertIsBool($spec['needs_path']);
             self::assertIsBool($spec['supports_filter']);
@@ -31,7 +36,13 @@ final class RemoteReadonlyActionCatalogTest extends TestCase
         self::assertFalse(remoteJobAllowed('workspace.read', ['path' => '../secrets']));
         self::assertFalse(remoteJobAllowed('workspace.list', ['path' => '.', 'filter' => 'all']));
         self::assertFalse(remoteJobAllowed('workspace.find', ['path' => '.', 'filter' => 'exe']));
-        self::assertTrue(remoteJobAllowed('workspace.find', ['path' => '.', 'filter' => 'php']));
+        $filters = $catalog['workspace.find']['filter_values'];
+        self::assertSame(['all', 'php', 'js', 'json', 'md'], $filters);
+        foreach ($filters as $filter) {
+            self::assertTrue(remoteJobAllowed('workspace.find', ['path' => '.', 'filter' => $filter]));
+        }
+        self::assertFalse(remoteJobAllowed('workspace.find', ['path' => '.', 'filter' => 'exe']));
+        self::assertFalse(remoteJobAllowed('workspace.read', ['path' => '.', 'filter' => 'php']));
     }
 
     public function testGitHeadCannotAcquireArgumentsThroughTheCatalog(): void
