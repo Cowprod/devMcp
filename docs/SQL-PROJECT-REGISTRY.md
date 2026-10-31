@@ -35,7 +35,7 @@ Depuis ChatGPT, sur la connexion MCP actualisée :
 3. `action_run(project="devmcp-e2e-f4cef2ae98247d11d632", action="git.status")` doit réussir.
 4. Un nouveau `project_create` doit retourner `state="active"` et `actions_authorized=true`, puis permettre immédiatement une lecture Git.
 
-Les nouvelles créations autorisent uniquement les six actions standard `git.status`, `git.head`, `workspace.list`, `workspace.stat`, `workspace.read` et `workspace.find`. Les commandes génériques en écriture ne sont jamais autorisées implicitement ; leur activation relève des définitions SQL.
+Les nouvelles créations autorisent les sept actions standard `git.status`, `git.head`, `workspace.list`, `workspace.stat`, `workspace.read`, `workspace.find` et `workspace.sync`. La synchronisation Git est une action locale asynchrone bornée à un SHA validé ; les autres commandes sensibles (déploiement, build, matériel, etc.) nécessitent toujours une autorisation explicite par définition SQL.
 
 ### Incidents / retour arrière
 
