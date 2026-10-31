@@ -41,7 +41,7 @@ try {
     }
     $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
     $tools = $runtime->tools;
-    $organization = $config['github_repository_creation']['organization'] ?? null;
+    $organization = ($config['github_repository_creation']['owner'] ?? $config['github_repository_creation']['organization'] ?? null);
     if (!is_string($organization) || $organization === '') {
         throw new RuntimeException('GitHub organization not configured in github_repository_creation');
     }
