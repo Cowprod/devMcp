@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS dm_project_provisioning (
     repository VARCHAR(141) NOT NULL,
     repository_mode VARCHAR(8) NOT NULL,
     state VARCHAR(32) NOT NULL,
+    repository_confirmed TINYINT(1) NOT NULL DEFAULT 0,
     machine VARCHAR(128) NULL,
     workspace_path VARCHAR(1024) NULL,
     actions_enabled TINYINT(1) NOT NULL DEFAULT 0,
