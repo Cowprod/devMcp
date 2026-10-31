@@ -77,8 +77,8 @@ final class ProjectTools
     }
 
     /**
-     * Register a project intent, without creating a repository or granting any action.
-     * The caller must use the preview first; the database enforces uniqueness.
+     * Register a project and clone its existing GitHub repository.
+     * Standard SQL read-only actions are granted atomically on activation.
      */
     public function projectRegister(
         string $project_id,
