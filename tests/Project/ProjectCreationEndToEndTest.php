@@ -1,0 +1,195 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Cowprod\DevMcp\Tests\Project;
+
+use Cowprod\DevMcp\Artifact\ArtifactService;
+use Cowprod\DevMcp\Audit\AuditLogger;
+use Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection;
+use Cowprod\DevMcp\Execution\ActionRunner;
+use Cowprod\DevMcp\Execution\FileJobStore;
+use Cowprod\DevMcp\Execution\JobManager;
+use Cowprod\DevMcp\GitHub\PrivateRepositoryCreator;
+use Cowprod\DevMcp\Mcp\HostTools;
+use Cowprod\DevMcp\Mcp\ProjectTools;
+use Cowprod\DevMcp\Mcp\RemoteTools;
+use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
+use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Project\ProvisioningStore;
+use PDO;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Symfony\Component\Process\Process;
+
+/**
+ * E2E in a disposable local environment: GitHub HTTPS is mocked and
+ * github.com SSH clone URLs are rewritten to a local bare git fixture.
+ * No external repository, agent, or real project is touched.
+ */
+final class ProjectCreationEndToEndTest extends TestCase
+{
+    private string $sandbox = '';
+    private array $previousGitConfig = [];
+    private PDO $db;
+    private ProjectTools $tools;
+    private ProvisioningStore $store;
+    private int $githubCalls = 0;
+
+    protected function setUp(): void
+    {
+        if (!in_array('sqlite', PDO::getAvailableDrivers(), true)) {
+            self::markTestSkipped('pdo_sqlite not installed');
+        }
+        $git = new Process(['git', '--version']);
+        $git->run();
+        if (!$git->isSuccessful()) {
+            self::markTestSkipped('git executable not available');
+        }
+
+        $this->sandbox = sys_get_temp_dir() . '/devmcp-create-e2e-' . bin2hex(random_bytes(8));
+        mkdir($this->sandbox, 0700);
+        mkdir($this->sandbox . '/upstream', 0700);
+        mkdir($this->sandbox . '/workspaces', 0700);
+
+        $bare = new Process(['git', 'init', '--bare', $this->sandbox . '/upstream/bakery-e2e.git']);
+        $bare->mustRun();
+
+        $tokenFile = $this->sandbox . '/token';
+        file_put_contents($tokenFile, 'github_pat_' . str_repeat('x', 40) . "\n");
+        chmod($tokenFile, 0600);
+
+        // The very same LocalWorkspaceProvisioner Git command runs, but
+        // never resolves github.com and cannot mutate a real repository.
+        foreach (['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0'] as $name) {
+            $value = getenv($name);
+            $this->previousGitConfig[$name] = $value === false ? null : $value;
+        }
+        putenv('GIT_CONFIG_COUNT=1');
+        putenv('GIT_CONFIG_KEY_0=url.file://' . $this->sandbox . '/upstream/.insteadOf');
+        putenv('GIT_CONFIG_VALUE_0=git@github.com:Cowprod/');
+
+        $this->db = new PDO('sqlite::memory:');
+        $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->db->exec('CREATE TABLE dm_project (id TEXT PRIMARY KEY, description TEXT NOT NULL, repository_url TEXT)');
+        $this->db->exec('CREATE TABLE dm_project_provisioning ('
+            . 'project_id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT UNIQUE NOT NULL, '
+            . 'repository_mode TEXT NOT NULL, state TEXT NOT NULL, repository_confirmed INTEGER NOT NULL DEFAULT 0, '
+            . 'machine TEXT, workspace_path TEXT, actions_enabled INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)');
+        $this->db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL)');
+        $this->db->exec('CREATE TABLE dm_deployment (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, '
+            . 'machine_id TEXT NOT NULL, workspace_path TEXT, enabled INTEGER NOT NULL DEFAULT 0)');
+
+        $registry = ProjectRegistry::fromConfig([
+            'projects' => ['demo' => ['root' => $this->sandbox, 'actions' => []]],
+        ]);
+        $audit = new AuditLogger($this->sandbox . '/audit.jsonl');
+        $jobs = new JobManager($registry, new FileJobStore($this->sandbox . '/jobs'), new ArtifactService(), $audit);
+        $creator = new PrivateRepositoryCreator(
+            'Cowprod',
+            $tokenFile,
+            function (string $url, string $token, array $payload): array {
+                $this->githubCalls++;
+                self::assertSame('https://api.github.com/orgs/Cowprod/repos', $url);
+                self::assertStringStartsWith('github_pat_', $token);
+                self::assertTrue($payload['private']);
+                self::assertSame('private', $payload['visibility']);
+                self::assertTrue($payload['auto_init']);
+                return [
+                    'status' => 201,
+                    'body' => json_encode([
+                        'id' => 1234,
+                        'name' => $payload['name'],
+                        'private' => true,
+                        'visibility' => 'private',
+                        'owner' => ['login' => 'Cowprod'],
+                    ], JSON_THROW_ON_ERROR),
+                ];
+            }
+        );
+        $this->store = new ProvisioningStore($this->db);
+        $this->tools = new ProjectTools(
+            $registry,
+            new ActionRunner($audit),
+            $jobs,
+            $audit,
+            new HostTools(),
+            new RemoteTools($this->db),
+            $creator,
+            $this->store,
+            new LocalWorkspaceProvisioner($this->sandbox . '/workspaces')
+        );
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->previousGitConfig as $name => $value) {
+            putenv($value === null ? $name : $name . '=' . $value);
+        }
+        if ($this->sandbox !== '' && is_dir($this->sandbox)) {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($this->sandbox, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($iterator as $file) {
+                if ($file->isDir() && !$file->isLink()) {
+                    rmdir($file->getPathname());
+                } else {
+                    unlink($file->getPathname());
+                }
+            }
+            rmdir($this->sandbox);
+        }
+    }
+
+    public function testCreatesPrivateRepositoryIntentAndWorkspaceVisibleInBothCatalogues(): void
+    {
+        $result = $this->tools->projectCreate('bakery-e2e', 'Bakery orders', 'CREATE_PROJECT');
+
+        self::assertSame(1, $this->githubCalls);
+        self::assertSame('active', $result['state']);
+        self::assertSame('active', $result['project']['state']);
+        self::assertFalse($result['actions_authorized']);
+        self::assertTrue($result['github']['private']);
+        self::assertSame('Cowprod/bakery-e2e', $result['github']['repository']);
+
+        $workspace = $this->sandbox . '/workspaces/bakery-e2e';
+        self::assertDirectoryExists($workspace . '/.git');
+        self::assertSame($workspace, $result['project']['workspace_path']);
+        self::assertSame('active', $this->store->get('bakery-e2e')['state']);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_deployment')->fetchColumn());
+
+        $mcpCatalogue = $this->tools->projectList()['projects'];
+        $entry = array_values(array_filter($mcpCatalogue, static fn(array $row): bool => $row['id'] === 'bakery-e2e'));
+        self::assertCount(1, $entry);
+        self::assertSame('active', $entry[0]['provisioning_state']);
+        self::assertSame(0, $entry[0]['action_count']);
+        self::assertSame([], $this->tools->actionList('bakery-e2e')['actions']);
+
+        $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
+        self::assertSame('active', $webCatalogue['bakery-e2e']['provisioning_state']);
+        self::assertSame([], $webCatalogue['bakery-e2e']['actions']);
+        self::assertSame('https://github.com/Cowprod/bakery-e2e', $webCatalogue['bakery-e2e']['repository_url']);
+    }
+
+    public function testMissingGitOriginLeavesVisibleInactiveProjectWithoutActionGrant(): void
+    {
+        // No bare Git fixture exists for this repository: the non-network clone
+        // fails after simulated GitHub creation and central registration.
+        try {
+            $this->tools->projectCreate('bakery-no-origin', 'Missing Git origin', 'CREATE_PROJECT');
+            self::fail('A failed clone must not be reported as a created workspace');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('Git clone failed', $exception->getMessage());
+        }
+        self::assertSame(1, $this->githubCalls);
+        self::assertSame('registered', $this->store->get('bakery-no-origin')['state']);
+        self::assertFalse($this->store->get('bakery-no-origin')['actions_enabled']);
+        self::assertSame([], $this->tools->actionList('bakery-no-origin')['actions']);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_deployment')->fetchColumn());
+
+        $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
+        self::assertSame('registered', $webCatalogue['bakery-no-origin']['provisioning_state']);
+        self::assertSame([], $webCatalogue['bakery-no-origin']['actions']);
+    }
+}
