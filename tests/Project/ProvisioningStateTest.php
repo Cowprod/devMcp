@@ -29,10 +29,9 @@ final class ProvisioningStateTest extends TestCase
         $record = ProvisioningState::advance($record, 'repository_ready');
         $record = ProvisioningState::advance($record, 'registered');
         $record = ProvisioningState::advance($record, 'machine_assigned', ['machine' => 'touchdeck']);
-        $record = ProvisioningState::advance($record, 'workspace_ready', [
+        $record = ProvisioningState::advance($record, 'active', [
             'workspace_path' => '/srv/devmcp/workspaces/demo-provision',
         ]);
-        $record = ProvisioningState::advance($record, 'active');
         self::assertSame('active', $record['state']);
         self::assertSame('touchdeck', $record['machine']);
         self::assertFalse($record['actions_enabled']);
@@ -66,8 +65,7 @@ final class ProvisioningStateTest extends TestCase
             $record = ProvisioningState::advance($record, $state);
         }
         $record = ProvisioningState::advance($record, 'machine_assigned', ['machine' => 'first']);
-        $record = ProvisioningState::advance($record, 'workspace_ready', ['workspace_path' => '/srv/a']);
-        $record = ProvisioningState::advance($record, 'active');
+        $record = ProvisioningState::advance($record, 'active', ['workspace_path' => '/srv/a']);
         $record = ProvisioningState::advance($record, 'machine_assigned', ['machine' => 'second']);
         self::assertNull($record['workspace_path']);
         self::assertFalse($record['actions_enabled']);
@@ -82,6 +80,6 @@ final class ProvisioningStateTest extends TestCase
         }
         $record = ProvisioningState::advance($record, 'machine_assigned', ['machine' => 'touchdeck']);
         $this->expectException(InvalidArgumentException::class);
-        ProvisioningState::advance($record, 'workspace_ready', ['workspace_path' => '/srv/../etc']);
+        ProvisioningState::advance($record, 'active', ['workspace_path' => '/srv/../etc']);
     }
 }
