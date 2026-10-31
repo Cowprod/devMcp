@@ -328,6 +328,8 @@ foreach ($localSnapshot['projects'] as $project) {
     $projectRows[$id]['actions'] = $project['actions'];
     $projectRows[$id]['action_details'] = $project['action_details'] ?? [];
 }
+// Surface journal entries alongside registry and local projects without granting actions.
+$projectRows = \Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection::merge($projectRows, $provisioningRows);
 ksort($projectRows);
 
 function e(mixed $value): string
@@ -513,8 +515,8 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
-<td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
 <td><?= e($project['repository_url'] ?: '—') ?></td></tr>
@@ -998,7 +1000,9 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       }
       const submit=el('button','btn btn-success','Enregistrer');submit.type='submit';form.appendChild(submit);
       card.append(title,form);body.appendChild(card);
-    }else if(name==='projects'&&row.dataset.registryEditable!=='1'){
+    }else if(name==='projects'&&row.dataset.provisioningState){
+       body.appendChild(el('p','small text-warning mt-3','Projet inscrit au journal de provisionnement ('+row.dataset.provisioningState+'). Aucune autorisation d’action ne découle de cet état.'));
+     }else if(name==='projects'&&row.dataset.registryEditable!=='1'){
       body.appendChild(el('p','small text-secondary mt-3','Inventaire local indisponible ou périmé : édition momentanément inaccessible.'));
     }else if(name==='deployments'&&row.dataset.enabled==='1'){
       body.appendChild(el('p','small text-secondary mt-3','Affectation active : édition du répertoire verrouillée.'));
