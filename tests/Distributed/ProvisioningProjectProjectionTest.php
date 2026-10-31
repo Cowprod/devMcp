@@ -34,6 +34,52 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertSame('', $projects['bakery-tracker']['workspace']);
     }
 
+    public function testExistingRegistryProjectDisplaysProvisionedWorkspaceAndMachine(): void
+    {
+        // Normal project creation registers in dm_project before updating the
+        // provisioning journal. A journal-only projection never covers it.
+        $existing = [
+            'bakery-tracker' => [
+                'id' => 'bakery-tracker',
+                'origin' => 'Distribué',
+                'description' => 'Description du registre',
+                'repository_url' => 'https://github.com/Cowprod/bakery-tracker',
+                'workspace' => '',
+                'actions' => [],
+                'action_details' => [],
+            ],
+        ];
+        $row = $this->journalRow('active');
+        $row['machine'] = 'touchdeck';
+        $row['workspace_path'] = '/srv/devmcp/workspaces/bakery-tracker';
+        $projects = ProvisioningProjectProjection::merge($existing, [$row]);
+        self::assertCount(1, $projects);
+        self::assertSame('Distribué', $projects['bakery-tracker']['origin']);
+        self::assertSame('Description du registre', $projects['bakery-tracker']['description']);
+        self::assertSame('active', $projects['bakery-tracker']['provisioning_state']);
+        self::assertSame('touchdeck', $projects['bakery-tracker']['provisioning_machine']);
+        self::assertSame('/srv/devmcp/workspaces/bakery-tracker', $projects['bakery-tracker']['workspace']);
+        self::assertSame([], $projects['bakery-tracker']['actions']);
+        self::assertSame([], $projects['bakery-tracker']['action_details']);
+    }
+
+    public function testIncompleteProvisioningDoesNotInventAnActiveWorkspace(): void
+    {
+        $existing = [
+            'bakery-tracker' => [
+                'id' => 'bakery-tracker',
+                'workspace' => '',
+                'actions' => [],
+                'action_details' => [],
+            ],
+        ];
+        $row = $this->journalRow('registered');
+        $row['workspace_path'] = '/srv/devmcp/workspaces/stale';
+        $result = ProvisioningProjectProjection::merge($existing, [$row]);
+        self::assertSame('', $result['bakery-tracker']['workspace']);
+        self::assertSame('registered', $result['bakery-tracker']['provisioning_state']);
+    }
+
     public function testJournalNeverOverridesTrustedLocalActionCatalogue(): void
     {
         $existing = [
@@ -52,6 +98,7 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertSame(['git.head'], $projects['bakery-tracker']['actions']);
         self::assertSame('Configuration locale', $projects['bakery-tracker']['description']);
         self::assertSame('active', $projects['bakery-tracker']['provisioning_state']);
+        self::assertSame('/srv/devmcp/workspaces/bakery-tracker', $projects['bakery-tracker']['workspace']);
         self::assertCount(1, $projects);
     }
 
@@ -69,6 +116,9 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertIsString($source);
         self::assertStringContainsString('ProvisioningProjectProjection::merge($projectRows, $provisioningRows)', $source);
         self::assertStringContainsString('data-provisioning-state=', $source);
+        self::assertStringContainsString('data-provisioning-machine=', $source);
+        self::assertStringContainsString("if(name==='projects'&&row.dataset.provisioningState)", $source);
+        self::assertStringNotContainsString("}else if(name==='projects'&&row.dataset.provisioningState)", $source);
         self::assertStringContainsString('Aucune autorisation d’action ne découle de cet état.', $source);
     }
 }
