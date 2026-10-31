@@ -89,6 +89,9 @@ final class ProjectTools
         if ($this->remoteTools === null) {
             throw new InvalidArgumentException('Registre central requis pour enregistrer un projet');
         }
+        if ($this->localProvisioner === null) {
+            throw new InvalidArgumentException('Provisionnement local requis pour creer un projet');
+        }
         $preview = $this->projectCreatePreview(
             $project_id, $description, $github_repository, $repository_mode,
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
@@ -104,6 +107,33 @@ final class ProjectTools
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.register',
             'project_id' => $project_id, 'outcome' => 'registered_intent',
+        ]);
+        // Local-first: a successful registration must leave a usable workspace.
+        // Clone failure leaves a registered, inactive project for explicit recovery.
+        try {
+            $workspace = $this->localProvisioner->provision($project_id, $github_repository);
+        } catch (\Throwable $error) {
+            $this->audit->append([
+                'project' => '_provisioning', 'action' => 'project.workspace.provision',
+                'project_id' => $project_id, 'outcome' => 'failed',
+                'error_class' => get_class($error),
+            ]);
+            throw $error;
+        }
+        $hostname = gethostname();
+        if (!is_string($hostname) || $hostname === '') {
+            throw new InvalidArgumentException('Hostname local indisponible');
+        }
+        $created = $this->provisioning->advance($project_id, $created['revision'], 'repository_ready');
+        $created = $this->provisioning->advance(
+            $project_id, $created['revision'], 'machine_assigned', ['machine' => $hostname]
+        );
+        $created = $this->provisioning->advance(
+            $project_id, $created['revision'], 'active', ['workspace_path' => $workspace['workspace_path']]
+        );
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.workspace.provision',
+            'project_id' => $project_id, 'outcome' => 'active_local',
         ]);
         return $created;
     }
