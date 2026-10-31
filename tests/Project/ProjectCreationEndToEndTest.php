@@ -61,13 +61,14 @@ final class ProjectCreationEndToEndTest extends TestCase
 
         // The very same LocalWorkspaceProvisioner Git command runs, but
         // never resolves github.com and cannot mutate a real repository.
-        foreach (['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0'] as $name) {
+        foreach (['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_ALLOW_PROTOCOL'] as $name) {
             $value = getenv($name);
             $this->previousGitConfig[$name] = $value === false ? null : $value;
         }
         putenv('GIT_CONFIG_COUNT=1');
         putenv('GIT_CONFIG_KEY_0=url.file://' . $this->sandbox . '/upstream/.insteadOf');
         putenv('GIT_CONFIG_VALUE_0=git@github.com:Cowprod/');
+        putenv('GIT_ALLOW_PROTOCOL=file');
 
         $this->db = new PDO('sqlite::memory:');
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
