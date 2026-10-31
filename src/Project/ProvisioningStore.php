@@ -9,8 +9,8 @@ use PDOException;
 use RuntimeException;
 
 /**
- * Durable, fail-closed provisioning journal. It does not grant execution
- * permissions or write into the legacy dm_project registry.
+ * Durable, fail-closed provisioning journal. Local SQL actions are enabled
+ * atomically when a verified workspace reaches the active state.
  */
 final class ProvisioningStore
 {
