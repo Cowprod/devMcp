@@ -484,7 +484,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -893,6 +893,29 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         : 'Statuts au chargement ; actualisation automatique toutes les 15 s sur cet onglet.';
     box.appendChild(el('p','small '+(remotePollError?'text-warning':'text-secondary')+' mt-2 mb-0',note));
   }
+  // UI-only filtering. It never changes the catalogue, queued request or agent policy.
+  function bindProjectActionFilter(input,list,counter,empty) {
+    const entries=Array.from(list.querySelectorAll('.registry-action-entry[data-action-search]'));
+    const catalogues=Array.from(list.querySelectorAll('details.registry-remote-catalogue'));
+    const update=()=>{
+      const query=input.value.trim().toLocaleLowerCase('fr');
+      let matches=0;
+      entries.forEach(entry=>{
+        const matched=!query || (entry.dataset.actionSearch||'').toLocaleLowerCase('fr').includes(query);
+        entry.classList.toggle('d-none',!matched);
+        if(matched)matches++;
+      });
+      catalogues.forEach(catalogue=>{
+        const hasMatch=!!catalogue.querySelector('.registry-action-entry:not(.d-none)');
+        catalogue.classList.toggle('d-none',!!query&&!hasMatch);
+        if(query&&hasMatch)catalogue.open=true;
+      });
+      counter.textContent=matches+' entrée(s) correspondante(s) sur '+entries.length+'.';
+      empty.classList.toggle('d-none',matches!==0);
+    };
+    input.addEventListener('input',update);
+    update();
+  }
   function select(name,index){
     const state=registry[name];if(!state||!state.rows[index])return;
     state.side.querySelectorAll('.registry-entry').forEach((b,i)=>{b.classList.toggle('active',i===index);b.setAttribute('aria-pressed',i===index?'true':'false');});
@@ -951,8 +974,12 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     if(name==='projects'){
       const heading=el('h3','h6 mt-4','Actions du projet');
       const list=el('div','registry-actions');
-      const localActions=Array.from(row.cells[4].querySelectorAll('details')).flatMap(d=>
-        (d.querySelector('.small')?.textContent||'').split(',').map(v=>v.trim()).filter(Boolean));
+      // Read the typed, HTML-escaped inventory projection, never reparse display text.
+      let localActions=[];
+      try {
+        const parsed=JSON.parse(row.dataset.localActions||'[]');
+        if(Array.isArray(parsed))localActions=parsed.filter(action=>typeof action==='string');
+      } catch (_) { /* Invalid inventory: do not infer actions from formatted HTML. */ }
       const projectId=row.cells[0].textContent.trim();
       const deployments=registry.deployments?.rows.filter(r=>r.cells[0].textContent.trim()===projectId)||[];
       if(localActions.length){
@@ -963,6 +990,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         localActions.forEach(action=>{
           const line=el('div','registry-action-entry');
           const detail=actionDetails[action];
+          line.dataset.actionSearch=action+' '+(typeof detail?.description==='string'?detail.description:'');
           const description=el('div','flex-grow-1');
           description.appendChild(el('code','d-block',action));
           if(detail && typeof detail.description==='string'){
@@ -1008,6 +1036,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           Object.entries(remoteActionCatalog).forEach(([action,spec])=>{
             const entry=el('div','registry-action-entry');
             entry.dataset.remoteAction=action;
+            entry.dataset.actionSearch=action+' '+spec.description;
             const description=el('div','flex-grow-1');
             description.appendChild(el('code','d-block',action));
             description.appendChild(el('div','small text-secondary',spec.description));
@@ -1067,6 +1096,18 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       }
       if(!localActions.length&&!deployments.length){
         list.appendChild(el('p','text-secondary small','Aucune action publiée pour ce projet.'));
+      }else{
+        const group=el('div','input-group input-group-sm mt-3 mb-2');
+        const filterInput=el('input','form-control');
+        filterInput.type='search';
+        filterInput.autocomplete='off';
+        filterInput.placeholder='Nom ou description d’action';
+        filterInput.setAttribute('aria-label','Filtrer les actions locales et distantes du projet');
+        group.append(el('span','input-group-text','Filtrer'),filterInput);
+        const counter=el('p','small text-secondary mb-2');
+        const empty=el('p','small text-secondary d-none','Aucune action correspondante.');
+        list.prepend(group,counter,empty);
+        bindProjectActionFilter(filterInput,list,counter,empty);
       }
       body.append(heading,list);
     }

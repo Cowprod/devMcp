@@ -81,6 +81,28 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringNotContainsString('dm_remote_readonly_job.result_json', $dashboardSource);
     }
 
+    public function testProjectActionFilterUsesTypedLocalInventoryAndDoesNotChangeAuthorization(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+
+        // Local action IDs come from the validated snapshot, not from a
+        // comma-separated display string (which is not a data protocol).
+        self::assertStringContainsString('data-local-actions=', $source);
+        self::assertStringContainsString("JSON.parse(row.dataset.localActions||'[]')", $source);
+        self::assertStringNotContainsString("split(',').map(v=>v.trim())", $source);
+
+        // The search only toggles catalogue visibility; it must not alter
+        // the five-action queue allowlist, form content or agent policy.
+        self::assertStringContainsString('function bindProjectActionFilter(', $source);
+        self::assertStringContainsString('entry.dataset.actionSearch=', $source);
+        self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',!!query&&!hasMatch);", $source);
+        self::assertStringContainsString('bindProjectActionFilter(filterInput,list,counter,empty);', $source);
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
+        self::assertStringContainsString('Conditionnel : politique agent', $source);
+    }
+
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
     {
         $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
