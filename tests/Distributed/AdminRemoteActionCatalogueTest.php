@@ -103,6 +103,38 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString('Conditionnel : politique agent', $source);
     }
 
+    public function testProjectCataloguePreparesExistingReadOnlyFormWithoutQueueing(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+
+        // A click only selects one of the server-published read-only actions.
+        // Buttons are created only after eligibility and CSRF checks.
+        $eligibilityGate = strpos($source, 'if(!enabled||!approved){');
+        $csrfGate = strpos($source, 'if(!csrf){');
+        $prepareControl = strpos($source, "prepare.dataset.prepareRemoteAction=action;");
+        self::assertIsInt($eligibilityGate);
+        self::assertIsInt($csrfGate);
+        self::assertIsInt($prepareControl);
+        self::assertLessThan($prepareControl, $eligibilityGate);
+        self::assertLessThan($prepareControl, $csrfGate);
+        self::assertStringContainsString(
+            "if(!Object.prototype.hasOwnProperty.call(remoteActionCatalog,action))return;", $source,
+        );
+        self::assertStringContainsString("prepare.type='button';", $source);
+        self::assertStringContainsString(
+            "actions.dispatchEvent(new Event('change',{bubbles:true}));", $source,
+        );
+        self::assertStringContainsString("preparedNote.setAttribute('role','status');", $source);
+        self::assertStringContainsString("entry.prepend(prepare);", $source);
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
+        self::assertStringContainsString("submit.type='submit';", $source);
+
+        // Neither new action IDs nor a direct execution endpoint are introduced.
+        self::assertStringNotContainsString("form.submit()", $source);
+        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+    }
+
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
     {
         $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
