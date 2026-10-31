@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Fixed, descriptive catalogue for the admin UI. This is not an agent grant:
  * the enqueue gate and the remote machine policy remain authoritative.
  *
- * @return array<string,array{description:string,needs_path:bool,supports_filter:bool}>
+ * @return array<string,array{description:string,needs_path:bool,supports_filter:bool,filter_values?:list<string>}>
  */
 function remoteReadonlyActionCatalog(): array
 {
@@ -34,6 +34,8 @@ function remoteReadonlyActionCatalog(): array
             'description' => 'Rechercher des fichiers autorises par extension.',
             'needs_path' => true,
             'supports_filter' => true,
+            // Shared with both admin forms and the enqueue validation gate.
+            'filter_values' => ['all', 'php', 'js', 'json', 'md'],
         ],
     ];
 }
@@ -59,5 +61,5 @@ function remoteJobAllowed(string $action, array $args): bool
         return false;
     }
     return !isset($args['filter']) || ($spec['supports_filter']
-        && in_array($args['filter'], ['all', 'php', 'js', 'json', 'md'], true));
+        && in_array($args['filter'], $spec['filter_values'] ?? [], true));
 }
