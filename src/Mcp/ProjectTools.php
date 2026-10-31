@@ -12,6 +12,7 @@ use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\ProjectCreationPreview;
 use Cowprod\DevMcp\Project\ProvisioningState;
 use Cowprod\DevMcp\Project\ProvisioningStore;
+use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
 use InvalidArgumentException;
 
 final class ProjectTools
@@ -25,6 +26,7 @@ final class ProjectTools
         private readonly ?RemoteTools $remoteTools = null,
         private readonly ?PrivateRepositoryCreator $githubCreator = null,
         private readonly ?ProvisioningStore $provisioning = null,
+        private readonly ?LocalWorkspaceProvisioner $localProvisioner = null,
     ) {
     }
 
@@ -143,6 +145,32 @@ final class ProjectTools
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.machine.assign',
             'project_id' => $project_id, 'machine_id' => $resolved['id'], 'outcome' => 'assigned',
+        ]);
+        return $updated;
+    }
+
+    public function projectProvisionLocal(string $project_id, int $revision, string $confirmation): array
+    {
+        if ($confirmation !== 'PROVISION_LOCAL_WORKSPACE'
+            || $this->provisioning === null || $this->localProvisioner === null) {
+            throw new InvalidArgumentException('Provisionnement local indisponible ou non confirme');
+        }
+        $record = $this->provisioning->get($project_id);
+        if ($record['revision'] !== $revision || $record['state'] !== 'machine_assigned'
+            || $record['machine'] !== gethostname()) {
+            throw new InvalidArgumentException('Projet non affecte a cet hote ou revision obsolete');
+        }
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.workspace.provision',
+            'project_id' => $project_id, 'outcome' => 'requested',
+        ]);
+        $result = $this->localProvisioner->provision($project_id, $record['repository']);
+        $updated = $this->provisioning->advance(
+            $project_id, $revision, 'workspace_ready', ['workspace_path' => $result['workspace_path']]
+        );
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.workspace.provision',
+            'project_id' => $project_id, 'outcome' => 'workspace_ready',
         ]);
         return $updated;
     }
