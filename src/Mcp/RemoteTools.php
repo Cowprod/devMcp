@@ -6,6 +6,7 @@ namespace Cowprod\DevMcp\Mcp;
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use InvalidArgumentException;
+use Cowprod\DevMcp\Project\ProvisioningStore;
 use PDO;
 use RuntimeException;
 
@@ -32,6 +33,11 @@ final class RemoteTools
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
         ));
+    }
+
+    public function provisioningStore(): ProvisioningStore
+    {
+        return new ProvisioningStore($this->db);
     }
 
     private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
