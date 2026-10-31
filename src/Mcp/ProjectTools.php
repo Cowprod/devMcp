@@ -40,8 +40,8 @@ final class ProjectTools
             $projects[] = $project->toPublicArray();
         }
 
-        if ($this->provisioning !== null) {
-            foreach ($this->provisioning->list() as $entry) {
+        if (($provisioningRows = $this->provisioningRows()) !== null) {
+            foreach ($provisioningRows as $entry) {
                 if (isset($this->projects->all()[$entry['project_id']])) {
                     continue;
                 }
@@ -287,10 +287,28 @@ final class ProjectTools
 
     public function projectProvisioningList(): array
     {
+        $rows = $this->provisioningRows();
+        return ['projects' => $rows ?? [], 'available' => $rows !== null];
+    }
+
+    /**
+     * The provisioning migration is optional during a staged rollout.
+     * Never break existing MCP project discovery when the journal is absent
+     * or the read-only database grant has not yet been installed.
+     * Mutating operations continue to fail closed through ProvisioningStore.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function provisioningRows(): ?array
+    {
         if ($this->provisioning === null) {
-            return ['projects' => [], 'available' => false];
+            return null;
         }
-        return ['projects' => $this->provisioning->list(), 'available' => true];
+        try {
+            return $this->provisioning->list();
+        } catch (\PDOException) {
+            return null;
+        }
     }
 
     /**
@@ -401,8 +419,8 @@ final class ProjectTools
         if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
             return $this->remoteTools->describe($project);
         }
-        if ($this->provisioning !== null) {
-            foreach ($this->provisioning->list() as $entry) {
+        if (($provisioningRows = $this->provisioningRows()) !== null) {
+            foreach ($provisioningRows as $entry) {
                 if ($entry['project_id'] === $project) {
                     return $this->provisioning->get($project);
                 }
