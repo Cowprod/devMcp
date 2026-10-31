@@ -287,6 +287,15 @@ try {
     $remoteHistoryAvailable = false;
     error_log('devmcp-admin remote action history unavailable: ' . get_class($exception));
 }
+// Provisioning journal is optional until the migration and read-only grant are applied.
+$provisioningRows = [];
+$provisioningAvailable = true;
+try {
+    $provisioningRows = (new \Cowprod\DevMcp\Project\ProvisioningStore($db))->list();
+} catch (PDOException $exception) {
+    $provisioningAvailable = false;
+    error_log('devmcp-admin provisioning journal unavailable: ' . get_class($exception));
+}
 // Keep distributed registry writes separate from local runtime definitions.
 $projectRows = [];
 foreach ($projects as $project) {
@@ -463,6 +472,26 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 </tbody></table></div>
 </section>
 <section class="admin-panel" id="panel-projects" data-panel="projects">
+<section class="card mb-4"><div class="card-body">
+<h2 class="h5">Provisionnement des projets</h2>
+<p class="text-secondary small">Journal central des projets en preparation. Cette vue n'autorise aucune action sur les machines.</p>
+<?php if (!$provisioningAvailable): ?>
+<div class="alert alert-warning">Journal de provisionnement indisponible : migration ou droit SELECT manquant.</div>
+<?php elseif ($provisioningRows === []): ?>
+<p class="text-secondary">Aucun projet en cours de provisionnement.</p>
+<?php else: ?>
+<div class="table-responsive"><table class="table table-sm table-striped">
+<thead><tr><th>Projet</th><th>Depot GitHub</th><th>Etat</th><th>Machine</th><th>Revision</th></tr></thead><tbody>
+<?php foreach ($provisioningRows as $provisioningRow): ?>
+<tr><td><?= e($provisioningRow['project_id']) ?></td>
+<td><?= e($provisioningRow['repository']) ?></td>
+<td><?= e($provisioningRow['state']) ?></td>
+<td><?= e($provisioningRow['machine'] ?? 'Non affectee') ?></td>
+<td><?= e((string) $provisioningRow['revision']) ?></td></tr>
+<?php endforeach; ?>
+</tbody></table></div>
+<?php endif; ?>
+</div></section>
 <?php if (!$remoteHistoryAvailable): ?><div class="alert alert-warning">Historique des actions distantes indisponible : vérifier les droits SQL en lecture seule et la migration 005. Les autorisations des agents ne sont pas affectées.</div><?php endif; ?><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter un projet</h2>
 <form method="post" action="/">
