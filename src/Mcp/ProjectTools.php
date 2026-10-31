@@ -202,6 +202,24 @@ final class ProjectTools
         return $updated;
     }
 
+    public function projectActivate(string $project_id, int $revision, string $confirmation): array
+    {
+        if ($confirmation !== 'ACTIVATE_PROJECT' || $this->provisioning === null) {
+            throw new InvalidArgumentException('Activation non confirmee ou indisponible');
+        }
+        $record = $this->provisioning->get($project_id);
+        if ($record['state'] !== 'workspace_ready' || $record['revision'] !== $revision) {
+            throw new InvalidArgumentException('Workspace non pret ou revision obsolete');
+        }
+        // Lifecycle activation is deliberately not action authorization.
+        $updated = $this->provisioning->advance($project_id, $revision, 'active');
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.activate',
+            'project_id' => $project_id, 'outcome' => 'active_without_actions',
+        ]);
+        return $updated;
+    }
+
     public function projectProvisioningList(): array
     {
         if ($this->provisioning === null) {
@@ -335,6 +353,16 @@ final class ProjectTools
     {
         if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
             return $this->remoteTools->actions($project);
+        }
+        if ($this->provisioning !== null && !isset($this->projects->all()[$project])) {
+            try {
+                $record = $this->provisioning->get($project);
+                if (!$record['actions_enabled']) {
+                    return ['project' => $project, 'actions' => []];
+                }
+            } catch (\\RuntimeException) {
+                // Not a provisioning project; retain legacy lookup behavior.
+            }
         }
         $definition = $this->projects->get($project);
         $actions = [];
