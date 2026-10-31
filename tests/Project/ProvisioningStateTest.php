@@ -46,6 +46,13 @@ final class ProvisioningStateTest extends TestCase
         self::assertSame('repository_ready', $record['state']);
     }
 
+    public function testCannotAssignMachineBeforeRepositoryReady(): void
+    {
+        $record = ProvisioningState::advance($this->planned(), 'registered');
+        $this->expectException(DomainException::class);
+        ProvisioningState::advance($record, 'machine_assigned', ['machine' => 'touchdeck']);
+    }
+
     public function testCannotSkipRegistration(): void
     {
         $this->expectException(DomainException::class);
