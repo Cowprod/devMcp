@@ -893,24 +893,29 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         : 'Statuts au chargement ; actualisation automatique toutes les 15 s sur cet onglet.';
     box.appendChild(el('p','small '+(remotePollError?'text-warning':'text-secondary')+' mt-2 mb-0',note));
   }
+  // Normalize public descriptive metadata only; no arguments or agent policy.
+  function normalizeProjectActionSearch(value) {
+    return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr');
+  }
   // UI-only filtering. It never changes the catalogue, queued request or agent policy.
   function bindProjectActionFilter(input,originSelect,list,counter,empty) {
     const entries=Array.from(list.querySelectorAll('.registry-action-entry[data-action-search]'));
     const catalogues=Array.from(list.querySelectorAll('details.registry-remote-catalogue'));
     const update=()=>{
-      const query=input.value.trim().toLocaleLowerCase('fr');
+      const terms=normalizeProjectActionSearch(input.value.trim()).split(/\s+/).filter(Boolean);
       const origin=originSelect.value;
       let matches=0;
       entries.forEach(entry=>{
+        const text=normalizeProjectActionSearch(entry.dataset.actionSearch);
         const matched=(origin==='all'||entry.dataset.actionOrigin===origin)
-          && (!query || (entry.dataset.actionSearch||'').toLocaleLowerCase('fr').includes(query));
+          && terms.every(term=>text.includes(term));
         entry.classList.toggle('d-none',!matched);
         if(matched)matches++;
       });
       catalogues.forEach(catalogue=>{
         const hasMatch=!!catalogue.querySelector('.registry-action-entry:not(.d-none)');
-        catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));
-        if(query&&hasMatch)catalogue.open=true;
+        catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));
+        if(terms.length&&hasMatch)catalogue.open=true;
       });
       counter.textContent=matches+' entrée(s) correspondante(s) sur '+entries.length+'.';
       empty.classList.toggle('d-none',matches!==0);
@@ -1135,6 +1140,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         filterInput.type='search';
         filterInput.autocomplete='off';
         filterInput.placeholder='Nom, description ou paramètre';
+        filterInput.title='Plusieurs mots-clés : tous doivent correspondre, sans contrainte d’ordre ni d’accents.';
         filterInput.setAttribute('aria-label','Rechercher les actions par nom, description ou paramètre');
         const originSelect=el('select','form-select');
         originSelect.setAttribute('aria-label','Origine des actions');
