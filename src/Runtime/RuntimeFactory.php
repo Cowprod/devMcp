@@ -23,7 +23,13 @@ final class RuntimeFactory
      */
     public static function fromConfig(array $config, string $fallbackVarDirectory): Runtime
     {
-        $projects = ProjectRegistry::fromConfig($config);
+        $remote = RemoteTools::fromConfig($config);
+        $sql = $remote?->sqlProjectConfiguration();
+        // Before migration readiness, preserve legacy config without downtime.
+        // Once cut over, no project/action definition is read from global.php.
+        $projects = $sql !== null && $sql->isReady()
+            ? ProjectRegistry::fromSql($sql)
+            : ProjectRegistry::fromConfig($config);
 
         $auditFile = self::stringValue(
             $config['audit']['file'] ?? null,
@@ -76,7 +82,6 @@ final class RuntimeFactory
         $artifacts = new ArtifactService($maxArtifactChunk);
         $store = new FileJobStore($jobsDirectory, $maxJobLog);
         $jobs = new JobManager($projects, $store, $artifacts, $audit, $maxOutput);
-        $remote = RemoteTools::fromConfig($config);
         $workspaceRoot = $config['project_provisioning']['local_workspace_root'] ?? null;
         $localProvisioner = is_string($workspaceRoot) && ($config['project_provisioning']['enabled'] ?? false) === true
             ? new LocalWorkspaceProvisioner($workspaceRoot) : null;
