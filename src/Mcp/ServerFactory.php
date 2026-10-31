@@ -113,6 +113,17 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $projectCreateSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string', 'maxLength' => 64],
+                'description' => ['type' => 'string', 'maxLength' => 255],
+                'confirmation' => ['type' => 'string', 'enum' => ['CREATE_PROJECT']],
+            ],
+            'required' => ['project_id', 'description', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -121,6 +132,11 @@ final class ServerFactory
             )
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
+            ->addTool(
+                [$tools, 'projectCreate'], 'project_create',
+                description: 'Cree en une operation le depot GitHub prive, le projet central et son workspace local actif.',
+                inputSchema: $projectCreateSchema,
+            )
             ->addTool(
                 [$tools, 'githubRepositoryCreate'],
                 'github_repository_create',
