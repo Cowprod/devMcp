@@ -17,7 +17,11 @@ use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\ProvisioningStore;
+use Cowprod\DevMcp\Project\ProvisioningState;
+use Cowprod\DevMcp\Project\ProjectCreationPreview;
 use PDO;
+use PDOException;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Symfony\Component\Process\Process;
@@ -213,5 +217,67 @@ final class ProjectCreationEndToEndTest extends TestCase
         $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
         self::assertSame('registered', $webCatalogue['bakery-no-origin']['provisioning_state']);
         self::assertSame([], $webCatalogue['bakery-no-origin']['actions']);
+    }
+    public function testOccupiedWorkspaceRejectsBeforeGitHubCreation(): void
+    {
+        $path = $this->sandbox . '/workspaces/bakery-e2e';
+        mkdir($path, 0700);
+        try {
+            $this->tools->projectCreate('bakery-e2e', 'Existing workspace', 'CREATE_PROJECT');
+            self::fail('An occupied local target must reject creation');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('Workspace already exists', $exception->getMessage());
+        }
+        self::assertSame(0, $this->githubCalls);
+        self::assertDirectoryExists($path);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
+    }
+
+    public function testReservedRepositoryRejectsBeforeGitHubCreation(): void
+    {
+        $reserved = ProvisioningState::begin(ProjectCreationPreview::prepare(
+            'previous-intent', 'Existing reservation', 'Cowprod/bakery-e2e',
+            'create', 'local', 'local', '/srv/devmcp/workspaces/previous-intent'
+        ));
+        $this->store->create($reserved);
+        try {
+            $this->tools->projectCreate('bakery-e2e', 'New project', 'CREATE_PROJECT');
+            self::fail('A reserved repository must reject creation');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('reserve', $exception->getMessage());
+        }
+        self::assertSame(0, $this->githubCalls);
+        self::assertSame('planned', $this->store->get('previous-intent')['state']);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
+    }
+
+    public function testReservedProjectIdRejectsBeforeGitHubCreation(): void
+    {
+        $reserved = ProvisioningState::begin(ProjectCreationPreview::prepare(
+            'bakery-e2e', 'Existing intent', 'Cowprod/old-repository',
+            'attach', 'local', 'local', '/srv/devmcp/workspaces/bakery-e2e'
+        ));
+        $this->store->create($reserved);
+        try {
+            $this->tools->projectCreate('bakery-e2e', 'New project', 'CREATE_PROJECT');
+            self::fail('A reserved project ID must reject creation');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('reserve', $exception->getMessage());
+        }
+        self::assertSame(0, $this->githubCalls);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
+    }
+
+    public function testMissingProvisioningMigrationFailsBeforeGitHubCreation(): void
+    {
+        $this->db->exec('DROP TABLE dm_project_provisioning');
+        try {
+            $this->tools->projectCreate('bakery-e2e', 'Missing journal', 'CREATE_PROJECT');
+            self::fail('A missing journal must reject creation');
+        } catch (PDOException $exception) {
+            self::assertStringContainsString('dm_project_provisioning', $exception->getMessage());
+        }
+        self::assertSame(0, $this->githubCalls);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
     }
 }
