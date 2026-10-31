@@ -390,6 +390,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 .registry-action-entry{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.45rem .65rem;margin:.3rem 0;background:rgba(22,32,57,.4);border-radius:.4rem;flex-wrap:wrap}
 .registry-action-entry code{color:#f5f7ff;overflow-wrap:anywhere}
 .registry-actions{margin-top:.6rem}
+.android-device-detail[hidden]{display:none!important}
 </style>
 </head>
 <body>
