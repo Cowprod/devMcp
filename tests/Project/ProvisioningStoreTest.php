@@ -44,7 +44,7 @@ final class ProvisioningStoreTest extends TestCase
         self::assertFalse($row['repository_confirmed']);
         self::assertFalse($row['actions_enabled']);
         self::assertSame('provision-test', $store->list()[0]['project_id']);
-        $this->expectException(\\PDOException::class);
+        $this->expectException(\PDOException::class);
         $store->registerCentral($this->plan());
     }
 
