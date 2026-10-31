@@ -31,21 +31,22 @@ Le résultat indique \`state=preview_only\`. Il affiche \`creation_authorized=fa
 
 ## Création du dépôt GitHub — implémentation opt-in
 
-L'outil MCP \`github_repository_create\` prend \`repository\` au format \`Cowprod/nom\` et \`confirmation=CREATE_PRIVATE_REPOSITORY\`. Il est **désactivé par défaut**. Sans activation explicite dans la configuration centrale, aucun appel HTTP n'est émis.
+L'outil MCP \`github_repository_create\` prend \`repository\` au format \`Cowprod/nom\` et \`confirmation=CREATE_PRIVATE_REPOSITORY\`. Il est **désactivé par défaut**. Sans activation explicite dans la configuration centrale, aucun appel HTTP n'est émis. Le compte \`Cowprod\` est de type GitHub \`User\` et doit être configuré avec \`owner_type=user\` (et non \`organization\`).
 
 La configuration root-controlled \`/etc/devmcp/global.php\` doit, après validation de l'opérateur, contenir :
 
 ~~~php
 'github_repository_creation' => [
     'enabled' => true,
-    'organization' => 'Cowprod',
+    'owner' => 'Cowprod',
+    'owner_type' => 'user',
     'token_file' => '/etc/devmcp/github-repository-token',
 ],
 ~~~
 
 Le fichier de jeton est séparé du dépôt Git, non accessible à l'interface Web et lisible uniquement par son propriétaire (permissions 0600 ou plus strictes). Le serveur exige un fichier régulier, canonique, non lié et possédé par root ou l'utilisateur courant. Ce chemin unique est fixé dans le code et ne peut pas être choisi depuis une conversation.
 
-L'identité GitHub doit être autorisée pour la **création de dépôts** dans l'organisation, idéalement avec la permission *Repository creation: write* d'un GitHub App ou d'un jeton à droits limités. Ne pas lui donner d'accès global aux contenus de tous les dépôts. L'application effectue uniquement \`POST https://api.github.com/orgs/Cowprod/repos\` avec visibilité **private**, \`auto_init=true\`, un corps de requête borné et un transport HTTPS vérifié sans redirection. Toute réponse non 201 ou non conforme est rejetée ; un HTTP 422 (dépôt existant) n'est jamais déclaré comme une création réussie.
+L'identité GitHub doit être autorisée pour la **création de dépôts** pour le compte utilisateur, idéalement avec la permission *Repository creation: write* d'un GitHub App ou d'un jeton à droits limités. Ne pas lui donner d'accès global aux contenus de tous les dépôts. Pour un compte utilisateur, l'application vérifie d'abord l'identité du jeton via \`GET https://api.github.com/user\` puis exécute \`POST https://api.github.com/user/repos\`. Pour une organisation déclarée explicitement via \`owner_type=organization\`, elle utilise \`POST https://api.github.com/orgs/{owner}/repos\` avec visibilité **private**, \`auto_init=true\`, un corps de requête borné et un transport HTTPS vérifié sans redirection. Toute réponse non 201 ou non conforme est rejetée ; un HTTP 422 (dépôt existant) n'est jamais déclaré comme une création réussie.
 
 Le résultat \`github_created\` signifie seulement que l'API a confirmé la création du dépôt privé. **Il ne signifie pas** que le projet a été enregistré dans SQL, que le workspace existe ni qu'un agent a reçu de nouvelles autorisations. Chaque tentative est auditée avec le nom du dépôt et le résultat, sans jeton, corps HTTP ou contenu de fichier.
 
