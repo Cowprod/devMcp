@@ -85,6 +85,26 @@ final class ProjectTools
         return $created;
     }
 
+    public function projectRepositoryConfirm(string $project_id, string $repository, int $revision, string $confirmation): array
+    {
+        if ($confirmation !== 'CONFIRM_REPOSITORY_READY') {
+            throw new InvalidArgumentException('Confirmation explicite requise');
+        }
+        if ($this->provisioning === null) {
+            throw new InvalidArgumentException('Registre de provisionnement indisponible');
+        }
+        $current = $this->provisioning->get($project_id);
+        if ($current['repository'] !== $repository) {
+            throw new InvalidArgumentException('Depot different de celui du projet');
+        }
+        $updated = $this->provisioning->advance($project_id, $revision, 'repository_ready');
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.repository.confirm',
+            'project_id' => $project_id, 'repository' => $repository, 'outcome' => 'recorded',
+        ]);
+        return $updated;
+    }
+
     public function projectProvisioningList(): array
     {
         if ($this->provisioning === null) {
