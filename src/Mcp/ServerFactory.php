@@ -134,7 +134,7 @@ final class ServerFactory
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
                 [$tools, 'projectCreate'], 'project_create',
-                description: 'Cree en une operation le depot GitHub prive, le projet central et son workspace local actif.',
+                description: 'Cree le depot GitHub prive, le workspace local et les actions standard SQL immediatement utilisables.',
                 inputSchema: $projectCreateSchema,
             )
             ->addTool(
@@ -145,7 +145,7 @@ final class ServerFactory
             )
             ->addTool(
                 [$tools, 'projectRegister'], 'project_register',
-                description: 'Enregistre une intention de projet dans le journal central. Ne cree ni depot ni workspace, n autorise aucune action.',
+                description: 'Enregistre le projet, clone le depot existant, active le workspace local et ses actions standard SQL.',
                 inputSchema: $projectRegisterSchema,
             )
             ->addTool(
@@ -164,7 +164,7 @@ final class ServerFactory
             )
             ->addTool(
                 [$tools, 'projectProvisionLocal'], 'project_provision_local',
-                description: 'Clone le depot GitHub dans un nouveau workspace local sous la racine autorisee, avec activation automatique du projet, sans accorder de droits d execution.',
+                description: 'Clone le depot dans un workspace local sous la racine autorisee, puis active le projet et ses actions standard SQL.',
                 inputSchema: $localProvisionSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')

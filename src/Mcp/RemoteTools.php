@@ -40,6 +40,11 @@ final class RemoteTools
         return new ProvisioningStore($this->db);
     }
 
+    public function sqlProjectConfiguration(): \Cowprod\DevMcp\Project\SqlProjectConfiguration
+    {
+        return new \Cowprod\DevMcp\Project\SqlProjectConfiguration($this->db);
+    }
+
     private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
 
     /**

@@ -16,6 +16,7 @@ use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
 use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Project\SqlProjectConfiguration;
 use Cowprod\DevMcp\Project\ProvisioningStore;
 use Cowprod\DevMcp\Project\ProvisioningState;
 use Cowprod\DevMcp\Project\ProjectCreationPreview;
@@ -94,9 +95,18 @@ final class ProjectCreationEndToEndTest extends TestCase
         $this->db->exec('CREATE TABLE dm_deployment (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, '
             . 'machine_id TEXT NOT NULL, workspace_path TEXT, enabled INTEGER NOT NULL DEFAULT 0)');
 
-        $registry = ProjectRegistry::fromConfig([
-            'projects' => ['demo' => ['root' => $this->sandbox, 'actions' => []]],
-        ]);
+        $this->db->exec('CREATE TABLE dm_shared_action_config (action_id TEXT PRIMARY KEY, config_json TEXT NOT NULL)');
+        $this->db->exec('CREATE TABLE dm_local_project_config (project_id TEXT PRIMARY KEY, config_json TEXT NOT NULL)');
+        $this->db->exec('CREATE TABLE dm_project_registry_state (id INTEGER PRIMARY KEY, ready INTEGER NOT NULL)');
+        $this->db->exec('INSERT INTO dm_project_registry_state (id,ready) VALUES (1,1)');
+        $templates = require dirname(__DIR__, 2) . '/config/shared-actions.php';
+        $insert = $this->db->prepare(
+            'INSERT INTO dm_shared_action_config (action_id,config_json) VALUES (?,?)'
+        );
+        foreach (SqlProjectConfiguration::DEFAULT_ACTIONS as $name) {
+            $insert->execute([$name, json_encode($templates[$name], JSON_THROW_ON_ERROR)]);
+        }
+        $registry = ProjectRegistry::fromSql(new SqlProjectConfiguration($this->db));
         $audit = new AuditLogger($this->sandbox . '/audit.jsonl');
         $jobs = new JobManager($registry, new FileJobStore($this->sandbox . '/jobs'), new ArtifactService(), $audit);
         $creator = new PrivateRepositoryCreator(
@@ -175,8 +185,11 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertSame(1, $this->githubCalls);
         self::assertSame('active', $result['state']);
         self::assertSame('active', $result['project']['state']);
-        self::assertFalse($result['actions_authorized']);
+        self::assertTrue($result['actions_authorized']);
         self::assertTrue($result['github']['private']);
+        self::assertTrue($result['github']['project_registered']);
+        self::assertTrue($result['github']['workspace_created']);
+        self::assertTrue($result['github']['actions_authorized']);
         self::assertSame('Cowprod/bakery-e2e', $result['github']['repository']);
 
         $workspace = $this->sandbox . '/workspaces/bakery-e2e';
@@ -189,15 +202,42 @@ final class ProjectCreationEndToEndTest extends TestCase
         $entry = array_values(array_filter($mcpCatalogue, static fn(array $row): bool => $row['id'] === 'bakery-e2e'));
         self::assertCount(1, $entry);
         self::assertSame('active', $entry[0]['provisioning_state']);
-        self::assertSame(0, $entry[0]['action_count']);
+        self::assertSame(count(SqlProjectConfiguration::DEFAULT_ACTIONS), $entry[0]['action_count']);
         self::assertSame($workspace, $entry[0]['workspace']);
-        self::assertSame([], $this->tools->actionList('bakery-e2e')['actions']);
+        self::assertCount(
+            count(SqlProjectConfiguration::DEFAULT_ACTIONS),
+            $this->tools->actionList('bakery-e2e')['actions']
+        );
+        // The same long-lived MCP runtime must execute a fresh project's action.
+        self::assertTrue($this->tools->actionRun('bakery-e2e', 'git.status')['ok']);
 
         $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
         self::assertSame('active', $webCatalogue['bakery-e2e']['provisioning_state']);
         self::assertSame($workspace, $webCatalogue['bakery-e2e']['workspace']);
         self::assertSame([], $webCatalogue['bakery-e2e']['actions']);
         self::assertSame('https://github.com/Cowprod/bakery-e2e', $webCatalogue['bakery-e2e']['repository_url']);
+    }
+
+    public function testReassignmentRevokesPreviouslyActiveSqlActions(): void
+    {
+        $this->tools->projectCreate('bakery-e2e', 'Bakery orders', 'CREATE_PROJECT');
+        self::assertCount(
+            count(SqlProjectConfiguration::DEFAULT_ACTIONS),
+            $this->tools->actionList('bakery-e2e')['actions']
+        );
+
+        $record = $this->store->get('bakery-e2e');
+        $updated = $this->store->advance(
+            'bakery-e2e', $record['revision'], 'machine_assigned',
+            ['machine' => 'other-host']
+        );
+        self::assertFalse($updated['actions_enabled']);
+        self::assertSame([], $this->tools->actionList('bakery-e2e')['actions']);
+        self::assertSame(0, (int) $this->db->query(
+            "SELECT COUNT(*) FROM dm_local_project_config WHERE project_id='bakery-e2e'"
+        )->fetchColumn());
+        $this->expectException(InvalidArgumentException::class);
+        $this->tools->actionRun('bakery-e2e', 'git.status');
     }
 
     public function testMissingGitOriginLeavesVisibleInactiveProjectWithoutActionGrant(): void

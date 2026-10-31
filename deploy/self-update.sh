@@ -33,6 +33,10 @@ fi
 if [ -f composer.lock ]; then
     composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 fi
+# One-time SQL import/cutover runs before any runtime restart. The importer
+# is idempotent, retains the old PHP config as rollback reference and fails
+# closed when a required SQL permission or action template is missing.
+/usr/bin/php /opt/devmcp/bin/import-global-projects-to-sql.php --execute MIGRATE_PROJECTS_TO_SQL
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
 if [ "$old" != "$new" ]; then
     systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service

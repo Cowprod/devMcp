@@ -4,6 +4,8 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
+use Cowprod\DevMcp\Mcp\RemoteTools;
+use Cowprod\DevMcp\Project\ProjectRegistry;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -18,7 +20,12 @@ if (!is_array($config)) {
     exit(1);
 }
 try {
-    $snapshot = LocalProjectSnapshot::export($config);
+    $remote = RemoteTools::fromConfig($config);
+    $sql = $remote?->sqlProjectConfiguration();
+    $registry = $sql !== null && $sql->isReady()
+        ? ProjectRegistry::fromSql($sql)
+        : ProjectRegistry::fromConfig($config);
+    $snapshot = LocalProjectSnapshot::export($config, $registry);
     $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $output = LocalProjectSnapshot::DEFAULT_PATH;
     $directory = dirname($output);

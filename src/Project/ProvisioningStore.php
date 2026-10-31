@@ -9,12 +9,21 @@ use PDOException;
 use RuntimeException;
 
 /**
- * Durable, fail-closed provisioning journal. It does not grant execution
- * permissions or write into the legacy dm_project registry.
+ * Durable, fail-closed provisioning journal. Local SQL actions are enabled
+ * atomically when a verified workspace reaches the active state.
  */
 final class ProvisioningStore
 {
     public function __construct(private readonly PDO $db) {}
+
+    /**
+     * Fail before creating external GitHub resources unless the SQL registry
+     * and its standard action templates have been imported successfully.
+     */
+    public function assertLocalProjectCreationReady(): void
+    {
+        (new SqlProjectConfiguration($this->db))->assertDefaultActionsAvailable();
+    }
 
     public function create(array $record): array
     {
@@ -116,6 +125,16 @@ final class ProvisioningStore
                 throw new RuntimeException('Concurrent provisioning modification');
             }
             $updated = ProvisioningState::advance($current, $next, $details);
+            $sql = new SqlProjectConfiguration($this->db);
+            if ($next === 'machine_assigned' && $current['state'] === 'active') {
+                // An inactive/reassigned workspace must no longer be executable.
+                $sql->deactivateLocalProject($id);
+            }
+            if ($next === 'active' && $sql->isReady()) {
+                // SQL definition + actions_enabled + state transition are atomic.
+                $sql->activateLocalProject($updated);
+                $updated['actions_enabled'] = true;
+            }
             $query = $this->db->prepare(
                 'UPDATE dm_project_provisioning SET state = ?, repository_confirmed = ?, machine = ?, workspace_path = ?, '
                 . 'actions_enabled = ?, revision = revision + 1 '

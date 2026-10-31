@@ -11,8 +11,23 @@ final class ProjectRegistry
     /**
      * @param array<string, ProjectDefinition> $projects
      */
-    private function __construct(private readonly array $projects)
+    private function __construct(
+        private readonly array $projects,
+        private readonly ?SqlProjectConfiguration $sql = null,
+    )
     {
+    }
+
+    /**
+     * SQL is authoritative after the transactional import sets ready=1.
+     * Keep a dynamic handle instead of a startup snapshot: project_create()
+     * can be followed immediately by action_list()/action_run().
+     */
+    public static function fromSql(SqlProjectConfiguration $sql): self
+    {
+        // Validate the migrated templates and workspaces at startup.
+        self::fromConfig($sql->load());
+        return new self([], $sql);
     }
 
     /**
@@ -140,11 +155,12 @@ final class ProjectRegistry
 
     public function get(string $projectId): ProjectDefinition
     {
-        if (!isset($this->projects[$projectId])) {
+        $projects = $this->all();
+        if (!isset($projects[$projectId])) {
             throw new InvalidArgumentException("Projet inconnu : {$projectId}");
         }
 
-        return $this->projects[$projectId];
+        return $projects[$projectId];
     }
 
     /**
@@ -152,6 +168,10 @@ final class ProjectRegistry
      */
     public function all(): array
     {
+        if ($this->sql !== null) {
+            // Revalidate on each read; no stale authorization in long-lived workers.
+            return self::fromConfig($this->sql->load())->projects;
+        }
         return $this->projects;
     }
 }

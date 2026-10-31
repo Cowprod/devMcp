@@ -18,10 +18,11 @@ final class LocalProjectSnapshot
     /** @param array<string,mixed> $config
      *  @return array<string,mixed>
      */
-    public static function export(array $config): array
+    public static function export(array $config, ?ProjectRegistry $registry = null): array
     {
         $projects = [];
-        foreach (ProjectRegistry::fromConfig($config)->all() as $project) {
+        // The privileged exporter receives the same SQL-backed registry as MCP.
+        foreach (($registry ?? ProjectRegistry::fromConfig($config))->all() as $project) {
             $actions = array_keys($project->getActions());
             // Publish strictly descriptive metadata, never argv/cwd/enum values.
             $actionDetails = [];

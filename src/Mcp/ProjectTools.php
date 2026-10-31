@@ -36,13 +36,19 @@ final class ProjectTools
     public function projectList(): array
     {
         $projects = [];
-        foreach ($this->projects->all() as $project) {
+        $local = $this->projects->all();
+        foreach ($local as $project) {
             $projects[] = $project->toPublicArray();
         }
 
         if (($provisioningRows = $this->provisioningRows()) !== null) {
             foreach ($provisioningRows as $entry) {
-                if (isset($this->projects->all()[$entry['project_id']])) {
+                $existing = array_search($entry['project_id'], array_column($projects, 'id'), true);
+                if ($existing !== false) {
+                    $projects[$existing]['provisioning_state'] = $entry['state'];
+                    $projects[$existing]['machine'] = $entry['machine'];
+                    $projects[$existing]['workspace'] = $entry['workspace_path'];
+                    $projects[$existing]['repository'] = $entry['repository'];
                     continue;
                 }
                 $projects[] = [
@@ -71,8 +77,8 @@ final class ProjectTools
     }
 
     /**
-     * Register a project intent, without creating a repository or granting any action.
-     * The caller must use the preview first; the database enforces uniqueness.
+     * Register a project and clone its existing GitHub repository.
+     * Standard SQL actions are granted atomically on activation.
      */
     public function projectRegister(
         string $project_id,
@@ -93,6 +99,7 @@ final class ProjectTools
         if ($this->localProvisioner === null) {
             throw new InvalidArgumentException('Provisionnement local requis pour creer un projet');
         }
+        $this->provisioning->assertLocalProjectCreationReady();
         $preview = $this->projectCreatePreview(
             $project_id, $description, $github_repository, $repository_mode,
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
@@ -157,6 +164,7 @@ final class ProjectTools
             throw new InvalidArgumentException('Creation integree non configuree');
         }
         $repository = $this->githubCreator->organization() . '/' . $project_id;
+        $this->provisioning->assertLocalProjectCreationReady();
         // Validate all local and central preconditions before GitHub mutation.
         $this->projectCreatePreview(
             $project_id, $description, $repository, 'create',
@@ -185,9 +193,16 @@ final class ProjectTools
         }
         return [
             'project' => $project,
-            'github' => $github,
+            // Normalize the integrated response, not only the intermediate
+            // GitHub-only creation step where registration was still pending.
+            'github' => [
+                ...$github,
+                'project_registered' => true,
+                'workspace_created' => true,
+                'actions_authorized' => (bool) $project['actions_enabled'],
+            ],
             'state' => 'active',
-            'actions_authorized' => false,
+            'actions_authorized' => (bool) $project['actions_enabled'],
         ];
     }
 
@@ -261,6 +276,7 @@ final class ProjectTools
             || $record['machine'] !== gethostname()) {
             throw new InvalidArgumentException('Projet non affecte a cet hote ou revision obsolete');
         }
+        $this->provisioning->assertLocalProjectCreationReady();
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.workspace.provision',
             'project_id' => $project_id, 'outcome' => 'requested',

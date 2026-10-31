@@ -31,9 +31,25 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/001_distributed_registry.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/002_policy_revision.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261031_project_provisioning.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261031_sql_project_registry.sql
       - name: SQL integration tests
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
           DEVMCP_TEST_MYSQL_USER: devmcp_test
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
         run: vendor/bin/phpunit tests/Distributed/MySqlIntegrationTest.php
+
+      - name: SQL project registry integration tests
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/SqlProjectMySqlIntegrationTest.php
+
+      - name: SQL global.php migration smoke test
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/SqlProjectImportSmokeTest.php
