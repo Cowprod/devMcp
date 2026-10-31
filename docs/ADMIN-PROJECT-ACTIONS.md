@@ -12,9 +12,12 @@ Le schéma v1 conserve `actions` (liste des identifiants) et ajoute, de manière
 
 - `description` : texte descriptif, limité à 255 octets ;
 - `sync_allowed` : booléen, indiquant si l'appel synchrone est autorisé ;
-- `timeout_seconds` : entier borné entre 1 et 86400.
+- `timeout_seconds` : entier borné entre 1 et 86400 ;
+- `parameters` : liste descriptive facultative (maximum 64), avec `id`, `type` et `required=true`. Les types autorisés sont `git_sha`, `android_serial`, `serial_device`, `relative_path`, `enum` et `integer`.
 
-La lecture accepte l'ancien instantané dépourvu de `action_details`. Elle refuse les champs supplémentaires par action, les clés inconnues et les types incorrects. Elle ne restitue pas les champs inattendus au navigateur. Ni commandes `argv`, ni répertoires d'exécution `cwd`, ni valeurs d'énumérations de paramètres ne doivent être publiés.
+La fiche **Projets** affiche le nom et le type des paramètres requis pour les actions locales. Il s'agit d'un inventaire **en lecture seule**, pas d'un formulaire d'exécution ni d'une habilitation. L'instantané ne publie ni descriptions privées de paramètres, ni choix des énumérations, ni bornes, ni commande.
+
+La lecture accepte les anciens instantanés dépourvus de `action_details` ou de `parameters`. Elle refuse les champs supplémentaires par action ou paramètre, les identifiants dupliqués, les clés inconnues et les types incorrects. Elle ne restitue pas les champs inattendus au navigateur. Ni commandes `argv`, ni répertoires d'exécution `cwd`, ni valeurs d'énumérations de paramètres ne doivent être publiés.
 
 ## Frontière de modification
 
