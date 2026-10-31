@@ -74,5 +74,6 @@ final class ProvisioningStoreTest extends TestCase
         ]);
         self::assertFalse($row['actions_enabled']);
         self::assertCount(1, $store->list());
+        self::assertSame('/srv/devmcp/workspaces/provision-test', $store->list()[0]['workspace_path']);
     }
 }
