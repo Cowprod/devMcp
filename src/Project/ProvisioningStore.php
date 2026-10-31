@@ -25,8 +25,8 @@ final class ProvisioningStore
         }
         $query = $this->db->prepare(
             'INSERT INTO dm_project_provisioning '
-            . '(project_id, description, repository, repository_mode, state, machine, workspace_path, actions_enabled, revision) '
-            . 'VALUES (?, ?, ?, ?, ?, NULL, NULL, 0, 1)'
+            . '(project_id, description, repository, repository_mode, state, repository_confirmed, machine, workspace_path, actions_enabled, revision) '
+            . 'VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, 0, 1)'
         );
         $query->execute([
             $record['project_id'], $record['description'], $record['repository'],
@@ -38,7 +38,7 @@ final class ProvisioningStore
     public function get(string $id): array
     {
         $query = $this->db->prepare(
-            'SELECT project_id, description, repository, repository_mode, state, machine, '
+            'SELECT project_id, description, repository, repository_mode, state, repository_confirmed, machine, '
             . 'workspace_path, actions_enabled, revision FROM dm_project_provisioning WHERE project_id = ?'
         );
         $query->execute([$id]);
@@ -48,6 +48,7 @@ final class ProvisioningStore
         }
         $row['revision'] = (int) $row['revision'];
         $row['actions_enabled'] = (bool) $row['actions_enabled'];
+        $row['repository_confirmed'] = (bool) $row['repository_confirmed'];
         return $row;
     }
 
@@ -61,12 +62,12 @@ final class ProvisioningStore
             }
             $updated = ProvisioningState::advance($current, $next, $details);
             $query = $this->db->prepare(
-                'UPDATE dm_project_provisioning SET state = ?, machine = ?, workspace_path = ?, '
+                'UPDATE dm_project_provisioning SET state = ?, repository_confirmed = ?, machine = ?, workspace_path = ?, '
                 . 'actions_enabled = ?, revision = revision + 1 '
                 . 'WHERE project_id = ? AND revision = ?'
             );
             $query->execute([
-                $updated['state'], $updated['machine'], $updated['workspace_path'],
+                $updated['state'], $updated['repository_confirmed'] ? 1 : 0, $updated['machine'], $updated['workspace_path'],
                 $updated['actions_enabled'] ? 1 : 0, $id, $expectedRevision,
             ]);
             if ($query->rowCount() !== 1) {
