@@ -51,6 +51,7 @@ final class ProjectTools
                     'repository' => $entry['repository'],
                     'provisioning_state' => $entry['state'],
                     'machine' => $entry['machine'],
+                    'workspace' => $entry['workspace_path'],
                     'action_count' => 0,
                 ];
             }
