@@ -26,10 +26,21 @@ final class LocalProjectSnapshot
             // Publish strictly descriptive metadata, never argv/cwd/enum values.
             $actionDetails = [];
             foreach ($project->getActions() as $action) {
+                // Metadata only: enum values, argv templates and executable paths
+                // must never cross the privileged local-to-web bridge.
+                $parameters = [];
+                foreach ($action->toPublicArray()['parameters'] as $parameter) {
+                    $parameters[] = [
+                        'id' => $parameter['id'],
+                        'type' => $parameter['type'],
+                        'required' => $parameter['required'],
+                    ];
+                }
                 $actionDetails[$action->id] = [
                     'description' => $action->description,
                     'sync_allowed' => $action->syncAllowed,
                     'timeout_seconds' => $action->timeoutSeconds,
+                    'parameters' => $parameters,
                 ];
             }
             $projects[] = [
@@ -120,9 +131,33 @@ final class LocalProjectSnapshot
                     || !is_int($detail['timeout_seconds'] ?? null)
                     || $detail['timeout_seconds'] < 1
                     || $detail['timeout_seconds'] > 86400
-                    || array_diff(array_keys($detail), ['description', 'sync_allowed', 'timeout_seconds']) !== []) {
+                    || array_diff(array_keys($detail), ['description', 'sync_allowed', 'timeout_seconds', 'parameters']) !== []) {
                     $empty['reason'] = 'métadonnée d’action invalide';
                     return $empty;
+                }
+                // Accept older published snapshots that lack parameter metadata,
+                // but fail closed on any additional or malformed parameter field.
+                $parameters = $detail['parameters'] ?? [];
+                if ((array_key_exists('parameters', $detail) && !is_array($detail['parameters']))
+                    || !is_array($parameters) || !array_is_list($parameters) || count($parameters) > 64) {
+                    $empty['reason'] = 'paramètres d’action invalides';
+                    return $empty;
+                }
+                $seenParameterIds = [];
+                foreach ($parameters as $parameter) {
+                    if (!is_array($parameter)
+                        || count($parameter) !== 3
+                        || array_diff(array_keys($parameter), ['id', 'type', 'required']) !== []
+                        || !is_string($parameter['id'] ?? null)
+                        || preg_match('/^[a-z][a-z0-9_]{0,63}$/D', $parameter['id']) !== 1
+                        || !in_array($parameter['type'] ?? null,
+                            ['git_sha', 'android_serial', 'serial_device', 'relative_path', 'enum', 'integer'], true)
+                        || ($parameter['required'] ?? null) !== true
+                        || isset($seenParameterIds[$parameter['id']])) {
+                        $empty['reason'] = 'paramètre d’action invalide';
+                        return $empty;
+                    }
+                    $seenParameterIds[$parameter['id']] = true;
                 }
             }
             if (isset($projects[$project['id']])) {
