@@ -35,6 +35,45 @@ final class ProvisioningStore
         return $this->get($record['project_id']);
     }
 
+    /**
+     * Register project metadata and its provisioning intent atomically.
+     * No deployment or executable permission is created.
+     */
+    public function registerCentral(array $record): array
+    {
+        if (($record['state'] ?? null) !== 'planned'
+            || !is_string($record['project_id'] ?? null)
+            || !is_string($record['description'] ?? null)
+            || !is_string($record['repository'] ?? null)) {
+            throw new RuntimeException('Invalid initial provisioning record');
+        }
+        $this->db->beginTransaction();
+        try {
+            $statement = $this->db->prepare(
+                'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
+            );
+            $statement->execute([
+                $record['project_id'], $record['description'],
+                'https://github.com/' . $record['repository'],
+            ]);
+            $statement = $this->db->prepare(
+                'INSERT INTO dm_project_provisioning '
+                . '(project_id, description, repository, repository_mode, state, '
+                . 'repository_confirmed, machine, workspace_path, actions_enabled, revision) '
+                . "VALUES (?, ?, ?, ?, 'registered', 0, NULL, NULL, 0, 1)"
+            );
+            $statement->execute([
+                $record['project_id'], $record['description'],
+                $record['repository'], $record['repository_mode'],
+            ]);
+            $this->db->commit();
+        } catch (\\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+        return $this->get($record['project_id']);
+    }
+
     public function get(string $id): array
     {
         $query = $this->db->prepare(
