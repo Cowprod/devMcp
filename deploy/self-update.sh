@@ -4,6 +4,11 @@ set -eu
 [ "$(id -u)" -eq 0 ] || { echo "Run as root" >&2; exit 1; }
 exec 9>/run/lock/devmcp-update.lock
 flock -n 9 || { echo "devMcp update already running" >&2; exit 1; }
+# Expose a non-secret diagnostic status to the unprivileged MCP requester.
+# /run is root-controlled. The content is deliberately limited to fixed stages.
+update_stage=preflight
+status_file=/run/devmcp-update-status
+trap 'rc=$?; umask 022; { printf "exit_code=%s\\nstage=%s\\n" "$rc" "$update_stage"; date -u "+finished_utc=%Y-%m-%dT%H:%M:%SZ"; } > "$status_file"' 0
 # Clear any pending MCP request after acquiring the exclusive update lock.
 rm -f /var/lib/devmcp/update-request
 cd /opt/devmcp
@@ -15,6 +20,7 @@ export GIT_CONFIG_VALUE_0=/opt/devmcp
 [ "$(git rev-parse --show-toplevel)" = /opt/devmcp ] || exit 1
 [ "$(git branch --show-current)" = main ] || { echo "Expected main branch" >&2; exit 1; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "Tracked local modifications: abort" >&2; exit 1; }
+update_stage=git-fetch
 git fetch --no-tags origin main
 old=$(git rev-parse HEAD)
 new=$(git rev-parse refs/remotes/origin/main)
@@ -30,21 +36,34 @@ if [ -f /opt/devmcp/bin/devmcp-touchdeck-ota ]; then
 fi
 /usr/bin/php -l /etc/devmcp/global.php
 /usr/bin/php -l /opt/devmcp/config/shared-actions.php
+update_stage=dependencies
 if [ -f composer.lock ]; then
     composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
 fi
 # One-time SQL import/cutover runs before any runtime restart. The importer
 # is idempotent, retains the old PHP config as rollback reference and fails
 # closed when a required SQL permission or action template is missing.
-/usr/bin/php /opt/devmcp/bin/import-global-projects-to-sql.php --execute MIGRATE_PROJECTS_TO_SQL
+update_stage=sql-import
+sql_import_output=$(/usr/bin/php /opt/devmcp/bin/import-global-projects-to-sql.php --execute MIGRATE_PROJECTS_TO_SQL)
+printf '%s\\n' "$sql_import_output"
+sql_cutover=0
+case "$sql_import_output" in
+    *"SQL registry READY"*) sql_cutover=1 ;;
+esac
+update_stage=doctor
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
-if [ "$old" != "$new" ]; then
+# A first-time SQL cutover requires runtime reload even if no Git revision
+# changed. Also retry restarting when a previous updater failed post-migration.
+update_stage=restart
+if [ "$old" != "$new" ] || [ "$sql_cutover" -eq 1 ]; then
     systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
 fi
 # The web admin has a separate checkout; sync it on every scheduled run,
 # including when the core is already current. The bridge deployer validates
 # origins, clean worktrees, ancestry, PHP syntax and service permissions.
+update_stage=admin-bridge
 if [ -d /opt/devmcp-admin/.git ]; then
     /bin/bash /opt/devmcp/deploy/distributed/apply-local-admin-bridge.sh
 fi
+update_stage=complete
 echo "devMcp update check completed: $old -> $new"
