@@ -14,15 +14,23 @@ if (($argv[1] ?? '') !== '--execute' || ($argv[2] ?? '') !== 'MIGRATE_PROJECTS_T
     exit(2);
 }
 $configPath = getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php';
-$distributedPath = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php';
 try {
-    if (!is_file($configPath) || !is_file($distributedPath)) {
-        throw new RuntimeException('Configuration globale ou distribuée absente');
+    if (!is_file($configPath)) {
+        throw new RuntimeException('Configuration globale absente');
     }
     $config = require $configPath;
+    if (!is_array($config)) {
+        throw new RuntimeException('Configuration PHP globale invalide');
+    }
+    // Use the exact same distributed DB config precedence as RemoteTools.
+    $distributedPath = $config['distributed']['config_path']
+        ?? (getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php');
+    if (!is_string($distributedPath) || !is_file($distributedPath)) {
+        throw new RuntimeException('Configuration distribuée absente');
+    }
     $distributed = require $distributedPath;
-    if (!is_array($config) || !is_array($distributed)) {
-        throw new RuntimeException('Configuration PHP invalide');
+    if (!is_array($distributed)) {
+        throw new RuntimeException('Configuration distribuée invalide');
     }
     $legacyProjects = $config['projects'] ?? [];
     $legacyActions = $config['shared_actions'] ?? [];
