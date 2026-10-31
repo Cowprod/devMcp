@@ -20,6 +20,7 @@ final class ProvisioningStoreTest extends TestCase
         }
         $db = new PDO('sqlite::memory:');
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $db->exec('CREATE TABLE dm_project (id TEXT PRIMARY KEY, description TEXT NOT NULL, repository_url TEXT)');
         $db->exec('CREATE TABLE dm_project_provisioning ('
             . 'project_id TEXT PRIMARY KEY, description TEXT NOT NULL, repository TEXT UNIQUE NOT NULL, '
             . 'repository_mode TEXT NOT NULL, state TEXT NOT NULL, repository_confirmed INTEGER NOT NULL DEFAULT 0, machine TEXT, workspace_path TEXT, '
@@ -33,6 +34,18 @@ final class ProvisioningStoreTest extends TestCase
             'provision-test', 'Test project', 'Cowprod/provision-test',
             'create', 'local', 'local', '/srv/devmcp/workspaces/provision-test'
         ));
+    }
+
+    public function testCentralRegistrationIsAtomicAndVisible(): void
+    {
+        $store = $this->store();
+        $row = $store->registerCentral($this->plan());
+        self::assertSame('registered', $row['state']);
+        self::assertFalse($row['repository_confirmed']);
+        self::assertFalse($row['actions_enabled']);
+        self::assertSame('provision-test', $store->list()[0]['project_id']);
+        $this->expectException(\\PDOException::class);
+        $store->registerCentral($this->plan());
     }
 
     public function testPersistsTransitionsAndRefusesStaleRevision(): void
