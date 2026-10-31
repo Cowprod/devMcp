@@ -471,7 +471,8 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="input-group mb-2"><span class="input-group-text">Identifiant</span><input class="form-control" name="id" maxlength="64" required></div>
 <div class="input-group mb-2"><span class="input-group-text">Description</span><input class="form-control" name="description" maxlength="255" required></div>
 <div class="input-group mb-3"><span class="input-group-text">Dépôt HTTPS</span><input class="form-control" name="repository_url" type="url"></div>
-<div class="btn-group"><button class="btn btn-success" type="submit">Ajouter</button></div>
+<div class="btn-group"><button class="btn btn-success" type="submit">Enregistrer la fiche</button></div>
+<p class="small text-warning mt-2 mb-0">Cette opération enregistre uniquement une fiche dans le registre distribué. Elle ne crée ni dépôt GitHub, ni workspace, ni autorisation d’action. Le provisionnement complet reste désactivé.</p>
 </form></div></div></div>
 </section><h2 class="h5">Projets (locaux et distribués)</h2>
 <?php if (!$localSnapshot['ok']): ?>
@@ -609,6 +610,136 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
 <?php endif; ?>
 </div></div>
 </section>
+<script>
+/* The Android page shares the master/detail UI of registry views.
+   Relocate PHP-rendered forms rather than duplicating controls or CSRF tokens.
+   Keep the original table as a progressive-enhancement fallback. */
+(function () {
+  const panel = document.getElementById('panel-android');
+  const table = panel?.querySelector('.table-responsive table');
+  const original = table?.closest('.card');
+  if (!table || !original) return;
+  const rows = Array.from(table.querySelectorAll('tbody tr')).filter(row => row.cells.length === 12);
+  const create = (tag, classes, label) => {
+    const node = document.createElement(tag);
+    if (classes) node.className = classes;
+    if (label !== undefined) node.textContent = label;
+    return node;
+  };
+  const layout = create('div', 'registry-layout');
+  const sidebar = create('aside', 'registry-sidebar');
+  sidebar.setAttribute('aria-label', 'Appareils Android');
+  sidebar.appendChild(create('h3', '', 'Appareils ADB'));
+  const detail = create('div', 'registry-detail');
+  layout.append(sidebar, detail);
+  const controls = [];
+  rows.forEach((row, index) => {
+    const cells = Array.from(row.cells);
+    const serial = cells[3].textContent.trim();
+    const labelForm = cells[1].querySelector('form');
+    const customName = labelForm?.querySelector('input[name="label"]')?.value.trim() || '';
+    const androidName = cells[2].querySelector('div')?.firstChild?.textContent?.trim() || '';
+    const deviceName = customName || androidName || cells[5].textContent.trim() || serial;
+    const state = cells[4].textContent.trim();
+    const button = create('button', 'registry-entry');
+    button.type = 'button';
+    button.append(create('span', '', deviceName), create('small', '', serial + ' · ' + state));
+    button.setAttribute('aria-controls', 'android-detail-' + index);
+    button.addEventListener('click', () => activate(index));
+    sidebar.appendChild(button);
+
+    const card = create('article', 'card android-device-detail');
+    card.id = 'android-detail-' + index;
+    card.hidden = true;
+    const body = create('div', 'card-body');
+    const header = create('div', 'registry-toolbar');
+    header.appendChild(create('h2', 'h5 mb-0', deviceName));
+    body.appendChild(header);
+
+    const fields = create('dl', 'registry-fields mt-3');
+    const metadata = [
+      [2, 'Nom Android / hôte'], [3, 'Série'], [4, 'État ADB'],
+      [5, 'Modèle'], [6, 'Version Android'], [7, 'Batterie'],
+      [8, 'Stockage libre'], [9, 'MultiCam']
+    ];
+    metadata.forEach(([column, title]) => {
+      fields.appendChild(create('dt', '', title));
+      const value = create('dd');
+      value.append(...Array.from(cells[column].childNodes));
+      fields.appendChild(value);
+    });
+    body.appendChild(fields);
+
+    if (labelForm) {
+      body.appendChild(create('h3', 'h6 mt-4', 'Identification'));
+      labelForm.className = 'input-group mb-3';
+      labelForm.removeAttribute('style');
+      labelForm.prepend(create('span', 'input-group-text', 'Libellé local / rôle'));
+      body.appendChild(labelForm);
+    }
+
+    const actions = create('div', 'mt-4');
+    actions.appendChild(create('h3', 'h6', 'Actions ADB'));
+    const buttons = create('div', 'btn-group');
+    Array.from(cells[0].querySelectorAll('form')).forEach(form => buttons.appendChild(form));
+    actions.appendChild(buttons);
+    body.appendChild(actions);
+
+    const attachments = create('div', 'row g-3 mt-2');
+    const screenshotColumn = create('div', 'col-12 col-lg-6');
+    screenshotColumn.appendChild(create('h3', 'h6', 'Capture'));
+    const originalCapture = cells[10];
+    const capture = create('div', 'adb-capture-cell');
+    capture.dataset.serial = originalCapture.dataset.serial;
+    capture.dataset.pending = originalCapture.dataset.pending;
+    capture.append(...Array.from(originalCapture.childNodes));
+    originalCapture.classList.remove('adb-capture-cell');
+    originalCapture.removeAttribute('data-serial');
+    originalCapture.removeAttribute('data-pending');
+    screenshotColumn.appendChild(capture);
+
+    const logColumn = create('div', 'col-12 col-lg-6');
+    logColumn.appendChild(create('h3', 'h6', 'Journal MultiCam'));
+    logColumn.append(...Array.from(cells[11].childNodes));
+    attachments.append(screenshotColumn, logColumn);
+    body.appendChild(attachments);
+    card.appendChild(body);
+    detail.appendChild(card);
+    controls.push({button, card, serial});
+  });
+
+  if (!controls.length) {
+    const empty = create('div', 'card');
+    empty.appendChild(create('div', 'card-body', 'Aucun appareil ADB détecté au dernier contrôle.'));
+    detail.appendChild(empty);
+  }
+  panel.insertBefore(layout, original);
+  const originalBody = original.querySelector('.card-body');
+  const originalTable = table.closest('.table-responsive');
+  if (originalBody) {
+    Array.from(originalBody.children).filter(child => child !== originalTable)
+      .forEach(child => panel.insertBefore(child, layout));
+  }
+  original.classList.add('d-none');
+  original.setAttribute('aria-hidden', 'true');
+
+  function activate(index) {
+    controls.forEach((item, position) => {
+      const active = index === position;
+      item.button.classList.toggle('active', active);
+      item.button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      item.card.hidden = !active;
+    });
+    try { sessionStorage.setItem('devmcp-android-selection', controls[index].serial); } catch (_) {}
+  }
+  if (controls.length) {
+    let remembered = '';
+    try { remembered = sessionStorage.getItem('devmcp-android-selection') || ''; } catch (_) {}
+    const index = controls.findIndex(item => item.serial === remembered);
+    activate(index < 0 ? 0 : index);
+  }
+})();
+</script>
 <script>
 (function(){
  const names={'android-adb':'android',android:'android',machines:'machines',projects:'projects',deployments:'deployments',dashboard:'dashboard'};
