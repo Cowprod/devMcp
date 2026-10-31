@@ -67,7 +67,7 @@ final class ProvisioningStore
                 $record['repository'], $record['repository_mode'],
             ]);
             $this->db->commit();
-        } catch (\\Throwable $error) {
+        } catch (\Throwable $error) {
             $this->db->rollBack();
             throw $error;
         }
