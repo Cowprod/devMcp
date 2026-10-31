@@ -68,6 +68,66 @@ final class PrivateRepositoryCreatorTest extends TestCase
         self::assertFalse($result['actions_authorized']);
     }
 
+    public function testUserOwnedRepositoryChecksTokenIdentityBeforePost(): void
+    {
+        $calls = [];
+        $identity = static function (string $url, string $token) use (&$calls): array {
+            $calls[] = 'identity';
+            self::assertSame('https://api.github.com/user', $url);
+            self::assertStringStartsWith('github_pat_', $token);
+            return ['status' => 200, 'body' => '{"login":"Cowprod","type":"User"}'];
+        };
+        $post = static function (string $url, string $token, array $body) use (&$calls): array {
+            $calls[] = 'create';
+            self::assertSame('https://api.github.com/user/repos', $url);
+            self::assertTrue($body['private']);
+            self::assertSame('private', $body['visibility']);
+            return ['status' => 201, 'body' => json_encode([
+                'id' => 123, 'private' => true, 'visibility' => 'private',
+                'name' => 'new-project', 'owner' => ['login' => 'Cowprod'],
+            ], JSON_THROW_ON_ERROR)];
+        };
+        $creator = new PrivateRepositoryCreator('Cowprod', $this->tokenFile, $post, 'user', $identity);
+        $result = $creator->create('Cowprod/new-project', 'CREATE_PRIVATE_REPOSITORY');
+        self::assertSame(['identity', 'create'], $calls);
+        self::assertSame('github_created', $result['state']);
+    }
+
+    public function testUserOwnedRepositoryRefusesTokenForDifferentAccountBeforePost(): void
+    {
+        $creator = new PrivateRepositoryCreator(
+            'Cowprod',
+            $this->tokenFile,
+            static function (): array {
+                self::fail('Must not create a repository under a different account');
+            },
+            'user',
+            static fn(): array => ['status' => 200, 'body' => '{"login":"someone-else","type":"User"}']
+        );
+        $this->expectException(RuntimeException::class);
+        $creator->create('Cowprod/new-project', 'CREATE_PRIVATE_REPOSITORY');
+    }
+
+    public function testUserOwnedRepositoryRejectsUnauthorizedIdentityResponse(): void
+    {
+        $creator = new PrivateRepositoryCreator(
+            'Cowprod', $this->tokenFile,
+            static function (): array {
+                self::fail('GitHub identity was not verified');
+            },
+            'user',
+            static fn(): array => ['status' => 401, 'body' => '']
+        );
+        $this->expectException(RuntimeException::class);
+        $creator->create('Cowprod/new-project', 'CREATE_PRIVATE_REPOSITORY');
+    }
+
+    public function testRejectsUnknownAccountType(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        new PrivateRepositoryCreator('Cowprod', $this->tokenFile, null, 'arbitrary');
+    }
+
     public function testValidationPrecedesNetwork(): void
     {
         $transport = static function (): array {

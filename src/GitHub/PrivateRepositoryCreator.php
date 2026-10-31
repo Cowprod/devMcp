@@ -9,7 +9,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Creates private repositories in one operator-approved GitHub organisation.
+ * Creates private repositories only under one operator-approved GitHub account.
  * Does not register projects, clone repositories, or contact agents.
  */
 final class PrivateRepositoryCreator
@@ -19,14 +19,20 @@ final class PrivateRepositoryCreator
     /**
      * The transport hook exists for hermetic tests. Production uses HTTPS only.
      * @param ?Closure(string,string,array<string,mixed>):array{status:int,body:string} $transport
+     * @param ?Closure(string,string):array{status:int,body:string} $identityLookup
      */
     public function __construct(
         private readonly string $organization,
         private readonly string $tokenFile,
         private readonly ?Closure $transport = null,
+        private readonly string $ownerType = 'organization',
+        private readonly ?Closure $identityLookup = null,
     ) {
         if (preg_match('/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/D', $organization) !== 1) {
-            throw new InvalidArgumentException('Organisation GitHub invalide');
+            throw new InvalidArgumentException('Proprietaire GitHub invalide');
+        }
+        if (!in_array($ownerType, ['user', 'organization'], true)) {
+            throw new InvalidArgumentException('Type de proprietaire GitHub invalide');
         }
     }
 
@@ -40,11 +46,14 @@ final class PrivateRepositoryCreator
         if (($settings['enabled'] ?? false) !== true) {
             return null;
         }
-        if (!is_string($settings['organization'] ?? null)
+        $owner = $settings['owner'] ?? $settings['organization'] ?? null;
+        $type = $settings['owner_type'] ?? 'organization';
+        if (!is_string($owner) || !is_string($type)
+            || !in_array($type, ['user', 'organization'], true)
             || ($settings['token_file'] ?? null) !== self::TOKEN_FILE) {
             throw new InvalidArgumentException('Configuration privee GitHub incomplete');
         }
-        return new self($settings['organization'], self::TOKEN_FILE);
+        return new self($owner, self::TOKEN_FILE, null, $type);
     }
 
     public function organization(): string
@@ -63,11 +72,25 @@ final class PrivateRepositoryCreator
         }
         if (preg_match('~^([A-Za-z0-9-]{1,39})/([A-Za-z0-9][A-Za-z0-9._-]{0,99})$~D', $repository, $m) !== 1
             || strcasecmp($m[1], $this->organization) !== 0) {
-            throw new InvalidArgumentException('Depot hors organisation autorisee');
+            throw new InvalidArgumentException('Depot hors compte GitHub autorise');
         }
         $name = $m[2];
         $token = $this->readToken();
         $url = 'https://api.github.com/orgs/' . rawurlencode($this->organization) . '/repos';
+        if ($this->ownerType === 'user') {
+            // /user/repos creates under the token holder, which may differ from
+            // the configured owner. Verify identity *before* the side effect.
+            $identity = ($this->identityLookup ?? self::httpsGet(...))(
+                'https://api.github.com/user', $token
+            );
+            $principal = json_decode((string) ($identity['body'] ?? ''), true);
+            if (($identity['status'] ?? null) !== 200 || !is_array($principal)
+                || ($principal['type'] ?? null) !== 'User'
+                || strcasecmp((string) ($principal['login'] ?? ''), $this->organization) !== 0) {
+                throw new RuntimeException('Identite du jeton GitHub non conforme au proprietaire configure');
+            }
+            $url = 'https://api.github.com/user/repos';
+        }
         $request = ['name' => $name, 'private' => true, 'visibility' => 'private', 'auto_init' => true];
         $reply = ($this->transport ?? self::httpsPost(...))($url, $token, $request);
 
@@ -150,4 +173,37 @@ final class PrivateRepositoryCreator
         }
         return ['status' => $status, 'body' => is_string($response) ? substr($response, 0, 16384) : ''];
     }
+
+    /** @return array{status:int,body:string} */
+    private static function httpsGet(string $url, string $token): array
+    {
+        // Fixed, allowlisted endpoint; no input-controlled host or redirect.
+        if ($url !== 'https://api.github.com/user') {
+            throw new InvalidArgumentException('GitHub identity endpoint not allowed');
+        }
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => [
+                    'Accept: application/vnd.github+json',
+                    'Authorization: Bearer ' . $token,
+                    'X-GitHub-Api-Version: 2022-11-28',
+                    'User-Agent: devMcp-repository-creator',
+                ],
+                'timeout' => 12,
+                'ignore_errors' => true,
+                'follow_location' => 0,
+                'max_redirects' => 0,
+            ],
+            'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
+        ]);
+        $response = @file_get_contents($url, false, $context);
+        $headers = $http_response_header ?? [];
+        $status = 0;
+        if (isset($headers[0]) && preg_match('~^HTTP/\S+\s+(\d{3})~', $headers[0], $matches)) {
+            $status = (int) $matches[1];
+        }
+        return ['status' => $status, 'body' => is_string($response) ? substr($response, 0, 16384) : ''];
+    }
+
 }

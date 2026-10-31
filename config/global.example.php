@@ -21,11 +21,12 @@ return [
         'max_job_log_bytes' => 4 * 1024 * 1024,
         'max_artifact_chunk_bytes' => 262144,
     ],
-    // OFF by default; enabling requires a private, single-organisation token.
+    // OFF by default; enabling requires a token owned by this GitHub account.
     // The MCP worker must be able to read the file; never expose it to PHP-FPM.
     'github_repository_creation' => [
         'enabled' => false,
-        'organization' => 'Cowprod',
+        'owner' => 'Cowprod',
+        'owner_type' => 'user', // Cowprod is a GitHub user, not an organization.
         'token_file' => '/etc/devmcp/github-repository-token',
     ],
     'projects' => [
