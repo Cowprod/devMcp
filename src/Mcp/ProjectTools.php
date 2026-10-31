@@ -193,29 +193,11 @@ final class ProjectTools
             throw $error;
         }
         $updated = $this->provisioning->advance(
-            $project_id, $revision, 'workspace_ready', ['workspace_path' => $result['workspace_path']]
+            $project_id, $revision, 'active', ['workspace_path' => $result['workspace_path']]
         );
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.workspace.provision',
-            'project_id' => $project_id, 'outcome' => 'workspace_ready',
-        ]);
-        return $updated;
-    }
-
-    public function projectActivate(string $project_id, int $revision, string $confirmation): array
-    {
-        if ($confirmation !== 'ACTIVATE_PROJECT' || $this->provisioning === null) {
-            throw new InvalidArgumentException('Activation non confirmee ou indisponible');
-        }
-        $record = $this->provisioning->get($project_id);
-        if ($record['state'] !== 'workspace_ready' || $record['revision'] !== $revision) {
-            throw new InvalidArgumentException('Workspace non pret ou revision obsolete');
-        }
-        // Lifecycle activation is deliberately not action authorization.
-        $updated = $this->provisioning->advance($project_id, $revision, 'active');
-        $this->audit->append([
-            'project' => '_provisioning', 'action' => 'project.activate',
-            'project_id' => $project_id, 'outcome' => 'active_without_actions',
+            'project_id' => $project_id, 'outcome' => 'active',
         ]);
         return $updated;
     }
