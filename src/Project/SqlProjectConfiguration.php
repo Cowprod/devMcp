@@ -18,6 +18,7 @@ final class SqlProjectConfiguration
     public const DEFAULT_ACTIONS = [
         'git.status', 'git.head', 'workspace.list',
         'workspace.stat', 'workspace.read', 'workspace.find',
+        'workspace.sync',
     ];
 
     public function __construct(private readonly PDO $db) {}
