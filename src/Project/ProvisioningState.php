@@ -36,6 +36,7 @@ final class ProvisioningState
             'repository' => $preview['github']['repository'],
             'repository_mode' => $preview['github']['mode'],
             'state' => 'planned',
+            'repository_confirmed' => false,
             'machine' => null,
             'workspace_path' => null,
             'actions_enabled' => false,
@@ -47,6 +48,12 @@ final class ProvisioningState
         $current = $record['state'] ?? null;
         if (!is_string($current) || !in_array($next, self::TRANSITIONS[$current] ?? [], true)) {
             throw new DomainException('Transition de provisionnement interdite');
+        }
+        if ($next === 'machine_assigned' && ($record['repository_confirmed'] ?? false) !== true) {
+            throw new DomainException('Depot non confirme');
+        }
+        if ($next === 'repository_ready') {
+            $record['repository_confirmed'] = true;
         }
         if ($next === 'machine_assigned') {
             $machine = $details['machine'] ?? null;
