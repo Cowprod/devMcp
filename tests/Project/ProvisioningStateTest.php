@@ -38,6 +38,14 @@ final class ProvisioningStateTest extends TestCase
         self::assertFalse($record['actions_enabled']);
     }
 
+    public function testRegistrationCanPrecedeRepositoryReadiness(): void
+    {
+        $record = ProvisioningState::advance($this->planned(), 'registered');
+        self::assertSame('registered', $record['state']);
+        $record = ProvisioningState::advance($record, 'repository_ready');
+        self::assertSame('repository_ready', $record['state']);
+    }
+
     public function testCannotSkipRegistration(): void
     {
         $this->expectException(DomainException::class);
