@@ -37,6 +37,7 @@ jobs:
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Lint deployment scripts
         run: |
+          sh -n deploy/self-update.sh
           sh -n deploy/install-platformio.sh
           sh -n deploy/apply-vm-runtime.sh
           sh -n deploy/install-touchdeck-ota.sh
