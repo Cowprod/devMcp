@@ -69,10 +69,9 @@ final class ProvisioningStoreTest extends TestCase
         $row = $store->advance('provision-test', 1, 'repository_ready');
         $row = $store->advance('provision-test', $row['revision'], 'registered');
         $row = $store->advance('provision-test', $row['revision'], 'machine_assigned', ['machine' => 'touchdeck']);
-        $row = $store->advance('provision-test', $row['revision'], 'workspace_ready', [
+        $row = $store->advance('provision-test', $row['revision'], 'active', [
             'workspace_path' => '/srv/devmcp/workspaces/provision-test',
         ]);
-        $row = $store->advance('provision-test', $row['revision'], 'active');
         self::assertFalse($row['actions_enabled']);
         self::assertCount(1, $store->list());
     }
