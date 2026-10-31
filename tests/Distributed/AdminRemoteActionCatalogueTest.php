@@ -31,6 +31,11 @@ final class AdminRemoteActionCatalogueTest extends TestCase
             self::assertIsBool($spec['needs_path']);
             self::assertIsBool($spec['supports_filter']);
             self::assertFalse($spec['supports_filter'] && !$spec['needs_path']);
+            if ($spec['supports_filter']) {
+                self::assertSame(['all', 'php', 'js', 'json', 'md'], $spec['filter_values']);
+            } else {
+                self::assertArrayNotHasKey('filter_values', $spec);
+            }
         }
 
         self::assertTrue(\remoteJobAllowed('git.head', []));
@@ -61,6 +66,15 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         );
         self::assertStringContainsString('Catalogue distant (lecture seule)', $source);
         self::assertStringContainsString('Conditionnel : politique agent', $source);
+        self::assertStringContainsString(
+            "remoteReadonlyActionCatalog()['workspace.find']['filter_values'] as \$filter", $source,
+        );
+        self::assertStringContainsString(
+            "remoteActionCatalog['workspace.find'].filter_values.forEach(name=>", $source,
+        );
+        self::assertStringContainsString('function bindRemoteFields(', $source);
+        self::assertStringContainsString('bindRemoteFields(actions,path,filter,help);', $source);
+        self::assertStringContainsString('bindRemoteFields(actions,pathGroup,filterGroup,actionHelp);', $source);
         self::assertStringContainsString("if(!enabled||!approved){", $source);
     }
 }
