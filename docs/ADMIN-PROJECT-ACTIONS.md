@@ -87,7 +87,7 @@ exécutable depuis la fiche Projets.
 
 ## Filtrage par origine
 
-Depuis la fiche **Projets**, le catalogue peut être limité aux actions **Locales**, **Distantes** ou **Toutes**, tout en conservant la recherche textuelle commune. Le compteur de correspondances applique les deux critères. Les catalogues distants sont masqués en mode local sans supprimer les affectations, leurs historiques ni les formulaires préparés ; basculer vers « Toutes » les restitue sans effacer les champs saisis. Il s'agit uniquement d'un filtre du catalogue et non d'un mécanisme d'activation ou de désactivation d'actions. Les demandes passent toujours par la validation serveur et la politique indépendante des agents.
+Depuis la fiche **Projets**, le catalogue peut être limité aux actions **Locales**, **Distantes** ou **Toutes**, tout en conservant la recherche textuelle commune. Le compteur de correspondances applique les deux critères. Le filtre masque également les titres des groupes sans correspondance et les cartes d'affectation dont aucune action distante ne correspond, y compris leurs formulaires et historiques visibles. Ces éléments restent dans le DOM : revenir à « Toutes » ou effacer la recherche les réaffiche **sans perdre les champs déjà saisis** ni les états des demandes. Aucun job n'est lancé, annulé ou modifié par le filtrage. Il s'agit uniquement d'un filtre du catalogue et non d'un mécanisme d'activation ou de désactivation d'actions. Les demandes passent toujours par la validation serveur et la politique indépendante des agents.
 
 ## Préparer une action distante depuis son catalogue
 
