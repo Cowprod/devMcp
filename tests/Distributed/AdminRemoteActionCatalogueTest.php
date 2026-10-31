@@ -97,7 +97,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString('function bindProjectActionFilter(', $source);
         self::assertStringContainsString('entry.dataset.actionSearch=', $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
-        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));", $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));", $source);
         self::assertStringContainsString('bindProjectActionFilter(filterInput,originSelect,list,counter,empty);', $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertStringContainsString('Conditionnel : politique agent', $source);
@@ -145,12 +145,29 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString('function bindProjectActionFilter(input,originSelect,list,counter,empty)', $source);
         self::assertStringContainsString("originSelect.addEventListener('change',update);", $source);
         self::assertStringContainsString("origin==='all'||entry.dataset.actionOrigin===origin", $source);
-        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));", $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));", $source);
         self::assertStringContainsString("bindProjectActionFilter(filterInput,originSelect,list,counter,empty);", $source);
         // Only the catalogue entries are hidden; no submitted field, queue or permission changes.
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+    }
+
+    public function testProjectActionSearchSupportsUnorderedKeywordsAndAccentInsensitiveMatching(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+
+        // Search is entirely client-side and uses only already published descriptions.
+        self::assertStringContainsString('function normalizeProjectActionSearch(value)', $source);
+        self::assertStringContainsString("normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')", $source);
+        self::assertStringContainsString("normalizeProjectActionSearch(input.value.trim()).split(/\\s+/).filter(Boolean)", $source);
+        self::assertStringContainsString('const text=normalizeProjectActionSearch(entry.dataset.actionSearch);', $source);
+        self::assertStringContainsString('terms.every(term=>text.includes(term));', $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));", $source);
+        self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
+        self::assertSame(5, count(\\remoteReadonlyActionCatalog()));
     }
 
     public function testProjectCatalogueSearchIncludesOnlyPublishedParameterNamesAndTypes(): void
