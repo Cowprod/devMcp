@@ -97,8 +97,8 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString('function bindProjectActionFilter(', $source);
         self::assertStringContainsString('entry.dataset.actionSearch=', $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
-        self::assertStringContainsString("catalogue.classList.toggle('d-none',!!query&&!hasMatch);", $source);
-        self::assertStringContainsString('bindProjectActionFilter(filterInput,list,counter,empty);', $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));", $source);
+        self::assertStringContainsString('bindProjectActionFilter(filterInput,originSelect,list,counter,empty);', $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertStringContainsString('Conditionnel : politique agent', $source);
     }
@@ -132,6 +132,24 @@ final class AdminRemoteActionCatalogueTest extends TestCase
 
         // Neither new action IDs nor a direct execution endpoint are introduced.
         self::assertStringNotContainsString("form.submit()", $source);
+        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+    }
+
+    public function testProjectActionOriginFilterOnlyChangesVisibleCatalogueEntries(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/public/distributed-admin.php');
+        self::assertIsString($source);
+        self::assertStringContainsString("line.dataset.actionOrigin='local';", $source);
+        self::assertStringContainsString("entry.dataset.actionOrigin='remote';", $source);
+        self::assertStringContainsString("['all','Toutes'],['local','Locales'],['remote','Distantes']", $source);
+        self::assertStringContainsString('function bindProjectActionFilter(input,originSelect,list,counter,empty)', $source);
+        self::assertStringContainsString("originSelect.addEventListener('change',update);", $source);
+        self::assertStringContainsString("origin==='all'||entry.dataset.actionOrigin===origin", $source);
+        self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(!!query&&!hasMatch));", $source);
+        self::assertStringContainsString("bindProjectActionFilter(filterInput,originSelect,list,counter,empty);", $source);
+        // Only the catalogue entries are hidden; no submitted field, queue or permission changes.
+        self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
+        self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertSame(5, count(\remoteReadonlyActionCatalog()));
     }
 

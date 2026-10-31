@@ -83,6 +83,10 @@ La création de demandes distantes passe toujours par le même validateur serveu
 et la politique autonome de chaque agent ; aucune action locale n'est rendue
 exécutable depuis la fiche Projets.
 
+## Filtrage par origine
+
+Depuis la fiche **Projets**, le catalogue peut être limité aux actions **Locales**, **Distantes** ou **Toutes**, tout en conservant la recherche textuelle commune. Le compteur de correspondances applique les deux critères. Les catalogues distants sont masqués en mode local sans supprimer les affectations, leurs historiques ni les formulaires préparés ; basculer vers « Toutes » les restitue sans effacer les champs saisis. Il s'agit uniquement d'un filtre du catalogue et non d'un mécanisme d'activation ou de désactivation d'actions. Les demandes passent toujours par la validation serveur et la politique indépendante des agents.
+
 ## Préparer une action distante depuis son catalogue
 
 Dans la fiche **Projets**, le bouton **Préparer** de chaque action distante de consultation sélectionne cette action dans le formulaire de mise en file de son affectation. Les champs `path` et `filter` sont affichés selon le catalogue central, sans remplacer les valeurs déjà saisies. Le formulaire devient visible et le champ pertinent reçoit le focus. **Aucune demande n'est envoyée à ce stade** : l'opérateur doit encore cliquer explicitement sur **Mettre en file**.
