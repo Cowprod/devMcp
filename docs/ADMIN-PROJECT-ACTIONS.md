@@ -82,3 +82,9 @@ Le filtrage est exclusivement visuel et ne constitue pas un contrôle de droits.
 La création de demandes distantes passe toujours par le même validateur serveur
 et la politique autonome de chaque agent ; aucune action locale n'est rendue
 exécutable depuis la fiche Projets.
+
+## Préparer une action distante depuis son catalogue
+
+Dans la fiche **Projets**, le bouton **Préparer** de chaque action distante de consultation sélectionne cette action dans le formulaire de mise en file de son affectation. Les champs `path` et `filter` sont affichés selon le catalogue central, sans remplacer les valeurs déjà saisies. Le formulaire devient visible et le champ pertinent reçoit le focus. **Aucune demande n'est envoyée à ce stade** : l'opérateur doit encore cliquer explicitement sur **Mettre en file**.
+
+Ce bouton n'est créé que pour une affectation activée, une machine approuvée et une session possédant un jeton CSRF ; les catalogues des affectations inéligibles restent consultables sans bouton de préparation ni formulaire. Cette condition d'affichage ne constitue **pas** une garantie d'autorisation : les contrôles serveur (`remoteJobAllowed()`, état du registre) et la politique indépendante de l'agent sont toujours déterminants au moment de l'exécution. Les actions locales restent un inventaire non exécutable depuis le navigateur.
