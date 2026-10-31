@@ -994,7 +994,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           const line=el('div','registry-action-entry');
           line.dataset.actionOrigin='local';
           const detail=actionDetails[action];
-          line.dataset.actionSearch=action+' '+(typeof detail?.description==='string'?detail.description:'');
+          const searchableParts=[action,typeof detail?.description==='string'?detail.description:''];
           const description=el('div','flex-grow-1');
           description.appendChild(el('code','d-block',action));
           if(detail && typeof detail.description==='string'){
@@ -1004,9 +1004,11 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           // no enum choices, executable templates or execution rights are exposed.
           if(detail && Array.isArray(detail.parameters) && detail.parameters.length){
             const parameterNames=detail.parameters.map(parameter=>parameter.id+' ('+parameter.type+')');
+            searchableParts.push(...parameterNames);
             description.appendChild(el('div','small text-info',
               'Paramètres requis : '+parameterNames.join(', ')));
           }
+          line.dataset.actionSearch=searchableParts.join(' ');
           line.appendChild(description);
           if(detail && Number.isInteger(detail.timeout_seconds) && typeof detail.sync_allowed==='boolean'){
             line.appendChild(el('span','badge bg-info text-dark',detail.sync_allowed?'Synchrone autorisé':'Asynchrone uniquement'));
@@ -1041,7 +1043,9 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             const entry=el('div','registry-action-entry');
             entry.dataset.actionOrigin='remote';
             entry.dataset.remoteAction=action;
-            entry.dataset.actionSearch=action+' '+spec.description;
+            entry.dataset.actionSearch=action+' '+spec.description
+              +(spec.needs_path?' path relative_path':'')
+              +(spec.supports_filter?' filter enum':'');
             const description=el('div','flex-grow-1');
             description.appendChild(el('code','d-block',action));
             description.appendChild(el('div','small text-secondary',spec.description));
@@ -1130,8 +1134,8 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         const filterInput=el('input','form-control');
         filterInput.type='search';
         filterInput.autocomplete='off';
-        filterInput.placeholder='Nom ou description d’action';
-        filterInput.setAttribute('aria-label','Filtrer les actions locales et distantes du projet');
+        filterInput.placeholder='Nom, description ou paramètre';
+        filterInput.setAttribute('aria-label','Rechercher les actions par nom, description ou paramètre');
         const originSelect=el('select','form-select');
         originSelect.setAttribute('aria-label','Origine des actions');
         [['all','Toutes'],['local','Locales'],['remote','Distantes']].forEach(([value,label])=>{
