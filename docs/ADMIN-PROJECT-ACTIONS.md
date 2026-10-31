@@ -78,7 +78,7 @@ en découpant la représentation textuelle des cellules du tableau. Les données
 publiées restent strictement descriptives : aucune commande, aucun argument
 secret, aucune valeur d'énumération privilégiée.
 
-La recherche inclut désormais, en plus du nom et de la description, les **identifiants et types** des paramètres affichés : par exemple `serial`, `relative_path` ou `integer` côté local, et `path`/`filter` côté distant. Les valeurs autorisées d'énumération, arguments réels, commandes et informations privées des politiques ne sont pas indexés. Le filtre fonctionne également avec le choix d'origine Locales/Distantes/Toutes.
+La recherche inclut désormais, en plus du nom et de la description, les **identifiants et types** des paramètres affichés : par exemple `serial`, `relative_path` ou `integer` côté local, et `path`/`filter` côté distant. Les valeurs autorisées d'énumération, arguments réels, commandes et informations privées des politiques ne sont pas indexés. Le filtre accepte plusieurs mots-clés séparés par des espaces : **tous doivent correspondre**, quel que soit leur ordre. La recherche ignore la casse et les accents (par exemple `echec` retrouve `échec`). Le filtre fonctionne également avec le choix d'origine Locales/Distantes/Toutes.
 
 Le filtrage est exclusivement visuel et ne constitue pas un contrôle de droits.
 La création de demandes distantes passe toujours par le même validateur serveur
