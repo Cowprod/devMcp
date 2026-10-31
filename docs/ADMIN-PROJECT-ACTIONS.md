@@ -62,3 +62,23 @@ avertissement sans rendre les autres écrans indisponibles. Le nombre de demande
 affichées est borné ; l'absence de demande n'implique pas l'absence d'anciens
 jobs. Aucun changement de politique, aucune permission ajoutée, aucune
 mutation du workspace distant ne découle de ce suivi.
+
+## Recherche dans les actions d'un projet
+
+La fiche **Projets** propose un filtre local (nom ou description) commun aux entrées
+locales déclarées et aux cinq actions distantes présentées par affectation.
+Lorsqu'une action distante correspond, son catalogue est déplié ; les catalogues
+sans correspondance sont masqués seulement le temps de la recherche. Les formulaires
+de demande et les historiques ne sont pas modifiés par ce filtre.
+
+Les identifiants d'actions locales sont désormais transmis au navigateur sous
+forme d'un tableau JSON échappé dans `data-local-actions`, provenant de
+`LocalProjectSnapshot::read()` ; le navigateur ne reconstruit plus les identifiants
+en découpant la représentation textuelle des cellules du tableau. Les données
+publiées restent strictement descriptives : aucune commande, aucun argument
+secret, aucune valeur d'énumération privilégiée.
+
+Le filtrage est exclusivement visuel et ne constitue pas un contrôle de droits.
+La création de demandes distantes passe toujours par le même validateur serveur
+et la politique autonome de chaque agent ; aucune action locale n'est rendue
+exécutable depuis la fiche Projets.
