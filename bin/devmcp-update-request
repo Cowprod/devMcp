@@ -18,3 +18,33 @@ if (file_put_contents($request, gmdate('c') . "\n", LOCK_EX) === false) {
     exit(1);
 }
 echo "Update queued; systemd checks within one minute.\n";
+// Read-only operational diagnostics: never expose logs, configuration or tokens.
+// The status file is written by the root updater with only stage/exit metadata.
+$statusFile = '/run/devmcp-update-status';
+if (is_file($statusFile) && !is_link($statusFile) && is_readable($statusFile)
+    && filesize($statusFile) !== false && filesize($statusFile) <= 512) {
+    $status = file_get_contents($statusFile);
+    if (is_string($status) && preg_match(
+        '/\\Aexit_code=[0-9]+\\nstage=[a-z-]+\\nfinished_utc=[0-9T:Z-]+\\n\\z/D',
+        $status
+    ) === 1) {
+        echo "Last updater run:\n", $status;
+    }
+}
+// Fixed argv, no caller-provided shell command. Exit codes are not used as
+// proof of deployment; the MCP runtime must still be verified separately.
+$process = proc_open(
+    ['/usr/bin/git', '-C', '/opt/devmcp', 'rev-parse', 'HEAD'],
+    [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+    $pipes
+);
+if (is_resource($process)) {
+    $head = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    if (proc_close($process) === 0 && is_string($head)
+        && preg_match('/\\A[a-f0-9]{40}\\s*\\z/D', $head) === 1) {
+        echo 'Installed revision: ', trim($head), "\n";
+    }
+}
+
