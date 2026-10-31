@@ -74,6 +74,22 @@ final class ProvisioningStore
         return $this->get($record['project_id']);
     }
 
+    /**
+     * Reject any existing project ID or repository reservation before a GitHub
+     * mutation. Missing migrations or database errors fail closed.
+     */
+    public function assertAvailableForCreate(string $projectId, string $repository): void
+    {
+        $query = $this->db->prepare(
+            'SELECT project_id FROM dm_project_provisioning '
+            . 'WHERE project_id = ? OR repository = ? LIMIT 1'
+        );
+        $query->execute([$projectId, $repository]);
+        if ($query->fetch(PDO::FETCH_ASSOC) !== false) {
+            throw new \InvalidArgumentException('Projet ou depot deja reserve dans le journal');
+        }
+    }
+
     public function get(string $id): array
     {
         $query = $this->db->prepare(
