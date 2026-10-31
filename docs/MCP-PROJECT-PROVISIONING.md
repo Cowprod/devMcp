@@ -60,3 +60,32 @@ Les opérations de rattachement au registre, création de workspace, activation 
 4. Validation séparée des actions et permissions (aucune activation implicite, aucune utilisation de la PR #38 comme autorisation de production).
 
 Les quatre workflows GitHub restent obligatoires avant fusion. Aucune donnée MultiCam ne doit être modifiée.
+
+## Création Web avec logique MCP commune
+
+La fiche **Projets** propose désormais « Créer un projet complet via devMcp ».
+Après validation du jeton CSRF et de la session HTTPS administrateur, PHP-FPM
+appelle exclusivement l'outil `project_create` du **MCP local**
+(`http://127.0.0.1:8765/mcp`). Les paramètres transmis sont
+`project_id`, `description` et `confirmation=CREATE_PROJECT`.
+
+L'outil `ProjectTools::projectCreate()` reste l'unique orchestration métier :
+création du dépôt privé, enregistrement SQL, clonage SSH dans le workspace,
+suivi des états et contrôles avant toute opération. Le processus Web n'accède
+ni au jeton GitHub, ni aux clés SSH, ni à `/etc/devmcp/global.php`.
+Le formulaire historique « Enregistrer uniquement une fiche SQL » reste
+distinct, replié dans la même vue de création.
+
+Le Web refuse d'afficher un succès si le MCP ne retourne pas explicitement
+`state=active` avec le même identifiant et le même état projet. En cas
+d'échec après création GitHub ou inscription SQL, les ressources existantes
+ne sont pas automatiquement supprimées et il faut inspecter le journal
+avant de retenter l'opération. Les projets sont visibles via le journal
+de provisionnement et le catalogue MCP ; aucune permission d'action n'est
+accordée implicitement.
+
+Préconditions opérationnelles : service `devmcp-http` sur loopback 8765,
+configuration `project_provisioning` active et racine locale préexistante,
+création GitHub active, migration `20261031_project_provisioning.sql`
+appliquée avec droits SQL adéquats et SSH GitHub fonctionnel pour `devmcp`.
+Ces préconditions s'appliquent autant au Web qu'au MCP.
