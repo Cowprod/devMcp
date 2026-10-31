@@ -10,6 +10,8 @@ use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\GitHub\PrivateRepositoryCreator;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\ProjectCreationPreview;
+use Cowprod\DevMcp\Project\ProvisioningState;
+use Cowprod\DevMcp\Project\ProvisioningStore;
 use InvalidArgumentException;
 
 final class ProjectTools
@@ -22,6 +24,7 @@ final class ProjectTools
         private readonly HostTools $hostTools = new HostTools(),
         private readonly ?RemoteTools $remoteTools = null,
         private readonly ?PrivateRepositoryCreator $githubCreator = null,
+        private readonly ?ProvisioningStore $provisioning = null,
     ) {
     }
 
@@ -46,6 +49,48 @@ final class ProjectTools
             'projects' => $projects,
             'host' => $this->hostTools->capabilities(),
         ];
+    }
+
+    /**
+     * Register a project intent, without creating a repository or granting any action.
+     * The caller must use the preview first; the database enforces uniqueness.
+     */
+    public function projectRegister(
+        string $project_id,
+        string $description,
+        string $github_repository,
+        string $repository_mode,
+        string $confirmation,
+    ): array {
+        if ($confirmation !== 'REGISTER_PROJECT') {
+            throw new InvalidArgumentException('Confirmation explicite requise');
+        }
+        if ($this->provisioning === null) {
+            throw new InvalidArgumentException('Registre de provisionnement indisponible');
+        }
+        $preview = $this->projectCreatePreview(
+            $project_id, $description, $github_repository, $repository_mode,
+            'local', 'local', '/srv/devmcp/workspaces/' . $project_id
+        );
+        $record = ProvisioningState::begin($preview);
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.register',
+            'project_id' => $project_id, 'outcome' => 'requested',
+        ]);
+        $created = $this->provisioning->create($record);
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.register',
+            'project_id' => $project_id, 'outcome' => 'registered_intent',
+        ]);
+        return $created;
+    }
+
+    public function projectProvisioningList(): array
+    {
+        if ($this->provisioning === null) {
+            return ['projects' => [], 'available' => false];
+        }
+        return ['projects' => $this->provisioning->list(), 'available' => true];
     }
 
     /**
