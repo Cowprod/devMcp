@@ -190,6 +190,7 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertCount(1, $entry);
         self::assertSame('active', $entry[0]['provisioning_state']);
         self::assertSame(0, $entry[0]['action_count']);
+        self::assertSame($workspace, $entry[0]['workspace']);
         self::assertSame([], $this->tools->actionList('bakery-e2e')['actions']);
 
         $webCatalogue = ProvisioningProjectProjection::merge([], $this->store->list());
