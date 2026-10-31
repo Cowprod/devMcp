@@ -167,6 +167,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 . '&adb_kind=' . ($isLog ? 'journal' : 'capture') . '#android-adb', true, 303);
             exit;
         }
+        // The Web UI delegates to the same project_create tool as MCP clients.
+        // PHP-FPM does not read the GitHub token, SSH key or private runtime config.
+        if (($_POST['operation'] ?? '') === 'project.create.integrated') {
+            $created = (new \Cowprod\DevMcp\Distributed\Admin\McpProjectCreationClient())->create(
+                (string) ($_POST['project_id'] ?? ''),
+                (string) ($_POST['description'] ?? ''),
+            );
+            header('Location: /?created=1&created_project='
+                . rawurlencode((string) $created['project']['project_id']) . '#projects', true, 303);
+            exit;
+        }
         if (!isset($config['writer_username'], $config['writer_password'])) {
             throw new RuntimeException('Write access not configured');
         }
@@ -497,6 +508,16 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 </div></section>
 <?php if (!$remoteHistoryAvailable): ?><div class="alert alert-warning">Historique des actions distantes indisponible : vérifier les droits SQL en lecture seule et la migration 005. Les autorisations des agents ne sont pas affectées.</div><?php endif; ?><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter un projet</h2>
+<h3 class="h6">Créer un projet complet via devMcp</h3>
+<form method="post" action="/" class="registry-project-integrated-create">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
+<input type="hidden" name="operation" value="project.create.integrated">
+<div class="input-group mb-2"><span class="input-group-text">Identifiant</span><input class="form-control" name="project_id" pattern="[a-z0-9][a-z0-9._-]*" maxlength="64" autocomplete="off" required></div>
+<div class="input-group mb-2"><span class="input-group-text">Description</span><input class="form-control" name="description" maxlength="255" required></div>
+<p class="small text-secondary">Crée le dépôt GitHub privé Cowprod/&lt;identifiant&gt;, inscrit le projet dans le registre et clone son workspace sur touchdeck via l'outil MCP <code>project_create</code>. Les autorisations d'actions restent indépendantes.</p>
+<div class="btn-group mb-3"><button class="btn btn-success" type="submit">Créer dépôt et workspace</button></div>
+</form>
+<details class="mt-2 mb-3"><summary>Enregistrer uniquement une fiche SQL</summary>
 <form method="post" action="/">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
 <input type="hidden" name="operation" value="project.create">
@@ -504,8 +525,8 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="input-group mb-2"><span class="input-group-text">Description</span><input class="form-control" name="description" maxlength="255" required></div>
 <div class="input-group mb-3"><span class="input-group-text">Dépôt HTTPS</span><input class="form-control" name="repository_url" type="url"></div>
 <div class="btn-group"><button class="btn btn-success" type="submit">Enregistrer la fiche</button></div>
-<p class="small text-warning mt-2 mb-0">Cette opération enregistre uniquement une fiche dans le registre distribué. Elle ne crée ni dépôt GitHub, ni workspace, ni autorisation d’action. Le provisionnement complet reste désactivé.</p>
-</form></div></div></div>
+<p class="small text-secondary mt-2 mb-0">Cette opération enregistre uniquement une fiche dans le registre distribué. Elle ne crée ni dépôt GitHub, ni workspace, ni autorisation d’action.</p>
+</form></details></div></div></div>
 </section><h2 class="h5">Projets (locaux et distribués)</h2>
 <?php if (!$localSnapshot['ok']): ?>
 <div class="alert alert-warning">Catalogue local indisponible : <?= e($localSnapshot['reason']) ?>. Les projets distribués restent visibles. Aucun accès direct à la configuration privée depuis le serveur web.</div>
@@ -955,9 +976,16 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     const creationForm=Array.from(panel.querySelectorAll('form')).find(f=>f.querySelector('input[name="operation"]')?.value===operations[name]);
     const creationRoot=creationForm?.closest('.row')||creationForm?.closest('.card');
     if(!creationRoot)return;
-    // Keep only the existing creation form and its explanatory note, not the nested card.
+    // Preserve the MCP creation form and the legacy metadata-only form.
+    // Both are moved to the same sidebar detail; no duplicate submissions.
     const creationView=el('div','registry-create-form');
-    creationView.appendChild(creationForm);
+    if(name==='projects'){
+      const integrated=creationRoot.querySelector('form.registry-project-integrated-create');
+      if(integrated)creationView.appendChild(integrated);
+      creationView.appendChild(creationForm.closest('details')||creationForm);
+    }else{
+      creationView.appendChild(creationForm);
+    }
     const note=creationForm.nextElementSibling;
     if(note&&note.tagName==='SMALL')creationView.appendChild(note);
     creationRoot.remove();
