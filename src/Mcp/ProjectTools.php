@@ -56,7 +56,7 @@ final class ProjectTools
 
         if ($this->remoteTools !== null) {
             foreach ($this->remoteTools->projects() as $remote) {
-                if (!isset($this->projects->all()[$remote['id']])) {
+                if (!isset($this->projects->all()[$remote['id']]) && !in_array($remote['id'], array_column($projects, 'id'), true)) {
                     $projects[] = $remote;
                 }
             }
@@ -83,6 +83,9 @@ final class ProjectTools
         }
         if ($this->provisioning === null) {
             throw new InvalidArgumentException('Registre de provisionnement indisponible');
+        }
+        if ($this->remoteTools === null) {
+            throw new InvalidArgumentException('Registre central requis pour enregistrer un projet');
         }
         $preview = $this->projectCreatePreview(
             $project_id, $description, $github_repository, $repository_mode,
@@ -111,6 +114,9 @@ final class ProjectTools
             throw new InvalidArgumentException('Registre de provisionnement indisponible');
         }
         $current = $this->provisioning->get($project_id);
+        if ($current['state'] !== 'registered') {
+            throw new InvalidArgumentException('Projet non enregistre ou depot deja confirme');
+        }
         if ($current['repository'] !== $repository) {
             throw new InvalidArgumentException('Depot different de celui du projet');
         }
