@@ -96,8 +96,11 @@ final class ProjectTools
             $project_id, $description, $github_repository, $repository_mode,
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
         );
+        // Validate both reservations and destination before any SQL write or clone.
+        // The central uniqueness constraints remain the authoritative race guard.
+        $this->provisioning->assertAvailableForCreate($project_id, $github_repository);
+        $this->localProvisioner->assertDestinationAvailable($project_id);
         // An unassigned project must not inherit an implicit machine binding.
-        // Duplicate journal IDs are rejected by the unique database key.
         $record = ProvisioningState::begin($preview);
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.register',
@@ -158,6 +161,10 @@ final class ProjectTools
             $project_id, $description, $repository, 'create',
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
         );
+        // Never create a GitHub repository when the journal already reserves
+        // the ID/repository or a local clone target is occupied.
+        $this->provisioning->assertAvailableForCreate($project_id, $repository);
+        $this->localProvisioner->assertDestinationAvailable($project_id);
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.create',
             'project_id' => $project_id, 'outcome' => 'requested',
