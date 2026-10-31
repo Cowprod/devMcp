@@ -30,8 +30,18 @@ final class ProvisioningProjectProjection
             }
 
             if (isset($projectRows[$id])) {
-                // Registry/local inventory remains authoritative for actions.
+                // Registry/local inventory remains authoritative for actions and
+                // existing workspace paths. A newly provisioned project is also
+                // registered centrally; without this projection its workspace
+                // would be missing from the usual Projects detail view.
                 $projectRows[$id]['provisioning_state'] = $state;
+                $projectRows[$id]['provisioning_machine'] =
+                    is_string($entry['machine'] ?? null) ? $entry['machine'] : '';
+                $workspace = $entry['workspace_path'] ?? null;
+                if ($state === 'active' && is_string($workspace)
+                    && $workspace !== '' && ($projectRows[$id]['workspace'] ?? '') === '') {
+                    $projectRows[$id]['workspace'] = $workspace;
+                }
                 continue;
             }
 
@@ -44,6 +54,7 @@ final class ProvisioningProjectProjection
                 'actions' => [],
                 'action_details' => [],
                 'provisioning_state' => $state,
+                'provisioning_machine' => is_string($entry['machine'] ?? null) ? $entry['machine'] : '',
             ];
         }
 
