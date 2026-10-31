@@ -66,6 +66,64 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $projectRegisterSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string', 'maxLength' => 64],
+                'description' => ['type' => 'string', 'maxLength' => 255],
+                'github_repository' => ['type' => 'string'],
+                'repository_mode' => ['type' => 'string', 'enum' => ['create', 'attach']],
+                'confirmation' => ['type' => 'string', 'enum' => ['REGISTER_PROJECT']],
+            ],
+            'required' => ['project_id', 'description', 'github_repository', 'repository_mode', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
+        $repositoryConfirmSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'repository' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['CONFIRM_REPOSITORY_READY']],
+            ],
+            'required' => ['project_id', 'repository', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+        $machineAssignSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'machine' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['ASSIGN_MACHINE']],
+            ],
+            'required' => ['project_id', 'machine', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
+        $localProvisionSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['PROVISION_LOCAL_WORKSPACE']],
+            ],
+            'required' => ['project_id', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
+        $projectCreateSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string', 'maxLength' => 64],
+                'description' => ['type' => 'string', 'maxLength' => 255],
+                'confirmation' => ['type' => 'string', 'enum' => ['CREATE_PROJECT']],
+            ],
+            'required' => ['project_id', 'description', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -75,10 +133,39 @@ final class ServerFactory
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
+                [$tools, 'projectCreate'], 'project_create',
+                description: 'Cree en une operation le depot GitHub prive, le projet central et son workspace local actif.',
+                inputSchema: $projectCreateSchema,
+            )
+            ->addTool(
                 [$tools, 'githubRepositoryCreate'],
                 'github_repository_create',
                 description: 'Cree un depot GitHub prive uniquement si la politique centrale est activee. Ne cree ni projet ni workspace.',
                 inputSchema: $githubRepositoryCreateSchema,
+            )
+            ->addTool(
+                [$tools, 'projectRegister'], 'project_register',
+                description: 'Enregistre une intention de projet dans le journal central. Ne cree ni depot ni workspace, n autorise aucune action.',
+                inputSchema: $projectRegisterSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisioningList'], 'project_provisioning_list',
+                description: 'Liste les intentions de provisionnement et leurs etats persistants.',
+            )
+            ->addTool(
+                [$tools, 'projectRepositoryConfirm'], 'project_repository_confirm',
+                description: 'Enregistre une attestation explicite de depot pret. Ne verifie pas GitHub automatiquement.',
+                inputSchema: $repositoryConfirmSchema,
+            )
+            ->addTool(
+                [$tools, 'projectAssignMachine'], 'project_assign_machine',
+                description: 'Affecte un projet a une machine active du registre, sans deployer ni activer les actions.',
+                inputSchema: $machineAssignSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisionLocal'], 'project_provision_local',
+                description: 'Clone le depot GitHub dans un nouveau workspace local sous la racine autorisee, avec activation automatique du projet, sans accorder de droits d execution.',
+                inputSchema: $localProvisionSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(

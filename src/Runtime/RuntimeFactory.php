@@ -13,6 +13,7 @@ use Cowprod\DevMcp\GitHub\PrivateRepositoryCreator;
 use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\ProjectRegistry;
+use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
 use RuntimeException;
 
 final class RuntimeFactory
@@ -75,7 +76,11 @@ final class RuntimeFactory
         $artifacts = new ArtifactService($maxArtifactChunk);
         $store = new FileJobStore($jobsDirectory, $maxJobLog);
         $jobs = new JobManager($projects, $store, $artifacts, $audit, $maxOutput);
-        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), RemoteTools::fromConfig($config), PrivateRepositoryCreator::fromConfig($config));
+        $remote = RemoteTools::fromConfig($config);
+        $workspaceRoot = $config['project_provisioning']['local_workspace_root'] ?? null;
+        $localProvisioner = is_string($workspaceRoot) && ($config['project_provisioning']['enabled'] ?? false) === true
+            ? new LocalWorkspaceProvisioner($workspaceRoot) : null;
+        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore(), $localProvisioner);
 
         return new Runtime(
             $projects,
