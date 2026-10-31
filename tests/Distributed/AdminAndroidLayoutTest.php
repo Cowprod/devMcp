@@ -52,6 +52,6 @@ final class AdminAndroidLayoutTest extends TestCase
         $source = $this->adminSource();
         self::assertStringContainsString('Enregistrer la fiche', $source);
         self::assertStringContainsString('Elle ne crée ni dépôt GitHub, ni workspace, ni autorisation', $source);
-        self::assertStringContainsString("$editor->createProject(", $source);
+        self::assertStringContainsString('$editor->createProject(', $source);
     }
 }
