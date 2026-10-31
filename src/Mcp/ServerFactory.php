@@ -66,6 +66,19 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $projectRegisterSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string', 'maxLength' => 64],
+                'description' => ['type' => 'string', 'maxLength' => 255],
+                'github_repository' => ['type' => 'string'],
+                'repository_mode' => ['type' => 'string', 'enum' => ['create', 'attach']],
+                'confirmation' => ['type' => 'string', 'enum' => ['REGISTER_PROJECT']],
+            ],
+            'required' => ['project_id', 'description', 'github_repository', 'repository_mode', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -79,6 +92,15 @@ final class ServerFactory
                 'github_repository_create',
                 description: 'Cree un depot GitHub prive uniquement si la politique centrale est activee. Ne cree ni projet ni workspace.',
                 inputSchema: $githubRepositoryCreateSchema,
+            )
+            ->addTool(
+                [$tools, 'projectRegister'], 'project_register',
+                description: 'Enregistre une intention de projet dans le journal central. Ne cree ni depot ni workspace, n autorise aucune action.',
+                inputSchema: $projectRegisterSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisioningList'], 'project_provisioning_list',
+                description: 'Liste les intentions de provisionnement et leurs etats persistants.',
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
