@@ -75,7 +75,8 @@ final class RuntimeFactory
         $artifacts = new ArtifactService($maxArtifactChunk);
         $store = new FileJobStore($jobsDirectory, $maxJobLog);
         $jobs = new JobManager($projects, $store, $artifacts, $audit, $maxOutput);
-        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), RemoteTools::fromConfig($config), PrivateRepositoryCreator::fromConfig($config));
+        $remote = RemoteTools::fromConfig($config);
+        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore());
 
         return new Runtime(
             $projects,
