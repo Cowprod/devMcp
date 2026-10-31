@@ -848,6 +848,27 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   // Repaint status-only metadata, never the surrounding action forms.
   let lastRemoteJobRefresh = null;
   let remotePollError = false;
+  // Historical outcome only; never a statement about current agent authorization.
+  const remoteJobLabels={queued:'En file',claimed:'Prise en charge',succeeded:'Réussie (agent)',failed:'Échec (agent)',expired:'Expirée'};
+  const remoteJobClasses={queued:'bg-warning text-dark',claimed:'bg-info text-dark',succeeded:'bg-success',failed:'bg-danger',expired:'bg-secondary'};
+  function renderRemoteCatalogueStatuses(catalogue, deploymentId) {
+    // recentRemoteReadonlyJobs() orders the bounded 100-row result newest first.
+    catalogue.querySelectorAll('[data-remote-action]').forEach(entry=>{
+      const badge=entry.querySelector('.remote-catalogue-state');
+      if(!badge)return;
+      const latest=remoteJobHistory.find(job=>job.deployment_id===deploymentId && job.action_name===entry.dataset.remoteAction);
+      badge.className='badge remote-catalogue-state '+(latest&&remoteHistoryAvailable?(remoteJobClasses[latest.state]||'bg-secondary'):'bg-secondary');
+      if(!remoteHistoryAvailable){
+        badge.textContent='Historique indisponible';
+      }else if(!latest){
+        badge.textContent='Aucune demande parmi les 100 dernières';
+      }else{
+        badge.textContent='Dernière demande visible : '+(remoteJobLabels[latest.state]||'État inconnu');
+      }
+      if(remotePollError)badge.textContent+=' (à actualiser)';
+      badge.title='Historique récent uniquement ; ne prouve aucune autorisation actuelle de l’agent.';
+    });
+  }
   function renderRemoteHistory(box, deploymentId) {
     box.replaceChildren(el('h5','small mb-2','Dernières demandes distantes'));
     const history=remoteJobHistory.filter(job=>job.deployment_id===deploymentId).slice(0,5);
@@ -856,12 +877,10 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     }else if(!history.length){
       box.appendChild(el('p','small text-secondary mb-0','Aucune demande parmi les 100 dernières du registre.'));
     }else{
-      const labels={queued:'En file',claimed:'Prise en charge',succeeded:'Réussie (agent)',failed:'Échec (agent)',expired:'Expirée'};
-      const classes={queued:'bg-warning text-dark',claimed:'bg-info text-dark',succeeded:'bg-success',failed:'bg-danger',expired:'bg-secondary'};
       history.forEach(job=>{
         const entry=el('div','d-flex flex-wrap gap-2 align-items-center small mb-1');
         entry.appendChild(el('code','',job.action_name));
-        entry.appendChild(el('span','badge '+(classes[job.state]||'bg-secondary'),labels[job.state]||'État inconnu'));
+        entry.appendChild(el('span','badge '+(remoteJobClasses[job.state]||'bg-secondary'),remoteJobLabels[job.state]||'État inconnu'));
         entry.appendChild(el('span','text-secondary',String(job.created_at)+' UTC'));
         entry.appendChild(el('span','text-secondary','Réf. '+String(job.id).slice(0,8)));
         box.appendChild(entry);
@@ -985,8 +1004,10 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
           // Show the same catalogue even when this deployment is disabled.
           const catalogue=el('details','registry-remote-catalogue mb-2');
           catalogue.appendChild(el('summary','small text-secondary','Catalogue distant (lecture seule)'));
+          catalogue.dataset.deploymentId=deployment.dataset.recordId;
           Object.entries(remoteActionCatalog).forEach(([action,spec])=>{
             const entry=el('div','registry-action-entry');
+            entry.dataset.remoteAction=action;
             const description=el('div','flex-grow-1');
             description.appendChild(el('code','d-block',action));
             description.appendChild(el('div','small text-secondary',spec.description));
@@ -997,10 +1018,12 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
               description.appendChild(el('div','small text-info','Paramètres : '+parameters.join(', ')));
             }
             entry.appendChild(description);
+            entry.appendChild(el('span','badge bg-secondary remote-catalogue-state','Historique non chargé'));
             entry.appendChild(el('span','badge bg-secondary','Conditionnel : politique agent'));
             catalogue.appendChild(entry);
           });
           box.appendChild(catalogue);
+          renderRemoteCatalogueStatuses(catalogue,deployment.dataset.recordId);
           const historyBox=el('div','mt-2 mb-3 remote-job-history');
           historyBox.dataset.deploymentId=deployment.dataset.recordId;
           renderRemoteHistory(historyBox,deployment.dataset.recordId);
@@ -1104,6 +1127,9 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     }
     document.querySelectorAll('#panel-projects .remote-job-history').forEach(box=>{
       renderRemoteHistory(box,box.dataset.deploymentId||'');
+    });
+    document.querySelectorAll('#panel-projects .registry-remote-catalogue').forEach(catalogue=>{
+      renderRemoteCatalogueStatuses(catalogue,catalogue.dataset.deploymentId||'');
     });
   }
   window.setInterval(pollRemoteJobs,15000);

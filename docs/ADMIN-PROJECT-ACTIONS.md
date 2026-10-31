@@ -37,6 +37,8 @@ parmi les 100 derniers jobs de consultation distante du registre, avec action,
 référence courte. Après une mise en file réussie, le navigateur revient à la
 fiche du projet correspondant plutôt qu'au tableau de bord.
 
+La fiche **Projets** associe aussi à chaque action du catalogue distant l'état de sa **dernière demande visible** sur cette affectation, en réutilisant les mêmes métadonnées (aucune nouvelle requête SQL ni lecture des résultats de job). Les cinq actions restent affichées, même si aucune demande ne figure parmi les 100 dernières du registre. Le statut est recalculé lors du rafraîchissement à 15 secondes ; en cas d'échec, il est explicitement marqué comme potentiellement périmé. Le succès d'une demande passée n'est **jamais** présenté comme une autorisation d'exécution actuelle : l'acceptation future dépend toujours des validations serveur et agent.
+
 Ce suivi lit seulement les métadonnées SQL (`dm_remote_readonly_job` et
 `dm_deployment`). Il ne charge **ni les arguments**, **ni `result_json`** :
 un résultat de `workspace.read` peut contenir des données sensibles.
