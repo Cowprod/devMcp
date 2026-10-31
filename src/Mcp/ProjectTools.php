@@ -100,8 +100,7 @@ final class ProjectTools
             'project' => '_provisioning', 'action' => 'project.register',
             'project_id' => $project_id, 'outcome' => 'requested',
         ]);
-        $created = $this->provisioning->create($record);
-        $created = $this->provisioning->advance($project_id, $created['revision'], 'registered');
+        $created = $this->provisioning->registerCentral($record);
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.register',
             'project_id' => $project_id, 'outcome' => 'registered_intent',
