@@ -270,6 +270,21 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
     }
 
+    public function testMissingProvisioningMigrationPreservesMcpProjectDiscovery(): void
+    {
+        $this->db->exec('DROP TABLE dm_project_provisioning');
+
+        $catalogue = $this->tools->projectList();
+        self::assertArrayHasKey('projects', $catalogue);
+        self::assertArrayHasKey('host', $catalogue);
+        self::assertIsArray($catalogue['projects']);
+        self::assertSame(
+            ['projects' => [], 'available' => false],
+            $this->tools->projectProvisioningList()
+        );
+        self::assertSame(0, $this->githubCalls);
+    }
+
     public function testMissingProvisioningMigrationFailsBeforeGitHubCreation(): void
     {
         $this->db->exec('DROP TABLE dm_project_provisioning');
