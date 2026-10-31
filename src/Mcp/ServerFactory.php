@@ -113,6 +113,17 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $activateSchema = [
+            'type' => 'object',
+            'properties' => [
+                'project_id' => ['type' => 'string'],
+                'revision' => ['type' => 'integer', 'minimum' => 1],
+                'confirmation' => ['type' => 'string', 'enum' => ['ACTIVATE_PROJECT']],
+            ],
+            'required' => ['project_id', 'revision', 'confirmation'],
+            'additionalProperties' => false,
+        ];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -150,6 +161,11 @@ final class ServerFactory
                 [$tools, 'projectProvisionLocal'], 'project_provision_local',
                 description: 'Clone le depot GitHub dans un nouveau workspace local sous la racine autorisee, sans activer les actions.',
                 inputSchema: $localProvisionSchema,
+            )
+            ->addTool(
+                [$tools, 'projectActivate'], 'project_activate',
+                description: 'Active le cycle de vie du projet apres creation du workspace, sans autoriser d actions.',
+                inputSchema: $activateSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
