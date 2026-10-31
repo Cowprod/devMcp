@@ -78,7 +78,7 @@ final class ProjectTools
 
     /**
      * Register a project and clone its existing GitHub repository.
-     * Standard SQL read-only actions are granted atomically on activation.
+     * Standard SQL actions are granted atomically on activation.
      */
     public function projectRegister(
         string $project_id,
