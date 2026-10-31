@@ -36,13 +36,19 @@ final class ProjectTools
     public function projectList(): array
     {
         $projects = [];
-        foreach ($this->projects->all() as $project) {
+        $local = $this->projects->all();
+        foreach ($local as $project) {
             $projects[] = $project->toPublicArray();
         }
 
         if (($provisioningRows = $this->provisioningRows()) !== null) {
             foreach ($provisioningRows as $entry) {
-                if (isset($this->projects->all()[$entry['project_id']])) {
+                $existing = array_search($entry['project_id'], array_column($projects, 'id'), true);
+                if ($existing !== false) {
+                    $projects[$existing]['provisioning_state'] = $entry['state'];
+                    $projects[$existing]['machine'] = $entry['machine'];
+                    $projects[$existing]['workspace'] = $entry['workspace_path'];
+                    $projects[$existing]['repository'] = $entry['repository'];
                     continue;
                 }
                 $projects[] = [
@@ -93,6 +99,7 @@ final class ProjectTools
         if ($this->localProvisioner === null) {
             throw new InvalidArgumentException('Provisionnement local requis pour creer un projet');
         }
+        $this->provisioning->assertLocalProjectCreationReady();
         $preview = $this->projectCreatePreview(
             $project_id, $description, $github_repository, $repository_mode,
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
@@ -157,6 +164,7 @@ final class ProjectTools
             throw new InvalidArgumentException('Creation integree non configuree');
         }
         $repository = $this->githubCreator->organization() . '/' . $project_id;
+        $this->provisioning->assertLocalProjectCreationReady();
         // Validate all local and central preconditions before GitHub mutation.
         $this->projectCreatePreview(
             $project_id, $description, $repository, 'create',
@@ -187,7 +195,7 @@ final class ProjectTools
             'project' => $project,
             'github' => $github,
             'state' => 'active',
-            'actions_authorized' => false,
+            'actions_authorized' => (bool) $project['actions_enabled'],
         ];
     }
 
@@ -261,6 +269,7 @@ final class ProjectTools
             || $record['machine'] !== gethostname()) {
             throw new InvalidArgumentException('Projet non affecte a cet hote ou revision obsolete');
         }
+        $this->provisioning->assertLocalProjectCreationReady();
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.workspace.provision',
             'project_id' => $project_id, 'outcome' => 'requested',
