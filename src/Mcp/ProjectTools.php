@@ -38,6 +38,22 @@ final class ProjectTools
             $projects[] = $project->toPublicArray();
         }
 
+        if ($this->provisioning !== null) {
+            foreach ($this->provisioning->list() as $entry) {
+                if (isset($this->projects->all()[$entry['project_id']])) {
+                    continue;
+                }
+                $projects[] = [
+                    'id' => $entry['project_id'],
+                    'description' => $entry['description'],
+                    'repository' => $entry['repository'],
+                    'provisioning_state' => $entry['state'],
+                    'machine' => $entry['machine'],
+                    'action_count' => 0,
+                ];
+            }
+        }
+
         if ($this->remoteTools !== null) {
             foreach ($this->remoteTools->projects() as $remote) {
                 if (!isset($this->projects->all()[$remote['id']])) {
@@ -78,6 +94,7 @@ final class ProjectTools
             'project_id' => $project_id, 'outcome' => 'requested',
         ]);
         $created = $this->provisioning->create($record);
+        $created = $this->provisioning->advance($project_id, $created['revision'], 'registered');
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.register',
             'project_id' => $project_id, 'outcome' => 'registered_intent',
@@ -101,6 +118,25 @@ final class ProjectTools
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.repository.confirm',
             'project_id' => $project_id, 'repository' => $repository, 'outcome' => 'recorded',
+        ]);
+        return $updated;
+    }
+
+    public function projectAssignMachine(string $project_id, string $machine, int $revision, string $confirmation): array
+    {
+        if ($confirmation !== 'ASSIGN_MACHINE' || $this->provisioning === null || $this->remoteTools === null) {
+            throw new InvalidArgumentException('Affectation indisponible ou non confirmee');
+        }
+        $resolved = $this->remoteTools->machineForProvisioningPreview($machine);
+        if ($resolved['status'] !== 'active') {
+            throw new InvalidArgumentException('Machine non active');
+        }
+        $updated = $this->provisioning->advance(
+            $project_id, $revision, 'machine_assigned', ['machine' => $resolved['id']]
+        );
+        $this->audit->append([
+            'project' => '_provisioning', 'action' => 'project.machine.assign',
+            'project_id' => $project_id, 'machine_id' => $resolved['id'], 'outcome' => 'assigned',
         ]);
         return $updated;
     }
@@ -220,6 +256,13 @@ final class ProjectTools
     {
         if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
             return $this->remoteTools->describe($project);
+        }
+        if ($this->provisioning !== null) {
+            foreach ($this->provisioning->list() as $entry) {
+                if ($entry['project_id'] === $project) {
+                    return $this->provisioning->get($project);
+                }
+            }
         }
         return $this->projects->get($project)->toPublicArray();
     }
