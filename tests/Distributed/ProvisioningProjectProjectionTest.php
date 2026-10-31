@@ -31,6 +31,7 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertSame('https://github.com/Cowprod/bakery-tracker', $projects['bakery-tracker']['repository_url']);
         self::assertSame([], $projects['bakery-tracker']['actions']);
         self::assertSame([], $projects['bakery-tracker']['action_details']);
+        self::assertSame('', $projects['bakery-tracker']['workspace']);
     }
 
     public function testJournalNeverOverridesTrustedLocalActionCatalogue(): void
