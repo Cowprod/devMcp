@@ -93,6 +93,8 @@ final class ProjectTools
             $project_id, $description, $github_repository, $repository_mode,
             'local', 'local', '/srv/devmcp/workspaces/' . $project_id
         );
+        // An unassigned project must not inherit an implicit machine binding.
+        // Duplicate journal IDs are rejected by the unique database key.
         $record = ProvisioningState::begin($preview);
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.register',
@@ -181,7 +183,16 @@ final class ProjectTools
             'project' => '_provisioning', 'action' => 'project.workspace.provision',
             'project_id' => $project_id, 'outcome' => 'requested',
         ]);
-        $result = $this->localProvisioner->provision($project_id, $record['repository']);
+        try {
+            $result = $this->localProvisioner->provision($project_id, $record['repository']);
+        } catch (\Throwable $error) {
+            $this->audit->append([
+                'project' => '_provisioning', 'action' => 'project.workspace.provision',
+                'project_id' => $project_id, 'outcome' => 'failed',
+                'error_class' => get_class($error),
+            ]);
+            throw $error;
+        }
         $updated = $this->provisioning->advance(
             $project_id, $revision, 'workspace_ready', ['workspace_path' => $result['workspace_path']]
         );
