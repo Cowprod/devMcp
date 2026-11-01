@@ -181,7 +181,7 @@ final class RemoteTools
         }
 
         $query = $this->db->prepare(
-            'SELECT j.id, j.action_name, j.state, j.created_at, j.claimed_at, j.finished_at '
+            'SELECT j.action_name, j.state, j.created_at, j.claimed_at, j.finished_at '
             . 'FROM dm_remote_readonly_job AS j '
             . 'INNER JOIN dm_deployment AS d ON d.id = j.deployment_id '
             . 'WHERE d.project_id = ? '
@@ -197,7 +197,6 @@ final class RemoteTools
                 'timestamp_utc' => str_replace(' ', 'T', (string) $row['created_at']) . 'Z',
                 'event' => 'remote_readonly_job',
                 'project' => $project,
-                'job_id' => $row['id'],
                 'action' => $row['action_name'],
                 'status' => $row['state'],
                 'created_at' => $row['created_at'],
