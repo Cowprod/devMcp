@@ -14,7 +14,10 @@ use RuntimeException;
  */
 final class ProvisioningStore
 {
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(
+        private readonly PDO $db,
+        private readonly ?PreviewPortAllocator $previewPorts = null,
+    ) {}
 
     /**
      * Fail before creating external GitHub resources unless the SQL registry
@@ -23,6 +26,7 @@ final class ProvisioningStore
     public function assertLocalProjectCreationReady(): void
     {
         (new SqlProjectConfiguration($this->db))->assertDefaultActionsAvailable();
+        $this->previewPorts?->assertSchema();
     }
 
     public function create(array $record): array
@@ -113,6 +117,11 @@ final class ProvisioningStore
         $row['revision'] = (int) $row['revision'];
         $row['actions_enabled'] = (bool) $row['actions_enabled'];
         $row['repository_confirmed'] = (bool) $row['repository_confirmed'];
+        if ($this->previewPorts !== null) {
+            $reservation = $this->previewPorts->find($id);
+            $row['preview_port'] = $reservation['port'] ?? null;
+            $row['preview_port_state'] = $reservation === null ? 'not_allocated' : 'reserved';
+        }
         return $row;
     }
 
@@ -125,6 +134,15 @@ final class ProvisioningStore
                 throw new RuntimeException('Concurrent provisioning modification');
             }
             $updated = ProvisioningState::advance($current, $next, $details);
+            if ($next === 'machine_assigned' && $this->previewPorts !== null) {
+                // The central host can only probe its own network namespace.
+                // Remote agents will receive their own allocation protocol later.
+                if ($updated['machine'] === gethostname()) {
+                    $this->previewPorts->reserve($id, $updated['machine']);
+                } else {
+                    $this->previewPorts->release($id);
+                }
+            }
             $sql = new SqlProjectConfiguration($this->db);
             if ($next === 'machine_assigned' && $current['state'] === 'active') {
                 // An inactive/reassigned workspace must no longer be executable.
@@ -161,6 +179,15 @@ final class ProvisioningStore
             'SELECT project_id, description, repository, state, machine, workspace_path, revision '
             . 'FROM dm_project_provisioning ORDER BY project_id'
         );
-        return $query->fetchAll(PDO::FETCH_ASSOC);
+        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
+        if ($this->previewPorts !== null) {
+            foreach ($rows as &$row) {
+                $reservation = $this->previewPorts->find($row['project_id']);
+                $row['preview_port'] = $reservation['port'] ?? null;
+                $row['preview_port_state'] = $reservation === null ? 'not_allocated' : 'reserved';
+            }
+            unset($row);
+        }
+        return $rows;
     }
 }
