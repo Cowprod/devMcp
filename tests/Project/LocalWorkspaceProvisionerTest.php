@@ -52,7 +52,7 @@ final class LocalWorkspaceProvisionerTest extends TestCase
 
     public function testCloneFailureClassificationDistinguishesLocalAndRemotePermissions(): void
     {
-        $method = new \\ReflectionMethod(LocalWorkspaceProvisioner::class, 'cloneFailureReason');
+        $method = new \ReflectionMethod(LocalWorkspaceProvisioner::class, 'cloneFailureReason');
         self::assertSame('workspace_permission_denied', $method->invoke(
             null, 'fatal: could not create work tree dir /srv/devmcp/workspaces/x: Permission denied'
         ));
