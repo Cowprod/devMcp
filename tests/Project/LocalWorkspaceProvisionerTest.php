@@ -50,6 +50,26 @@ final class LocalWorkspaceProvisionerTest extends TestCase
         (new LocalWorkspaceProvisioner($this->root))->provision('demo', '--upload-pack=evil');
     }
 
+    public function testCloneFailureClassificationDistinguishesLocalAndRemotePermissions(): void
+    {
+        $method = new \\ReflectionMethod(LocalWorkspaceProvisioner::class, 'cloneFailureReason');
+        self::assertSame('workspace_permission_denied', $method->invoke(
+            null, 'fatal: could not create work tree dir /srv/devmcp/workspaces/x: Permission denied'
+        ));
+        self::assertSame('ssh_auth_denied', $method->invoke(
+            null, 'git@github.com: Permission denied (publickey).'
+        ));
+        self::assertSame('ssh_key_unreadable', $method->invoke(
+            null, 'Load key "/home/operator/.ssh/key": Permission denied'
+        ));
+        self::assertSame('git_permission_denied', $method->invoke(
+            null, 'git@github.com: Permission denied.'
+        ));
+        self::assertSame('ssh_remote_unavailable', $method->invoke(
+            null, 'fatal: Could not read from remote repository.'
+        ));
+    }
+
     public function testRejectsProjectTraversalBeforeRunningGit(): void
     {
         $this->expectException(InvalidArgumentException::class);
