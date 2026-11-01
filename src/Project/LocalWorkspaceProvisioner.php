@@ -45,6 +45,14 @@ final class LocalWorkspaceProvisioner
             throw new InvalidArgumentException('Invalid project or repository');
         }
         $this->assertDestinationAvailable($projectId);
+        // Fail before launching Git when the MCP process (including its
+        // systemd mount sandbox) cannot write the dedicated checkout root.
+        if (!is_writable($this->root)) {
+            throw new LocalWorkspaceProvisioningException(
+                'workspace_root_read_only',
+                'Workspace root is not writable for the MCP runtime'
+            );
+        }
         $path = $this->root . '/' . $projectId;
         // Require a canonical SSH host key trust configuration supplied by the operator.
         // Git must not prompt or silently accept an unknown host key.
@@ -96,8 +104,19 @@ final class LocalWorkspaceProvisioner
             return 'ssh_network_failed';
         }
         if (str_contains($message, 'could not create work tree dir')
-            || str_contains($message, 'permission denied')) {
+            || str_contains($message, 'cannot create directory')) {
             return 'workspace_permission_denied';
+        }
+        if (str_contains($message, 'load key') && str_contains($message, 'permission denied')) {
+            return 'ssh_key_unreadable';
+        }
+        if (str_contains($message, 'permission denied')) {
+            // Ambiguous without a trusted path marker. Do not mislabel a
+            // generic SSH/Git error as a local filesystem permission error.
+            return 'git_permission_denied';
+        }
+        if (str_contains($message, 'could not read from remote repository')) {
+            return 'ssh_remote_unavailable';
         }
         return 'git_clone_failed';
     }
