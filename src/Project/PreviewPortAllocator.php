@@ -123,7 +123,6 @@ final class PreviewPortAllocator
             'tcp://0.0.0.0:' . $port,
             $errorNumber,
             $errorMessage,
-            0,
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
         );
         if ($socket === false) {
