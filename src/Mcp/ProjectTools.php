@@ -13,6 +13,7 @@ use Cowprod\DevMcp\Project\ProjectCreationPreview;
 use Cowprod\DevMcp\Project\ProvisioningState;
 use Cowprod\DevMcp\Project\ProvisioningStore;
 use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
+use Cowprod\DevMcp\Project\LocalWorkspaceProvisioningException;
 use InvalidArgumentException;
 
 final class ProjectTools
@@ -189,6 +190,24 @@ final class ProjectTools
                 'project_id' => $project_id, 'outcome' => 'partial_failure',
                 'repository' => $repository, 'error_class' => get_class($error),
             ]);
+            // GitHub creation and SQL registration already succeeded. A clone
+            // failure is a durable partial result, not an opaque MCP transport
+            // error; never claim the workspace or actions are ready.
+            if ($error instanceof LocalWorkspaceProvisioningException) {
+                $registered = $this->provisioning->get($project_id);
+                return [
+                    'project' => $registered,
+                    'github' => [
+                        ...$github,
+                        'project_registered' => true,
+                        'workspace_created' => false,
+                        'actions_authorized' => false,
+                    ],
+                    'state' => 'partial_failure',
+                    'actions_authorized' => false,
+                    'failure' => ['stage' => 'workspace_clone', 'code' => $error->reason],
+                ];
+            }
             throw $error;
         }
         return [
@@ -289,6 +308,14 @@ final class ProjectTools
                 'project_id' => $project_id, 'outcome' => 'failed',
                 'error_class' => get_class($error),
             ]);
+            if ($error instanceof LocalWorkspaceProvisioningException) {
+                return [
+                    'project' => $this->provisioning->get($project_id),
+                    'state' => $record['state'],
+                    'provisioning_succeeded' => false,
+                    'failure' => ['stage' => 'workspace_clone', 'code' => $error->reason],
+                ];
+            }
             throw $error;
         }
         $updated = $this->provisioning->advance(
@@ -380,7 +407,7 @@ final class ProjectTools
             'github_repository_checked' => false,
             'workspace_policy_checked' => false,
         ];
-        $preview['next_step'] = 'Provisioning disabled: approve separate GitHub and machine policies before mutation';
+        $preview['next_step'] = 'Preview only: GitHub and workspace policies not checked; creation must be invoked separately with explicit confirmation';
         return $preview;
     }
 
