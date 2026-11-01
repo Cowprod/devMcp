@@ -50,6 +50,10 @@ final class ProjectTools
                     $projects[$existing]['machine'] = $entry['machine'];
                     $projects[$existing]['workspace'] = $entry['workspace_path'];
                     $projects[$existing]['repository'] = $entry['repository'];
+                    if (isset($entry['preview_port'])) {
+                        $projects[$existing]['preview_port'] = (int) $entry['preview_port'];
+                        $projects[$existing]['preview_port_state'] = 'reserved';
+                    }
                     continue;
                 }
                 $projects[] = [
@@ -60,6 +64,8 @@ final class ProjectTools
                     'machine' => $entry['machine'],
                     'workspace' => $entry['workspace_path'],
                     'action_count' => 0,
+                    'preview_port' => $entry['preview_port'] ?? null,
+                    'preview_port_state' => $entry['preview_port_state'] ?? 'not_allocated',
                 ];
             }
         }
