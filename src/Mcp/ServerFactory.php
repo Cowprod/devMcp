@@ -193,7 +193,7 @@ final class ServerFactory
             ->addTool([$tools, 'jobCancel'], 'job_cancel', description: 'Demande l’annulation d’un job.')
             ->addTool([$tools, 'artifactList'], 'artifact_list', description: 'Liste les artefacts déclarés d’un job.')
             ->addTool([$tools, 'artifactGet'], 'artifact_get', description: 'Lit un artefact déclaré par morceaux base64 bornés.')
-            ->addTool([$tools, 'auditTail'], 'audit_tail', description: "Lit les dernières traces d'audit d'un projet.");
+            ->addTool([$tools, 'auditTail'], 'audit_tail', description: "Lit l'audit local ou l'historique SQL borné des jobs read-only distants (métadonnées uniquement).");
 
         if ($sessionStore !== null) {
             $builder->setSession($sessionStore);
