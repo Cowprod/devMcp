@@ -166,6 +166,48 @@ final class RemoteTools
         return $query->fetchColumn() !== false;
     }
 
+    /**
+     * Return bounded read-only job metadata for a visible remote project.
+     * This is a job history, not the agent's complete audit trail. Never
+     * expose queued arguments, result_json, or file contents through audit_tail.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function auditHistory(string $project, int $limit): array
+    {
+        $this->describe($project);
+        if ($limit < 1 || $limit > 100) {
+            throw new InvalidArgumentException('limit doit être compris entre 1 et 100');
+        }
+
+        $query = $this->db->prepare(
+            'SELECT j.action_name, j.state, j.created_at, j.claimed_at, j.finished_at '
+            . 'FROM dm_remote_readonly_job AS j '
+            . 'INNER JOIN dm_deployment AS d ON d.id = j.deployment_id '
+            . 'WHERE d.project_id = ? '
+            . 'ORDER BY j.created_at DESC, j.id DESC LIMIT ?'
+        );
+        $query->bindValue(1, $project, PDO::PARAM_STR);
+        $query->bindValue(2, $limit, PDO::PARAM_INT);
+        $query->execute();
+
+        $records = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $records[] = [
+                'timestamp_utc' => str_replace(' ', 'T', (string) $row['created_at']) . 'Z',
+                'event' => 'remote_readonly_job',
+                'project' => $project,
+                'action' => $row['action_name'],
+                'status' => $row['state'],
+                'created_at' => $row['created_at'],
+                'started_at' => $row['claimed_at'],
+                'finished_at' => $row['finished_at'],
+            ];
+        }
+        // Match the chronological order returned by the local JSONL audit tail.
+        return array_reverse($records);
+    }
+
     public function remoteProjectList(): array
     {
         $query = $this->db->query(
