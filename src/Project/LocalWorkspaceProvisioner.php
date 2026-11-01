@@ -33,7 +33,7 @@ final class LocalWorkspaceProvisioner
         }
         $path = $this->root . '/' . $projectId;
         if (file_exists($path) || is_link($path)) {
-            throw new RuntimeException('Workspace already exists: refusing to overwrite');
+            throw new LocalWorkspaceProvisioningException('workspace_exists', 'Workspace already exists: refusing to overwrite');
         }
     }
 
@@ -58,11 +58,48 @@ final class LocalWorkspaceProvisioner
         $process->run();
         if (!$process->isSuccessful()) {
             // A failed clone may leave a partial directory. Never delete it automatically.
-            throw new RuntimeException('Git clone failed; inspect workspace before retrying');
+            throw new LocalWorkspaceProvisioningException(
+                self::cloneFailureReason($process->getErrorOutput()),
+                'Git clone failed; inspect workspace before retrying'
+            );
         }
         if (is_link($path) || !is_dir($path) || realpath($path) !== $path) {
             throw new RuntimeException('Unexpected workspace after clone');
         }
         return ['workspace_path' => $path, 'repository' => $repository, 'created' => true];
     }
+    /**
+     * Git stderr is used only for a fixed diagnostic code, never returned.
+     * A failed clone can leave an occupied directory: do not delete or retry
+     * in-place without an explicit recovery inspection.
+     */
+    private static function cloneFailureReason(string $stderr): string
+    {
+        $message = strtolower(substr($stderr, 0, 8192));
+        if (str_contains($message, 'host key verification failed')) {
+            return 'ssh_host_key_untrusted';
+        }
+        if (str_contains($message, 'permission denied (publickey)')) {
+            return 'ssh_auth_denied';
+        }
+        if (str_contains($message, 'repository not found')
+            || str_contains($message, 'does not appear to be a git repository')
+            || str_contains($message, 'does not exist')) {
+            return 'repository_unavailable';
+        }
+        if (str_contains($message, 'could not resolve hostname')) {
+            return 'ssh_dns_failed';
+        }
+        if (str_contains($message, 'connection timed out')
+            || str_contains($message, 'connection refused')
+            || str_contains($message, 'network is unreachable')) {
+            return 'ssh_network_failed';
+        }
+        if (str_contains($message, 'could not create work tree dir')
+            || str_contains($message, 'permission denied')) {
+            return 'workspace_permission_denied';
+        }
+        return 'git_clone_failed';
+    }
+
 }
