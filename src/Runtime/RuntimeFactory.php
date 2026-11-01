@@ -89,6 +89,11 @@ final class RuntimeFactory
         if (!is_array($previewConfig)) {
             throw new RuntimeException('preview_ports invalide');
         }
+        // Newly provisioned projects get an automatic stable preview port by
+        // default. Explicit per-installation opt-out remains available.
+        if (!array_key_exists('enabled', $previewConfig)) {
+            $previewConfig['enabled'] = ($config['project_provisioning']['enabled'] ?? false) === true;
+        }
         $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore($previewConfig), $localProvisioner);
 
         return new Runtime(

@@ -29,10 +29,10 @@ return [
         'owner_type' => 'user', // Cowprod is a GitHub user, not an organization.
         'token_file' => '/etc/devmcp/github-repository-token',
     ],
-    // Enable only after applying migrations/20261101_preview_port_reservation.sql.
-    // The chosen port is persisted per project and scoped to the host machine.
+    // The root-controlled self-updater applies the preview-port schema before
+    // restarting services. Ports are persisted per project and host.
     'preview_ports' => [
-        'enabled' => false,
+        'enabled' => true,
         'min' => 12000,
         'max' => 19999,
     ],

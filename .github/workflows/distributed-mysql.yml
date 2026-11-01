@@ -55,6 +55,13 @@ jobs:
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
         run: vendor/bin/phpunit tests/Distributed/PreviewPortMySqlIntegrationTest.php
 
+      - name: Preview port migration idempotency test
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/PreviewPortMigrationTest.php
+
       - name: SQL global.php migration smoke test
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
