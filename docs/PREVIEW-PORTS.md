@@ -7,13 +7,22 @@ transport MCP ni un port public Internet.
 ## Attribution automatique (TouchDeck)
 
 La création MCP `project_create` / `project_register` conserve son interface.
-Quand la politique `preview_ports.enabled` est activée, le passage à
+L'attribution est désormais **automatique par défaut** lorsque
+`project_provisioning.enabled=true`. La clé facultative
+`preview_ports.enabled=false` permet de la désactiver explicitement.
+Le passage à
 `machine_assigned` sur **l'hôte local** réserve automatiquement un port
 aléatoire dans la plage configurable (par défaut **12000–19999**).
 
-- La migration `migrations/20261101_preview_port_reservation.sql` doit être
-  appliquée avant l'activation. L'API refuse la création **avant GitHub** si
-  l'option est activée et que la table manque.
+- La migration `migrations/20261101_preview_port_reservation.sql` est
+  appliquée **idempotemment par l'auto-update root** avant le redémarrage MCP,
+  via `bin/migrate-preview-port-reservations.php`.
+  Si le compte SQL d'écriture ne dispose pas du droit `CREATE`, l'update
+  échoue explicitement en étape `preview-port-migration` sans attribuer un
+  faux port ; il faut alors accorder le droit ou appliquer la migration
+  par la procédure SQL de l'installation.
+  L'API refuse la création **avant GitHub** si l'option est activée et que
+  la table manque.
 - Le serveur vérifie un bind TCP sur `0.0.0.0:<port>`, puis insère une réservation
   durable dans MariaDB. `UNIQUE(machine,port)` arbitre les créations concurrentes.
   La clé primaire `project_id` conserve un seul port par projet.
@@ -41,28 +50,30 @@ de l'admin permet de la modifier. Le lien porte explicitement la mention
 Le compte SQL de lecture de l'admin doit disposer de `SELECT` sur la nouvelle
 table ; aucune autorisation d'écriture ne lui est nécessaire.
 
-## Activation progressive
+## Déploiement
 
-1. Appliquer la migration via la procédure SQL contrôlée de devMcp.
-2. Accorder `SELECT` sur `dm_preview_port_reservation` au compte Web admin.
-3. Dans `/etc/devmcp/global.php` (hors dépôt), configurer :
+L'auto-update root applique désormais la migration statique et redémarre les
+entrées MCP uniquement si le diagnostic réussit. Aucun nouveau fichier de
+configuration n'est requis pour les projets locaux : dès que
+`project_provisioning.enabled=true`, les nouvelles créations obtiennent
+un port réservé.
 
-   ```php
-   'preview_ports' => [
-       'enabled' => true,
-       'min' => 12000,
-       'max' => 19999,
-   ],
-   ```
+On peut personnaliser la plage dans `/etc/devmcp/global.php`, sans changer le
+port déjà réservé aux projets existants :
 
-4. Redémarrer les points d'entrée MCP et vérifier leur révision déployée.
-5. Créer un **projet jetable** et vérifier la présence de `preview_port`,
-   la persistance après redémarrage puis la disponibilité HTTP d'une application
-   de test réellement démarrée sur ce port.
+```php
+'preview_ports' => [
+    'enabled' => true,
+    'min' => 12000,
+    'max' => 19999,
+],
+```
 
-La réservation reste purement descriptive tant que l'application n'est pas
-configurée pour écouter sur `0.0.0.0:<port>` ou directement sur son IP ZeroTier.
-Un serveur lié à `127.0.0.1` n'est pas joignable par ZeroTier.
+L'admin Web reste une frontière de lecture seule ; elle peut nécessiter
+un droit `SELECT` supplémentaire pour voir les réservations (le formulaire
+continue de fonctionner si le droit manque). Une URL annoncée ne prouve ni
+l'écoute du processus ni l'accessibilité ZeroTier. Effectuer un test réel
+HTTP après avoir configuré le processus applicatif pour écouter sur ce port.
 
 ## Limites de ce jalon
 
