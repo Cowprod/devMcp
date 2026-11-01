@@ -603,12 +603,21 @@ final class ProjectTools
      */
     public function auditTail(string $project, int $limit = 20): array
     {
-        $this->projects->get($project);
-
         if ($limit < 1 || $limit > 100) {
             throw new InvalidArgumentException('limit doit être compris entre 1 et 100');
         }
 
+        if ($this->remoteTools !== null
+            && $this->remoteTools->hasProject($project)
+            && !isset($this->projects->all()[$project])) {
+            return [
+                'project' => $project,
+                'source' => 'remote_readonly_job_history',
+                'records' => $this->remoteTools->auditHistory($project, $limit),
+            ];
+        }
+
+        $this->projects->get($project);
         return [
             'project' => $project,
             'records' => $this->audit->tail($project, $limit),
