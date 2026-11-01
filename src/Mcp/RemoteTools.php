@@ -7,6 +7,7 @@ namespace Cowprod\DevMcp\Mcp;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use InvalidArgumentException;
 use Cowprod\DevMcp\Project\ProvisioningStore;
+use Cowprod\DevMcp\Project\PreviewPortAllocator;
 use PDO;
 use RuntimeException;
 
@@ -35,9 +36,18 @@ final class RemoteTools
         ));
     }
 
-    public function provisioningStore(): ProvisioningStore
+    /** @param array<string,mixed> $previewConfig */
+    public function provisioningStore(array $previewConfig = []): ProvisioningStore
     {
-        return new ProvisioningStore($this->db);
+        $allocator = null;
+        if (($previewConfig['enabled'] ?? false) === true) {
+            $allocator = new PreviewPortAllocator(
+                $this->db,
+                $previewConfig['min'] ?? PreviewPortAllocator::DEFAULT_MIN,
+                $previewConfig['max'] ?? PreviewPortAllocator::DEFAULT_MAX,
+            );
+        }
+        return new ProvisioningStore($this->db, $allocator);
     }
 
     public function sqlProjectConfiguration(): \Cowprod\DevMcp\Project\SqlProjectConfiguration
