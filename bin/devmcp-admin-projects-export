@@ -26,6 +26,34 @@ try {
         ? ProjectRegistry::fromSql($sql)
         : ProjectRegistry::fromConfig($config);
     $snapshot = LocalProjectSnapshot::export($config, $registry);
+    // The privileged exporter already has SQL access. Publish only validated,
+    // non-secret local port metadata so the unprivileged Web admin requires
+    // no new direct SELECT grant on the reservation table.
+    if ($remote !== null) {
+        try {
+            $store = $remote->provisioningStore(['enabled' => true]);
+            $byProject = [];
+            foreach ($store->list() as $record) {
+                if (($record['state'] ?? null) !== 'active'
+                    || ($record['machine'] ?? null) !== $snapshot['host']['name']) {
+                    continue;
+                }
+                $port = $record['preview_port'] ?? null;
+                if (is_int($port) && $port >= 1024 && $port <= 65535) {
+                    $byProject[$record['project_id']] = $port;
+                }
+            }
+            foreach ($snapshot['projects'] as &$project) {
+                if (isset($byProject[$project['id']])) {
+                    $project['preview_port'] = $byProject[$project['id']];
+                }
+            }
+            unset($project);
+        } catch (\PDOException $error) {
+            // Keep legacy project inventory available during staged migration.
+            error_log('devmcp-admin snapshot preview ports unavailable: ' . get_class($error));
+        }
+    }
     $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $output = LocalProjectSnapshot::DEFAULT_PATH;
     $directory = dirname($output);
