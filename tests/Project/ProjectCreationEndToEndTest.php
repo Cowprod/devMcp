@@ -244,12 +244,15 @@ final class ProjectCreationEndToEndTest extends TestCase
     {
         // No bare Git fixture exists for this repository: the non-network clone
         // fails after simulated GitHub creation and central registration.
-        try {
-            $this->tools->projectCreate('bakery-no-origin', 'Missing Git origin', 'CREATE_PROJECT');
-            self::fail('A failed clone must not be reported as a created workspace');
-        } catch (RuntimeException $exception) {
-            self::assertStringContainsString('Git clone failed', $exception->getMessage());
-        }
+        $result = $this->tools->projectCreate('bakery-no-origin', 'Missing Git origin', 'CREATE_PROJECT');
+        self::assertSame('partial_failure', $result['state']);
+        self::assertSame('workspace_clone', $result['failure']['stage']);
+        self::assertSame('repository_unavailable', $result['failure']['code']);
+        self::assertTrue($result['github']['private']);
+        self::assertTrue($result['github']['project_registered']);
+        self::assertFalse($result['github']['workspace_created']);
+        self::assertFalse($result['actions_authorized']);
+        self::assertSame('registered', $result['project']['state']);
         self::assertSame(1, $this->githubCalls);
         self::assertSame('registered', $this->store->get('bakery-no-origin')['state']);
         self::assertFalse($this->store->get('bakery-no-origin')['actions_enabled']);
@@ -308,6 +311,44 @@ final class ProjectCreationEndToEndTest extends TestCase
         }
         self::assertSame(0, $this->githubCalls);
         self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
+    }
+
+    public function testCreatePreviewNeverClaimsThatProvisioningPolicyIsDisabled(): void
+    {
+        $preview = $this->tools->projectCreatePreview(
+            'bakery-preview', 'Preview only', 'Cowprod/bakery-preview',
+            'create', 'local', 'local', '/srv/devmcp/workspaces/bakery-preview'
+        );
+        self::assertSame('preview_only', $preview['state']);
+        self::assertStringContainsString('Preview only', $preview['next_step']);
+        self::assertStringNotContainsString('disabled', $preview['next_step']);
+        self::assertFalse($preview['checks']['github_repository_checked']);
+        self::assertFalse($preview['checks']['workspace_policy_checked']);
+        self::assertSame(0, $this->githubCalls);
+    }
+
+    public function testRecoverableCloneFailureReturnsSafeCodeWithoutGrantingActions(): void
+    {
+        $intent = ProvisioningState::begin(ProjectCreationPreview::prepare(
+            'bakery-recovery', 'Recovery clone missing origin',
+            'Cowprod/bakery-recovery', 'attach', 'local', 'local',
+            '/srv/devmcp/workspaces/bakery-recovery'
+        ));
+        $record = $this->store->create($intent);
+        $record = $this->store->advance('bakery-recovery', $record['revision'], 'repository_ready');
+        $record = $this->store->advance('bakery-recovery', $record['revision'], 'machine_assigned',
+            ['machine' => gethostname()]);
+        $result = $this->tools->projectProvisionLocal(
+            'bakery-recovery', $record['revision'], 'PROVISION_LOCAL_WORKSPACE'
+        );
+
+        self::assertFalse($result['provisioning_succeeded']);
+        self::assertSame('machine_assigned', $result['state']);
+        self::assertSame('workspace_clone', $result['failure']['stage']);
+        self::assertSame('repository_unavailable', $result['failure']['code']);
+        self::assertSame('machine_assigned', $this->store->get('bakery-recovery')['state']);
+        self::assertFalse($this->store->get('bakery-recovery')['actions_enabled']);
+        self::assertSame([], $this->tools->actionList('bakery-recovery')['actions']);
     }
 
     public function testMissingProvisioningMigrationPreservesMcpProjectDiscovery(): void
