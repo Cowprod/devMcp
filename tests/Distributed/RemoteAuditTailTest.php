@@ -48,15 +48,16 @@ final class RemoteAuditTailTest extends TestCase
         $remote = $this->remote();
         $latest = $remote->auditHistory('caserouter', 1);
         self::assertCount(1, $latest);
-        self::assertSame(str_repeat('b', 32), $latest[0]['job_id']);
+        self::assertSame('workspace.list', $latest[0]['action']);
+        self::assertArrayNotHasKey('job_id', $latest[0]);
         self::assertSame('queued', $latest[0]['status']);
         self::assertSame('remote_readonly_job', $latest[0]['event']);
         self::assertSame('2026-11-01T11:00:00.000000Z', $latest[0]['timestamp_utc']);
 
         $history = $remote->auditHistory('caserouter', 10);
-        self::assertSame([str_repeat('a', 32), str_repeat('b', 32)], array_column($history, 'job_id'));
+        self::assertSame(['git.head', 'workspace.list'], array_column($history, 'action'));
         $encoded = json_encode($history, JSON_THROW_ON_ERROR);
-        foreach (['PRIVATE_ARGUMENT', 'PRIVATE_RESULT', 'OTHER_PROJECT', 'secret.md', 'arguments_json', 'result_json'] as $forbidden) {
+        foreach (['PRIVATE_ARGUMENT', 'PRIVATE_RESULT', 'OTHER_PROJECT', 'secret.md', 'arguments_json', 'result_json', 'job_id'] as $forbidden) {
             self::assertStringNotContainsString($forbidden, $encoded);
         }
     }
