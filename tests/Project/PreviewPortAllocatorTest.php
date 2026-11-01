@@ -77,7 +77,7 @@ final class PreviewPortAllocatorTest extends TestCase
     public function testBusyRealTcpListenerIsRejected(): void
     {
         $listener = @stream_socket_server(
-            'tcp://0.0.0.0:0', $errno, $errstr, 0, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN
+            'tcp://0.0.0.0:0', $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN
         );
         if ($listener === false) {
             self::markTestSkipped('IPv4 TCP listener not available in runner');
