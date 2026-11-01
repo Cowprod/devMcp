@@ -102,6 +102,20 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertCount(1, $projects);
     }
 
+    public function testPreviewPortIsMetadataOnlyAndValidated(): void
+    {
+        $row = $this->journalRow('active');
+        $row['machine'] = 'touchdeck';
+        $row['preview_port'] = 15349;
+        $result = ProvisioningProjectProjection::merge([], [$row]);
+        self::assertSame(15349, $result['bakery-tracker']['preview_port']);
+        self::assertSame('touchdeck', $result['bakery-tracker']['provisioning_machine']);
+
+        $row['preview_port'] = 'javascript:alert(1)';
+        $result = ProvisioningProjectProjection::merge([], [$row]);
+        self::assertNull($result['bakery-tracker']['preview_port']);
+    }
+
     public function testIgnoresMalformedJournalRows(): void
     {
         $invalid = $this->journalRow();
@@ -117,6 +131,8 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertStringContainsString('ProvisioningProjectProjection::merge($projectRows, $provisioningRows)', $source);
         self::assertStringContainsString('data-provisioning-state=', $source);
         self::assertStringContainsString('data-provisioning-machine=', $source);
+        self::assertStringContainsString('data-preview-url=', $source);
+        self::assertStringContainsString('Port réservé', $source);
         self::assertStringContainsString("if(name==='projects'&&row.dataset.provisioningState)", $source);
         self::assertStringNotContainsString("}else if(name==='projects'&&row.dataset.provisioningState)", $source);
         self::assertStringContainsString('Aucune autorisation d’action ne découle de cet état.', $source);

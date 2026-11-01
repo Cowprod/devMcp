@@ -85,7 +85,11 @@ final class RuntimeFactory
         $workspaceRoot = $config['project_provisioning']['local_workspace_root'] ?? null;
         $localProvisioner = is_string($workspaceRoot) && ($config['project_provisioning']['enabled'] ?? false) === true
             ? new LocalWorkspaceProvisioner($workspaceRoot) : null;
-        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore(), $localProvisioner);
+        $previewConfig = $config['preview_ports'] ?? [];
+        if (!is_array($previewConfig)) {
+            throw new RuntimeException('preview_ports invalide');
+        }
+        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore($previewConfig), $localProvisioner);
 
         return new Runtime(
             $projects,

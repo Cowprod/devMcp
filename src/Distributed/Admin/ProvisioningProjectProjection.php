@@ -29,6 +29,10 @@ final class ProvisioningProjectProjection
                 continue;
             }
 
+            // Port metadata does not establish that an HTTP service is running.
+            $port = $entry['preview_port'] ?? null;
+            $port = is_int($port) && $port >= 1024 && $port <= 65535 ? $port : null;
+
             if (isset($projectRows[$id])) {
                 // Registry/local inventory remains authoritative for actions and
                 // existing workspace paths. A newly provisioned project is also
@@ -37,6 +41,7 @@ final class ProvisioningProjectProjection
                 $projectRows[$id]['provisioning_state'] = $state;
                 $projectRows[$id]['provisioning_machine'] =
                     is_string($entry['machine'] ?? null) ? $entry['machine'] : '';
+                $projectRows[$id]['preview_port'] = $port;
                 $workspace = $entry['workspace_path'] ?? null;
                 if ($state === 'active' && is_string($workspace)
                     && $workspace !== '' && ($projectRows[$id]['workspace'] ?? '') === '') {
@@ -55,6 +60,7 @@ final class ProvisioningProjectProjection
                 'action_details' => [],
                 'provisioning_state' => $state,
                 'provisioning_machine' => is_string($entry['machine'] ?? null) ? $entry['machine'] : '',
+                'preview_port' => $port,
             ];
         }
 

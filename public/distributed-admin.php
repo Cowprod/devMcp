@@ -307,6 +307,25 @@ try {
     $provisioningAvailable = false;
     error_log('devmcp-admin provisioning journal unavailable: ' . get_class($exception));
 }
+// Preview ports are read-only here. Missing migration/SELECT never disables the admin.
+try {
+    $reservedPorts = $db->query('SELECT project_id, machine, port FROM dm_preview_port_reservation')
+        ->fetchAll(\PDO::FETCH_ASSOC);
+    $byProject = [];
+    foreach ($reservedPorts as $reserved) {
+        $byProject[$reserved['project_id']] = $reserved;
+    }
+    foreach ($provisioningRows as &$entry) {
+        $reserved = $byProject[$entry['project_id']] ?? null;
+        if (is_array($reserved) && $reserved['machine'] === ($entry['machine'] ?? null)) {
+            $entry['preview_port'] = (int) $reserved['port'];
+        }
+    }
+    unset($entry);
+} catch (\PDOException $exception) {
+    // In a staged rollout, the existing inventory remains readable.
+    error_log('devmcp-admin preview port inventory unavailable: ' . get_class($exception));
+}
 // Keep distributed registry writes separate from local runtime definitions.
 $projectRows = [];
 foreach ($projects as $project) {
@@ -341,6 +360,24 @@ foreach ($localSnapshot['projects'] as $project) {
 }
 // Surface journal entries alongside registry and local projects without granting actions.
 $projectRows = \Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection::merge($projectRows, $provisioningRows);
+// Prefer an explicitly configured IP; TouchDeck's known ZeroTier IP is a
+// local-lab fallback, never an address inferred for remote agents.
+$previewIp = $config['preview_zerotier_ipv4'] ?? '';
+$localHost = $localSnapshot['host']['name'] ?? '';
+if ($previewIp === '' && $localHost === 'touchdeck') {
+    $previewIp = '192.168.194.189';
+}
+if (!is_string($previewIp) || filter_var($previewIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+    $previewIp = '';
+}
+foreach ($projectRows as &$projectRow) {
+    $port = $projectRow['preview_port'] ?? null;
+    $host = $projectRow['provisioning_machine'] ?? '';
+    $projectRow['preview_url'] = $previewIp !== '' && $host === $localHost && is_int($port)
+        && $port >= 1024 && $port <= 65535
+        ? 'http://' . $previewIp . ':' . $port : '';
+}
+unset($projectRow);
 ksort($projectRows);
 
 function e(mixed $value): string
@@ -538,9 +575,9 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
-<td><code><?= e($project['workspace'] ?: '—') ?></code></td>
+<td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1">Port réservé · service non vérifié</span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
 <td><?= e($project['repository_url'] ?: '—') ?></td></tr>
 <?php endforeach; ?>
@@ -1147,6 +1184,14 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     if(name==='projects' && row.dataset.provisioningMachine){
       fields.appendChild(el('dt','','Machine de provisionnement'));
       fields.appendChild(el('dd','',row.dataset.provisioningMachine));
+    }
+    if(name==='projects' && row.dataset.previewUrl){
+      fields.appendChild(el('dt','','Prévisualisation HTTP'));
+      const preview=el('dd'),link=el('a','',row.dataset.previewUrl);
+      link.href=row.dataset.previewUrl;link.target='_blank';link.rel='noopener noreferrer';
+      preview.appendChild(link);
+      preview.appendChild(el('span','badge bg-secondary ms-2','Port réservé — HTTP non vérifié'));
+      fields.appendChild(preview);
     }
     body.appendChild(fields);
     // Editable registry metadata only; local projects and enabled deployments remain read-only.
