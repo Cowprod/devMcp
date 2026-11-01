@@ -50,6 +50,11 @@ sql_cutover=0
 case "$sql_import_output" in
     *"SQL registry READY"*) sql_cutover=1 ;;
 esac
+# Provisioning runs inside systemd's read-only sandbox, unlike local CLI
+# diagnostics. Reconcile only the approved workspace root and narrow unit
+# drop-ins before the runtime is restarted.
+update_stage=workspace-access
+/bin/sh /opt/devmcp/deploy/install-project-workspace-access.sh
 update_stage=doctor
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
 # Remember the last successfully reloaded revision independently of the Git
@@ -63,6 +68,9 @@ if [ -f "$deployed_revision_file" ]; then
 fi
 if [ "$old" != "$new" ] || [ "$sql_cutover" -eq 1 ] || [ "$deployed_revision" != "$new" ]; then
     systemctl try-restart devmcp-worker.service devmcp-tunnel.service devmcp-pm2.service
+    if systemctl is-active --quiet devmcp-http.service; then
+        systemctl restart devmcp-http.service
+    fi
     printf '%s\n' "$new" > "$deployed_revision_file"
 fi
 # The web admin has a separate checkout; sync it on every scheduled run,
