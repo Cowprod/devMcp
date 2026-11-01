@@ -50,6 +50,10 @@ sql_cutover=0
 case "$sql_import_output" in
     *"SQL registry READY"*) sql_cutover=1 ;;
 esac
+# Preview-port reservations must exist before code that allocates a port is
+# reloaded. This fixed, idempotent migration never modifies existing rows.
+update_stage=preview-port-migration
+/usr/bin/php /opt/devmcp/bin/migrate-preview-port-reservations.php --execute MIGRATE_PREVIEW_PORTS
 # Provisioning runs inside systemd's read-only sandbox, unlike local CLI
 # diagnostics. Reconcile only the approved workspace root and narrow unit
 # drop-ins before the runtime is restarted.
