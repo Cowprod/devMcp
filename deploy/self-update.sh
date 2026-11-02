@@ -54,6 +54,9 @@ esac
 # reloaded. This fixed, idempotent migration never modifies existing rows.
 update_stage=preview-port-migration
 /usr/bin/php /opt/devmcp/bin/migrate-preview-port-reservations.php --execute MIGRATE_PREVIEW_PORTS
+# Runtime catalogue is data-only; never starts project servers during migration.
+update_stage=runtime-catalog-migration
+/usr/bin/php /opt/devmcp/bin/migrate-project-runtime-catalog.php --execute MIGRATE_PROJECT_RUNTIMES
 # Provisioning runs inside systemd's read-only sandbox, unlike local CLI
 # diagnostics. Reconcile only the approved workspace root and narrow unit
 # drop-ins before the runtime is restarted.

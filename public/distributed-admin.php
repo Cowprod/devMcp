@@ -200,6 +200,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $editor->updateMachine((string) ($_POST['machine_id'] ?? ''), (string) ($_POST['name'] ?? ''),
                     (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
                 break;
+            case 'project.runtime.select':
+                (new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($writer))->select(
+                    (string) ($_POST['project_id'] ?? ''),
+                    (string) ($_POST['runtime_type'] ?? ''),
+                    filter_var($_POST['revision'] ?? '', FILTER_VALIDATE_INT) !== false
+                        ? (int) $_POST['revision'] : -1
+                );
+                break;
             case 'project.update':
                 $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
                     (string) ($_POST['repository_url'] ?? ''));
@@ -241,6 +249,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
+                'project.runtime.select' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
                 'remote.readonly.enqueue' => 'projects', default => 'dashboard'
@@ -326,6 +335,19 @@ try {
     // In a staged rollout, the existing inventory remains readable.
     error_log('devmcp-admin preview port inventory unavailable: ' . get_class($exception));
 }
+// Runtime catalogue is optional until its DDL and read grants are applied.
+// No runtime process can be started through this projection.
+$runtimeTypes = [];
+$projectRuntimes = [];
+$runtimeCatalogueAvailable = false;
+try {
+    $catalog = new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($db);
+    $runtimeTypes = $catalog->types();
+    $projectRuntimes = $catalog->selections();
+    $runtimeCatalogueAvailable = true;
+} catch (PDOException $exception) {
+    error_log('devmcp-admin runtime catalogue unavailable: ' . get_class($exception));
+}
 // Keep distributed registry writes separate from local runtime definitions.
 $projectRows = [];
 foreach ($projects as $project) {
@@ -375,6 +397,14 @@ if (!is_string($previewIp) || filter_var($previewIp, FILTER_VALIDATE_IP, FILTER_
     $previewIp = '';
 }
 foreach ($projectRows as &$projectRow) {
+    $selected = $projectRuntimes[$projectRow['id']] ?? null;
+    $projectRow['runtime_type'] = $selected['runtime_type'] ?? '';
+    $projectRow['runtime_revision'] = $selected['revision'] ?? 0;
+    $projectRow['runtime_desired_state'] = $selected['desired_state'] ?? 'stopped';
+    $projectRow['runtime_configurable'] = $runtimeCatalogueAvailable
+        && ($projectRow['provisioning_state'] ?? null) === 'active'
+        && is_int($projectRow['preview_port'] ?? null)
+        && $projectRow['preview_port'] >= 1024;
     $port = $projectRow['preview_port'] ?? null;
     $host = $projectRow['provisioning_machine'] ?? '';
     // A reservation is not a server. Checks from TouchDeck's own network
@@ -589,13 +619,13 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
 <?php endif; ?>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
+<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th><th>Moteur</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1"><?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?></span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
-<td><?= e($project['repository_url'] ?: '—') ?></td></tr>
+<td><?= e($project['repository_url'] ?: '—') ?></td><td><?= e($project['runtime_type'] ?: 'Non configuré') ?><div class="small text-secondary">Configuration uniquement</div></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 </section>
@@ -988,9 +1018,10 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
-    projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
+    projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt','Moteur'], key:0, sub:2},
     deployments: {title:'Affectations', columns:['Projet','Machine','Répertoire','Exécution','Diagnostic','Branche','Commit','Contrôle UTC'], key:0, sub:1}
   };
   const registry = {};
@@ -1215,6 +1246,38 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     const canEdit=!!csrf && ((name==='machines'&&!!id)
         || (name==='projects'&&(row.dataset.registryEditable==='1'||(row.dataset.localProject==='1'&&document.documentElement.dataset.localInventoryFresh==='1')))
         || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
+    if(name==='projects'){
+      const runtimeCard=el('section','mt-4');
+      runtimeCard.appendChild(el('h3','h6','Moteur applicatif'));
+      const current=row.dataset.runtimeType||'';
+      runtimeCard.appendChild(el('p','small text-secondary',
+        'Choix enregistré : '+(current||'non configuré')+'. Le choix ne démarre aucun service et ne modifie pas le port réservé.'));
+      if(row.dataset.runtimeConfigurable==='1' && row.dataset.runtimeState!=='running'
+          && runtimeTypes.length && csrf){
+        const form=el('form');form.method='post';form.action='/';
+        [['csrf',csrf],['operation','project.runtime.select'],['project_id',row.cells[0].textContent.trim()],
+         ['revision',row.dataset.runtimeRevision||'0']].forEach(([key,value])=>{
+          const hidden=el('input');hidden.type='hidden';hidden.name=key;hidden.value=value;form.appendChild(hidden);
+        });
+        const group=el('div','input-group mb-2');
+        group.appendChild(el('span','input-group-text','Moteur'));
+        const select=el('select','form-select');select.name='runtime_type';select.required=true;
+        const empty=el('option','','Choisir un moteur');empty.value='';select.appendChild(empty);
+        runtimeTypes.forEach(type=>{
+          const option=el('option','',type.label+' ('+type.code+')');
+          option.value=type.code;select.appendChild(option);
+        });
+        select.value=current;group.appendChild(select);form.appendChild(group);
+        const save=el('button','btn btn-success','Enregistrer le choix');save.type='submit';form.appendChild(save);
+        runtimeCard.appendChild(form);
+      }else{
+        runtimeCard.appendChild(el('p','small text-secondary',
+          row.dataset.runtimeState==='running'
+            ? 'Arrêter le service avant de changer de moteur.'
+            : 'Moteur sélectionnable uniquement pour un projet actif avec port réservé et catalogue disponible.'));
+      }
+      body.appendChild(runtimeCard);
+    }
     if(canEdit){
       const card=el('div','mt-4'), title=el('h3','h6','Modifier les métadonnées');
       const form=el('form','');form.method='post';form.action='/';
