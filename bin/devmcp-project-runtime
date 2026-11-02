@@ -37,6 +37,8 @@ try {
         . 'JOIN dm_preview_port_reservation AS r '
         . 'ON r.project_id = p.project_id AND r.machine = p.machine '
         . 'JOIN dm_project_runtime AS x ON x.project_id = p.project_id '
+        . "JOIN dm_runtime_type AS t ON t.code = x.runtime_type "
+        . "AND t.supervisor = 'systemd' AND t.protocol = 'http' AND t.selectable = 1 "
         . 'WHERE p.project_id = ? LIMIT 1'
     );
     $query->execute([$argv[1]]);
@@ -71,6 +73,8 @@ try {
     echo 'devMcp service: ', $argv[1], ' ', $plan['runtime'], ' ',
         $ip, ':', $plan['port'], "\n";
     $process = new Process($plan['argv'], $plan['cwd'], $plan['env'], null, null);
+    // Application services are intentionally long-lived, unlike short MCP jobs.
+    $process->setTimeout(null);
     $process->run(static function (string $type, string $output): void {
         fwrite($type === Process::ERR ? STDERR : STDOUT, $output);
     });
