@@ -1246,6 +1246,38 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     const canEdit=!!csrf && ((name==='machines'&&!!id)
         || (name==='projects'&&(row.dataset.registryEditable==='1'||(row.dataset.localProject==='1'&&document.documentElement.dataset.localInventoryFresh==='1')))
         || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
+    if(name==='projects'){
+      const runtimeCard=el('section','mt-4');
+      runtimeCard.appendChild(el('h3','h6','Moteur applicatif'));
+      const current=row.dataset.runtimeType||'';
+      runtimeCard.appendChild(el('p','small text-secondary',
+        'Choix enregistré : '+(current||'non configuré')+'. Le choix ne démarre aucun service et ne modifie pas le port réservé.'));
+      if(row.dataset.runtimeConfigurable==='1' && row.dataset.runtimeState!=='running'
+          && runtimeTypes.length && csrf){
+        const form=el('form');form.method='post';form.action='/';
+        [['csrf',csrf],['operation','project.runtime.select'],['project_id',row.cells[0].textContent.trim()],
+         ['revision',row.dataset.runtimeRevision||'0']].forEach(([key,value])=>{
+          const hidden=el('input');hidden.type='hidden';hidden.name=key;hidden.value=value;form.appendChild(hidden);
+        });
+        const group=el('div','input-group mb-2');
+        group.appendChild(el('span','input-group-text','Moteur'));
+        const select=el('select','form-select');select.name='runtime_type';select.required=true;
+        const empty=el('option','','Choisir un moteur');empty.value='';select.appendChild(empty);
+        runtimeTypes.forEach(type=>{
+          const option=el('option','',type.label+' ('+type.code+')');
+          option.value=type.code;select.appendChild(option);
+        });
+        select.value=current;group.appendChild(select);form.appendChild(group);
+        const save=el('button','btn btn-success','Enregistrer le choix');save.type='submit';form.appendChild(save);
+        runtimeCard.appendChild(form);
+      }else{
+        runtimeCard.appendChild(el('p','small text-secondary',
+          row.dataset.runtimeState==='running'
+            ? 'Arrêter le service avant de changer de moteur.'
+            : 'Moteur sélectionnable uniquement pour un projet actif avec port réservé et catalogue disponible.'));
+      }
+      body.appendChild(runtimeCard);
+    }
     if(canEdit){
       const card=el('div','mt-4'), title=el('h3','h6','Modifier les métadonnées');
       const form=el('form','');form.method='post';form.action='/';
