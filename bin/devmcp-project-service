@@ -4,33 +4,57 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
-use Symfony\Component\Process\Process;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-// This entry point is invoked only through the project's explicit MCP action.
-// The project ID is derived from the action CWD, never from a caller parameter.
+// No sudo or shell access: the hardened MCP worker (NoNewPrivileges=true)
+// enqueues only one fixed operation for its own canonical local workspace.
+// A separate root-owned systemd timer revalidates SQL before any systemctl call.
 try {
     if (count($argv) !== 2 || !is_string($cwd = getcwd())) {
         throw new RuntimeException('Une opération de service est requise');
     }
-    $projectId = ProjectServiceRequestPolicy::projectFromCwd(
-        $cwd, '/srv/devmcp/workspaces'
-    );
-    ProjectServiceRequestPolicy::validate($argv[1], $projectId);
-    $process = new Process(
-        ['/usr/bin/sudo', '-n', '/usr/bin/php',
-            '/opt/devmcp/bin/devmcp-project-service-control', $argv[1], $projectId],
-        $cwd,
-        ['PATH' => '/usr/bin:/bin'],
-        null,
-        75
-    );
-    $process->run(static function (string $type, string $data): void {
-        fwrite($type === Process::ERR ? STDERR : STDOUT, substr($data, 0, 8192));
-    });
-    exit($process->getExitCode() ?? 1);
+    $id = ProjectServiceRequestPolicy::projectFromCwd($cwd, '/srv/devmcp/workspaces');
+    ProjectServiceRequestPolicy::validate($argv[1], $id);
+    $directory = '/var/lib/devmcp/project-service-requests';
+    $results = '/var/lib/devmcp/project-service-results';
+    if (!is_dir($directory) || !is_writable($directory)
+        || !is_dir($results) || !is_readable($results)
+        || is_link($directory) || is_link($results)) {
+        throw new RuntimeException('Contrôleur systemd local non installé');
+    }
+    $token = bin2hex(random_bytes(12));
+    $queue = $directory . '/' . $id . '.' . $token . '.json';
+    $tmp = $queue . '.tmp';
+    $payload = json_encode([
+        'project_id' => $id, 'operation' => $argv[1], 'request_id' => $token,
+        'issued_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
+    ], JSON_THROW_ON_ERROR);
+    umask(0077);
+    if (file_put_contents($tmp, $payload, LOCK_EX) !== strlen($payload)
+        || !rename($tmp, $queue)) {
+        @unlink($tmp);
+        throw new RuntimeException('Demande de service non enregistrée');
+    }
+    $result = $results . '/' . $token . '.json';
+    $deadline = microtime(true) + 65;
+    while (microtime(true) < $deadline) {
+        if (is_file($result) && !is_link($result) && filesize($result) <= 16384) {
+            $data = file_get_contents($result);
+            @unlink($result);
+            $answer = is_string($data) ? json_decode($data, true) : null;
+            if (!is_array($answer) || ($answer['request_id'] ?? null) !== $token
+                || ($answer['project_id'] ?? null) !== $id) {
+                throw new RuntimeException('Réponse du contrôleur invalide');
+            }
+            echo json_encode($answer, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";
+            exit(($answer['ok'] ?? false) === true ? 0 : 4);
+        }
+        usleep(250000);
+    }
+    fwrite(STDERR, "Contrôle de service encore en attente (aucun résultat root confirmé)\n");
+    exit(5);
 } catch (Throwable $error) {
-    fwrite(STDERR, 'Opération de service refusée : ', get_class($error), "\n");
+    fwrite(STDERR, 'Demande de service refusée : ', get_class($error), "\n");
     exit(2);
 }
