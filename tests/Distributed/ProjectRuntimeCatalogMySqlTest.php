@@ -81,6 +81,14 @@ final class ProjectRuntimeCatalogMySqlTest extends TestCase
         $catalog->select($this->id, 'php', 0);
     }
 
+    public function testPrivilegedPortCannotBeLinkedToRuntime(): void
+    {
+        $this->db->prepare('INSERT INTO dm_preview_port_reservation (project_id, machine, port) VALUES (?, ?, ?)')
+            ->execute([$this->id, 'touchdeck', 80]);
+        $this->expectException(InvalidArgumentException::class);
+        (new ProjectRuntimeCatalog($this->db))->select($this->id, 'php', 0);
+    }
+
     public function testSelectionIsPersistentAndRevisionProtected(): void
     {
         $this->reserve();
