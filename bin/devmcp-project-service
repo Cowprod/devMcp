@@ -1,0 +1,36 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+// This entry point is invoked only through the project's explicit MCP action.
+// The project ID is derived from the action CWD, never from a caller parameter.
+try {
+    if (count($argv) !== 2 || !is_string($cwd = getcwd())) {
+        throw new RuntimeException('Une opération de service est requise');
+    }
+    $projectId = ProjectServiceRequestPolicy::projectFromCwd(
+        $cwd, '/srv/devmcp/workspaces'
+    );
+    ProjectServiceRequestPolicy::validate($argv[1], $projectId);
+    $process = new Process(
+        ['/usr/bin/sudo', '-n', '/usr/bin/php',
+            '/opt/devmcp/bin/devmcp-project-service-control', $argv[1], $projectId],
+        $cwd,
+        ['PATH' => '/usr/bin:/bin'],
+        null,
+        75
+    );
+    $process->run(static function (string $type, string $data): void {
+        fwrite($type === Process::ERR ? STDERR : STDOUT, substr($data, 0, 8192));
+    });
+    exit($process->getExitCode() ?? 1);
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Opération de service refusée : ', get_class($error), "\n");
+    exit(2);
+}
