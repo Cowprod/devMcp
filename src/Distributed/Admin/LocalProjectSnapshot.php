@@ -169,6 +169,11 @@ final class LocalProjectSnapshot
                 $empty['reason'] = 'port de prévisualisation invalide';
                 return $empty;
             }
+            $httpLocal = $project['preview_http_local'] ?? null;
+            if ($httpLocal !== null && !in_array($httpLocal, ['http', 'tcp', 'offline'], true)) {
+                $empty['reason'] = 'état HTTP local invalide';
+                return $empty;
+            }
             if (isset($projects[$project['id']])) {
                 $empty['reason'] = 'projet local dupliqué';
                 return $empty;
