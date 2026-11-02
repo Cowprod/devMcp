@@ -29,6 +29,14 @@ return [
         'cwd' => '.', 'timeout' => 15, 'sync' => true,
     ],
 
+    // Test jobs have durable stdout/stderr and status via the existing MCP job API.
+    // No free-form command argument: only declared project test scripts are run.
+    'project.test' => [
+        'description' => 'Lance les tests déclarés du projet et publie un rapport horodaté dans job_output.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-test'],
+        'cwd' => '.', 'timeout' => 650, 'target' => 'local',
+    ],
+
     'git.status' => [
         'description' => 'Consulte les modifications locales du workspace.',
         'argv' => ['/usr/bin/git', 'status', '--short', '--branch'],
