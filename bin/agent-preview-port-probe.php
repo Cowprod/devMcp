@@ -40,6 +40,42 @@ final class PreviewPortProbe
         return $result;
     }
 
+    /**
+     * Identify a real active ZeroTier interface's IPv4 on the agent itself.
+     * The server separately verifies that this is the authenticated TLS
+     * connection's peer source IP; local interface data alone is insufficient.
+     *
+     * @param ?array<string,mixed> $interfaces Injectable for deterministic tests.
+     */
+    public static function zerotierIpv4(?array $interfaces = null): ?string
+    {
+        if ($interfaces === null) {
+            if (!function_exists('net_get_interfaces')) {
+                return null;
+            }
+            $interfaces = net_get_interfaces();
+        }
+        foreach ($interfaces as $name => $info) {
+            if (!is_string($name) || preg_match('/^zt[a-zA-Z0-9]{6,32}$/D', $name) !== 1
+                || !is_array($info) || ($info['up'] ?? false) !== true
+                || !is_array($info['unicast'] ?? null)) {
+                continue;
+            }
+            foreach ($info['unicast'] as $address) {
+                $ip = is_array($address) ? ($address['address'] ?? null) : null;
+                if (is_string($ip)
+                    && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+                    && !str_starts_with($ip, '127.')
+                    && !str_starts_with($ip, '169.254.')
+                    && $ip !== '0.0.0.0'
+                    && ((int) explode('.', $ip)[0]) < 224) {
+                    return $ip;
+                }
+            }
+        }
+        return null;
+    }
+
     private static function bindable(int $port): bool
     {
         $listener = @stream_socket_server(
