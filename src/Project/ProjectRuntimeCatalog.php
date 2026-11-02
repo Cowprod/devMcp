@@ -104,6 +104,12 @@ final class ProjectRuntimeCatalog
                 }
                 $revision = $expectedRevision + 1;
             }
+            // Record the choice atomically; selection never starts a service.
+            $audit = $this->db->prepare(
+                "INSERT INTO dm_audit_event (actor,event_type,object_type,object_id,outcome) "
+                . "VALUES ('web-admin','project.runtime.select','project',?,'success')"
+            );
+            $audit->execute([$projectId]);
             $this->db->commit();
             return [
                 'project_id' => $projectId, 'runtime_type' => $type,
