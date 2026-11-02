@@ -1,0 +1,90 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+// Runs only predeclared project test commands from the project workspace.
+// Stdout/stderr are streamed into the existing bounded devMcp job log store.
+if (count($argv) !== 1) {
+    fwrite(STDERR, "No command arguments accepted\n");
+    exit(2);
+}
+$cwd = getcwd();
+if (!is_string($cwd) || ($root = realpath($cwd)) === false || $root !== $cwd) {
+    fwrite(STDERR, "Project workspace unavailable\n");
+    exit(2);
+}
+$mode = 'none';
+$argvToRun = null;
+$package = $root . '/package.json';
+$composer = $root . '/composer.json';
+if (is_file($package) && !is_link($package)) {
+    $data = json_decode(file_get_contents($package) ?: '', true);
+    if (!is_array($data)) {
+        fwrite(STDERR, "Invalid package.json\n");
+        exit(2);
+    }
+    if (isset($data['scripts']['test']) && is_string($data['scripts']['test'])
+        && trim($data['scripts']['test']) !== '') {
+        $mode = 'node';
+        $argvToRun = ['/usr/bin/npm', 'run', 'test'];
+    }
+}
+if ($argvToRun === null && is_file($composer) && !is_link($composer)) {
+    $data = json_decode(file_get_contents($composer) ?: '', true);
+    if (!is_array($data)) {
+        fwrite(STDERR, "Invalid composer.json\n");
+        exit(2);
+    }
+    if (isset($data['scripts']['test'])) {
+        $mode = 'php-composer';
+        $argvToRun = ['/usr/bin/composer', 'run-script', '--no-interaction', 'test'];
+    }
+}
+if ($argvToRun === null && is_file($root . '/vendor/bin/phpunit')
+    && !is_link($root . '/vendor/bin/phpunit')
+    && (is_file($root . '/phpunit.xml') || is_file($root . '/phpunit.xml.dist'))) {
+    $mode = 'phpunit';
+    $argvToRun = [PHP_BINARY, $root . '/vendor/bin/phpunit'];
+}
+if ($argvToRun === null && is_file($root . '/pyproject.toml')
+    && is_dir($root . '/tests') && !is_link($root . '/tests')) {
+    $mode = 'python-unittest';
+    $argvToRun = ['/usr/bin/python3', '-m', 'unittest', 'discover', '-s', 'tests', '-v'];
+}
+
+$report = [
+    'schema_version' => 1,
+    'kind' => 'project_test',
+    'mode' => $mode,
+    'started_at_utc' => gmdate('Y-m-d\TH:i:s\Z'),
+];
+if ($argvToRun === null) {
+    $report['status'] = 'not_configured';
+    $report['exit_code'] = 3;
+    echo 'DEVMCP_TEST_REPORT ', json_encode($report, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), "\n";
+    fwrite(STDERR, "No test runner declared. Add a package.json test script, a composer.json test script, phpunit.xml, or Python unittest tests.\n");
+    exit(3);
+}
+echo "Test runner: {$mode}\n";
+$started = hrtime(true);
+try {
+    $process = new Process($argvToRun, $root, ['CI' => 'true'], null, 600);
+    $process->run(static function (string $type, string $buffer): void {
+        fwrite($type === Process::ERR ? STDERR : STDOUT, $buffer);
+    });
+    $code = $process->getExitCode() ?? 1;
+} catch (Throwable $error) {
+    // No environment variables, credentials or command line details in errors.
+    fwrite(STDERR, 'Test runner failed: ' . get_class($error) . "\n");
+    $code = 1;
+}
+$report['duration_ms'] = (int) ((hrtime(true) - $started) / 1000000);
+$report['status'] = $code === 0 ? 'passed' : 'failed';
+$report['exit_code'] = $code;
+echo "\nDEVMCP_TEST_REPORT ", json_encode($report, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), "\n";
+exit($code);
