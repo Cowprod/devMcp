@@ -1,0 +1,28 @@
+[Unit]
+Description=devMcp project application %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=devmcp
+Group=devmcp
+Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
+Environment=HOME=/var/lib/devmcp
+WorkingDirectory=/opt/devmcp
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-project-runtime %i
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/devmcp/workspaces
+UMask=0077
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target
