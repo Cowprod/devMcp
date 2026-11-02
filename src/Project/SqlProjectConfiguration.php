@@ -19,7 +19,7 @@ final class SqlProjectConfiguration
         'git.status', 'git.head', 'workspace.list',
         'workspace.stat', 'workspace.read', 'workspace.find',
         'workspace.sync',
-        'project.test',
+        'project.test', 'project.service',
     ];
 
     public function __construct(private readonly PDO $db) {}

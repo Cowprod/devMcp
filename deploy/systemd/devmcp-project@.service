@@ -4,12 +4,15 @@ After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=120
 StartLimitBurst=3
+StartLimitIntervalSec=120
+StartLimitBurst=3
 
 [Service]
 Type=simple
 User=devmcp
 Group=devmcp
 Environment=DEVMCP_CONFIG=/etc/devmcp/global.php
+EnvironmentFile=-/etc/devmcp/project-env/%i.env
 Environment=HOME=/var/lib/devmcp-project-%i
 StateDirectory=devmcp-project-%i
 WorkingDirectory=/opt/devmcp

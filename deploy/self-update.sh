@@ -52,6 +52,10 @@ case "$sql_import_output" in
 esac
 # Publish the standard test action after SQL import, without changing legacy
 # manual projects. This only configures a job action; no tests run on deploy.
+# Register the restricted local service action before other action migrations.
+# No application is started by registering an action.
+update_stage=project-service-action
+/usr/bin/php /opt/devmcp/bin/migrate-project-service-action.php --execute MIGRATE_PROJECT_SERVICE
 update_stage=project-test-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-test-action.php --execute MIGRATE_PROJECT_TEST
 # Preview-port reservations must exist before code that allocates a port is
@@ -69,6 +73,10 @@ update_stage=agent-zerotier-address-migration
 # drop-ins before the runtime is restarted.
 update_stage=workspace-access
 /bin/sh /opt/devmcp/deploy/install-project-workspace-access.sh
+# Install the fixed root-owned request processor; project instances remain disabled
+# until explicitly selected and started through the typed MCP action.
+update_stage=project-service-install
+/bin/sh /opt/devmcp/deploy/install-project-service-control.sh
 update_stage=doctor
 DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
 # Remember the last successfully reloaded revision independently of the Git
