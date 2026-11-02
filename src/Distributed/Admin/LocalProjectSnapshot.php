@@ -197,6 +197,9 @@ final class LocalProjectSnapshot
                 'actions' => $project['actions'],
                 'action_details' => $actionDetails,
                 'preview_port' => $previewPort,
+                'preview_http_local' => $httpLocal,
+                'preview_http_zerotier_host' => $httpZeroTierHost,
+                'preview_http_checked_at_utc' => $httpCheckedAt,
             ];
         }
         return [
