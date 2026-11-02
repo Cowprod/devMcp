@@ -250,6 +250,14 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         'note' => 'HTTP sondé seulement depuis la machine locale; pair distant non testé'], $health);
 }
 
+// Results are root-owned and readable by devmcp, never writable by it.
+// Prune old results without trusting worker-controlled file names.
+foreach (glob($results . '/*.json') ?: [] as $oldResult) {
+    if (!is_link($oldResult) && is_file($oldResult)
+        && (filemtime($oldResult) ?: 0) < time() - 600) {
+        @unlink($oldResult);
+    }
+}
 $files = glob($requests . '/*.json') ?: [];
 usort($files, static fn(string $a, string $b): int =>
     (filemtime($a) ?: 0) <=> (filemtime($b) ?: 0));
@@ -275,6 +283,11 @@ foreach (array_slice($files, 0, 3) as $file) {
     $request = is_string($data) ? json_decode($data, true) : null;
     $id = $matched[1];
     $token = $matched[2];
+    $issued = is_array($request) ? strtotime((string) ($request['issued_at_utc'] ?? '')) : false;
+    if ($issued === false || abs(time() - $issued) > 90) {
+        @unlink($file);
+        continue; // Stale requests never execute after a delayed restart.
+    }
     if (!is_array($request) || ($request['project_id'] ?? null) !== $id
         || ($request['request_id'] ?? null) !== $token) {
         @unlink($file);
