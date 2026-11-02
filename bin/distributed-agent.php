@@ -59,6 +59,74 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
+// Only an ACTIVE server-assigned project may request a TCP port. The agent
+// probes its own IPv4 network namespace; central never probes a remote host.
+$previewRequests = $data['preview_port_requests'] ?? [];
+if (!is_array($previewRequests) || count($previewRequests) > 8) {
+    fwrite(STDERR, "devMcp: invalid preview request list\n");
+    exit(1);
+}
+$probePath = __DIR__ . '/agent-preview-port-probe.php';
+if ($previewRequests !== [] && is_file($probePath) && !is_link($probePath)) {
+    require_once $probePath;
+    foreach ($previewRequests as $request) {
+        if (!is_array($request)
+            || preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', (string) ($request['project_id'] ?? '')) !== 1
+            || !is_int($request['min'] ?? null) || !is_int($request['max'] ?? null)) {
+            fwrite(STDERR, "devMcp: invalid agent preview task\n");
+            continue;
+        }
+        try {
+            $candidates = \Cowprod\DevMcp\Agent\PreviewPortProbe::candidates(
+                $request['min'], $request['max']
+            );
+        } catch (\InvalidArgumentException) {
+            fwrite(STDERR, "devMcp: invalid preview port range\n");
+            continue;
+        }
+        if ($candidates === []) {
+            fwrite(STDERR, "devMcp: no bindable preview port in sampled range\n");
+            continue;
+        }
+        $claimBody = json_encode([
+            'protocol_version' => 1,
+            'preview_port_claim' => [
+                'project_id' => $request['project_id'],
+                'ports' => $candidates,
+            ],
+        ], JSON_THROW_ON_ERROR);
+        $claimHandle = curl_init($server . '/v1/agent/ping');
+        curl_setopt_array($claimHandle, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => $claimBody,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $credential,
+                'X-DevMcp-Machine: ' . $config['machine_id'],
+            ],
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_CAINFO => $config['ca_file'], CURLOPT_FOLLOWLOCATION => false,
+        ]);
+        $claimResult = curl_exec($claimHandle);
+        $claimStatus = curl_getinfo($claimHandle, CURLINFO_RESPONSE_CODE);
+        curl_close($claimHandle);
+        if (!is_string($claimResult) || $claimStatus !== 200) {
+            fwrite(STDERR, "devMcp: preview port reservation request rejected\n");
+            continue;
+        }
+        $claimResponse = json_decode($claimResult, true, 8);
+        $reservation = is_array($claimResponse) ? ($claimResponse['preview_port_claim'] ?? null) : null;
+        if (!is_array($reservation)
+            || ($reservation['project_id'] ?? null) !== $request['project_id']
+            || ($reservation['state'] ?? null) !== 'reserved'
+            || !is_int($reservation['port'] ?? null)
+            || !in_array($reservation['port'], $candidates, true)) {
+            fwrite(STDERR, "devMcp: invalid preview port reservation acknowledgement\n");
+            continue;
+        }
+        fwrite(STDOUT, "devMcp: preview TCP port reserved (HTTP service not verified)\n");
+    }
+}
 // No remote jobs: only bounded, read-only inspection of registered workspaces.
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];

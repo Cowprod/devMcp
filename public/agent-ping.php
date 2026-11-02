@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
+use Cowprod\DevMcp\Project\RemotePreviewPortClaims;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -16,14 +17,25 @@ try {
         || strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])) !== 'application/json') {
         throw new RuntimeException('Invalid transport');
     }
+    // The existing ZeroTier-only Nginx location permits up to 1 KiB.
     $body = file_get_contents('php://input', false, null, 0, 1025);
     if (!is_string($body) || strlen($body) > 1024) {
         throw new RuntimeException('Invalid body');
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
-    if (!is_array($payload) || $payload !== ['protocol_version' => 1]) {
+    if (!is_array($payload) || ($payload['protocol_version'] ?? null) !== 1
+        || count($payload) < 1 || count($payload) > 2
+        || array_diff(array_keys($payload), ['protocol_version', 'preview_port_claim']) !== []) {
         throw new RuntimeException('Invalid protocol');
     }
+    $claim = $payload['preview_port_claim'] ?? null;
+    if (array_key_exists('preview_port_claim', $payload)
+        && (!is_array($claim) || count($claim) !== 2
+            || array_diff(array_keys($claim), ['project_id', 'ports']) !== []
+            || !is_string($claim['project_id'] ?? null) || !is_array($claim['ports'] ?? null))) {
+        throw new RuntimeException('Invalid preview claim');
+    }
+
     $headers = [];
     foreach (getallheaders() as $name => $value) {
         $headers[strtolower($name)] = $value;
@@ -34,6 +46,7 @@ try {
         || !is_string($auth) || preg_match('/^Bearer ([a-f0-9]{64})$/D', $auth, $match) !== 1) {
         throw new RuntimeException('Invalid identity');
     }
+
     $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
     if (!is_string($configPath) || !is_file($configPath)) {
         throw new RuntimeException('Unavailable');
@@ -47,7 +60,8 @@ try {
         (string) $config['writer_username'],
         (string) $config['writer_password'],
     );
-    (new AgentAuthenticator($db))->authenticate($machineId, $match[1], true);
+    // Pending agents may heartbeat but MUST NOT reserve ports.
+    (new AgentAuthenticator($db))->authenticate($machineId, $match[1], $claim === null);
     $statement = $db->prepare(
         "UPDATE dm_machine SET last_seen_at = UTC_TIMESTAMP(6) WHERE id = ? AND status IN ('pending','active')"
     );
@@ -55,17 +69,48 @@ try {
     if ($statement->rowCount() !== 1) {
         throw new RuntimeException('Machine not found');
     }
+
     $deployments = [];
     // Reporting is read-only and independent from remote execution approval.
-    // Only deployments assigned to this authenticated machine are returned.
     $query = $db->prepare('SELECT id, workspace_path FROM dm_deployment WHERE machine_id = ? ORDER BY id LIMIT 32');
     $query->execute([$machineId]);
     while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
         $deployments[] = ['id' => $row['id'], 'workspace_path' => $row['workspace_path']];
     }
-    echo json_encode(['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments], JSON_THROW_ON_ERROR);
+
+    $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments];
+    $portConfig = is_array($config['preview_ports'] ?? null) ? $config['preview_ports'] : [];
+    if (($portConfig['enabled'] ?? true) !== false) {
+        $min = $portConfig['min'] ?? 12000;
+        $max = $portConfig['max'] ?? 19999;
+        if (!is_int($min) || !is_int($max)) {
+            throw new RuntimeException('Invalid remote preview port configuration');
+        }
+        $ports = new RemotePreviewPortClaims($db, $min, $max);
+        if ($claim !== null) {
+            // The agent tested these exact ports on its OWN machine. No remote
+            // socket probing or user-selected port occurs on the central host.
+            $response['preview_port_claim'] = $ports->reserve($machineId, $claim['project_id'], $claim['ports']);
+        }
+        try {
+            $pending = $ports->pending($machineId);
+            $response['preview_port_requests'] = array_map(
+                static fn(string $id): array => ['project_id' => $id, 'min' => $min, 'max' => $max],
+                $pending,
+            );
+        } catch (PDOException $exception) {
+            // During a staged rollout, an absent port migration must not
+            // break the existing authenticated agent connectivity heartbeat.
+            if ($claim !== null) {
+                throw $exception;
+            }
+            error_log('devmcp-agent-preview-pending: ' . get_class($exception));
+            $response['preview_port_requests'] = [];
+        }
+    }
+    echo json_encode($response, JSON_THROW_ON_ERROR);
 } catch (Throwable $exception) {
-    // Never expose internal details to the agent; record a bounded server-side diagnostic.
+    // No SQL errors, credentials, port candidates or paths cross the boundary.
     error_log('devmcp-agent-ping: ' . get_class($exception) . ': ' . substr($exception->getMessage(), 0, 300));
     http_response_code(400);
     echo '{"error":"invalid_agent_request"}';
