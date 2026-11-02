@@ -44,6 +44,8 @@ final class ProjectRuntimeCatalogMySqlTest extends TestCase
         if ($this->db->inTransaction()) {
             $this->db->rollBack();
         }
+        $this->db->prepare("DELETE FROM dm_audit_event WHERE event_type = 'project.runtime.select' AND object_id = ?")
+            ->execute([$this->id]);
         foreach (['dm_project_runtime', 'dm_preview_port_reservation', 'dm_project_provisioning'] as $table) {
             $this->db->prepare('DELETE FROM ' . $table . ' WHERE project_id = ?')->execute([$this->id]);
         }
