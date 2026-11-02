@@ -45,6 +45,23 @@ final class AgentPreviewPortProbeTest extends TestCase
         }
     }
 
+    public function testSelectsOnlyTheIPv4OfAnUpZeroTierInterface(): void
+    {
+        $interfaces = [
+            'eth0' => ['up' => true, 'unicast' => [['address' => '10.0.0.1']]],
+            'zt1234abcd' => ['up' => false, 'unicast' => [['address' => '192.168.194.10']]],
+            'ztABC123ef' => ['up' => true, 'unicast' => [
+                ['address' => 'fd00::1234'],
+                ['address' => '192.168.194.22'],
+            ]],
+        ];
+        self::assertSame('192.168.194.22', PreviewPortProbe::zerotierIpv4($interfaces));
+        self::assertNull(PreviewPortProbe::zerotierIpv4(['eth0' => $interfaces['eth0']]));
+        self::assertNull(PreviewPortProbe::zerotierIpv4([
+            'zt1234abcd' => ['up' => true, 'unicast' => [['address' => '127.0.0.1']]],
+        ]));
+    }
+
     public function testRejectsPrivilegedOrInvalidBounds(): void
     {
         foreach ([[80, 81, 1], [19999, 12000, 1], [12000, 65536, 1], [12000, 12001, 17]] as $invalid) {
