@@ -1357,6 +1357,106 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             ? 'Arrêter le service avant de changer de moteur.'
             : 'Moteur sélectionnable uniquement pour un projet actif avec port réservé et catalogue disponible.'));
       }
+      if(row.dataset.serviceControl==='1'){
+        const controls=el('div','mt-3');
+        controls.appendChild(el('h4','h6','Service local (systemd)'));
+        controls.appendChild(el('p','small text-secondary',
+          'Pilotage du projet local uniquement, via actions MCP contrôlées. Le port reste réservé en base. Aucun accès distant ZeroTier n’est présumé.'));
+        const stateLine=el('div','mb-2');
+        const badge=el('span','badge bg-secondary','État non interrogé');
+        stateLine.appendChild(badge);controls.appendChild(stateLine);
+        const toolbar=el('div','d-flex flex-wrap gap-2');
+        const buttons={};
+        [
+          ['start','Démarrer','btn-success'],
+          ['stop','Arrêter','btn-danger'],
+          ['restart','Redémarrer','btn-success'],
+          ['status','Actualiser le statut','btn-secondary'],
+          ['logs','Lire les journaux','btn-secondary']
+        ].forEach(([operation,label,variant])=>{
+          const button=el('button','btn btn-sm '+variant,label);
+          button.type='button';button.dataset.serviceOperation=operation;
+          toolbar.appendChild(button);buttons[operation]=button;
+        });
+        controls.appendChild(toolbar);
+        const details=el('pre','small bg-dark text-light rounded p-2 mt-2 text-break d-none');
+        details.style.whiteSpace='pre-wrap';controls.appendChild(details);
+        let activeOperation=false;
+        const refreshButtons=()=>{
+          const running=row.dataset.runtimeState==='running';
+          buttons.start.hidden=running||!row.dataset.runtimeType;
+          buttons.stop.hidden=!running;
+          buttons.restart.hidden=!running;
+          Object.values(buttons).forEach(button=>{button.disabled=activeOperation;});
+        };
+        const projectId=row.cells[0].textContent.trim();
+        async function api(url,options={}){
+          const response=await fetch(url,{credentials:'same-origin',cache:'no-store',...options});
+          let result;
+          try{result=await response.json();}catch(_){throw new Error('Réponse JSON du service invalide.');}
+          if(!response.ok)throw new Error(result.error||'Service MCP indisponible (HTTP '+response.status+').');
+          return result;
+        }
+        async function run(operation){
+          if(activeOperation)return;
+          activeOperation=true;refreshButtons();
+          badge.className='badge bg-info text-dark';
+          badge.textContent='Demande '+operation+' en cours…';
+          details.classList.add('d-none');
+          try{
+            const data=new FormData();
+            data.set('csrf',csrf);
+            data.set('project_id',projectId);
+            data.set('service_operation',operation);
+            const started=await api('/?project_service_api=request',{method:'POST',body:data});
+            if(!/^[a-f0-9]{32}$/.test(started.job_id||''))throw new Error('Tâche non confirmée.');
+            let result=null;
+            for(let retry=0;retry<45;retry++){
+              await new Promise(resolve=>setTimeout(resolve,2000));
+              result=await api('/?project_service_api=poll&project_id='
+                +encodeURIComponent(projectId)+'&job_id='+encodeURIComponent(started.job_id));
+              if(!['queued','running'].includes(result.status))break;
+              badge.textContent='Tâche '+result.status+'…';
+            }
+            if(!result||['queued','running'].includes(result.status))throw new Error('Contrôle toujours en cours : consulter le journal devMcp.');
+            let payload=null;
+            try{payload=JSON.parse(result.stdout||'');}catch(_){/* error/empty output */}
+            if(result.status!=='succeeded'||payload?.ok!==true){
+              throw new Error('Contrôle non validé ('+result.status+')'
+                +(payload?.error ? ' : '+payload.error : (result.stderr ? ' : '+result.stderr.slice(0,200) : '')));
+            }
+            if(typeof payload.desired_state==='string')row.dataset.runtimeState=payload.desired_state;
+            const live=payload.service?.ActiveState==='active';
+            const httpOK=payload.http_checked===true&&payload.http_status===200;
+            badge.className='badge '+(live&&httpOK?'bg-success':live?'bg-warning text-dark':'bg-secondary');
+            badge.textContent=live
+              ? 'Actif'+(payload.http_checked?' · HTTP '+(payload.http_status??'indisponible'):' · HTTP non vérifié')
+              : (payload.service?.ActiveState||payload.desired_state||'Opération terminée');
+            const rendered=operation==='logs'
+              ? (payload.logs||'Aucun journal disponible.')
+              : ['État souhaité : '+(payload.desired_state||'non communiqué'),
+                 'systemd : '+(payload.service?.ActiveState||'non communiqué'),
+                 'PID : '+(payload.service?.MainPID||'—'),
+                 'HTTP local sur ZeroTier : '+(payload.http_checked?String(payload.http_status??'indisponible'):'non vérifié'),
+                 'Accès depuis un pair ZeroTier distinct : non testé'].join('\n');
+            details.textContent=rendered;
+            details.classList.remove('d-none');
+          }catch(error){
+            badge.className='badge bg-danger';
+            badge.textContent='Échec du contrôle';
+            details.textContent=error instanceof Error?error.message:'Erreur du service.';
+            details.classList.remove('d-none');
+          }finally{
+            activeOperation=false;refreshButtons();
+          }
+        }
+        Object.entries(buttons).forEach(([operation,button])=>{
+          button.addEventListener('click',()=>{void run(operation);});
+        });
+        refreshButtons();
+        runtimeCard.appendChild(controls);
+        void run('status');
+      }
       body.appendChild(runtimeCard);
     }
     if(canEdit){
