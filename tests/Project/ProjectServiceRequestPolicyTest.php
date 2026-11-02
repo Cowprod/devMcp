@@ -50,8 +50,12 @@ final class ProjectServiceRequestPolicyTest extends TestCase
     public function testRejectsArbitraryOperationsAndUnitNames(): void
     {
         foreach (['start;sh', 'start --now', 'enable', '', 'delete'] as $operation) {
-            $this->expectException(InvalidArgumentException::class);
-            ProjectServiceRequestPolicy::validate($operation, 'chattrackme');
+            try {
+                ProjectServiceRequestPolicy::validate($operation, 'chattrackme');
+                self::fail('Invalid operation allowed: ' . $operation);
+            } catch (InvalidArgumentException) {
+                self::assertTrue(true);
+            }
         }
     }
 
