@@ -619,13 +619,13 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 Les projets locaux sont consultables ici en lecture seule ; leur configuration et leurs actions restent sous le contrôle de devMcp.</p>
 <?php endif; ?>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
-<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th></tr></thead><tbody>
+<thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th><th>Moteur</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1"><?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?></span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
-<td><?= e($project['repository_url'] ?: '—') ?></td></tr>
+<td><?= e($project['repository_url'] ?: '—') ?></td><td><?= e($project['runtime_type'] ?: 'Non configuré') ?><div class="small text-secondary">Configuration uniquement</div></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 </section>
@@ -1020,7 +1020,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
-    projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt'], key:0, sub:2},
+    projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt','Moteur'], key:0, sub:2},
     deployments: {title:'Affectations', columns:['Projet','Machine','Répertoire','Exécution','Diagnostic','Branche','Commit','Contrôle UTC'], key:0, sub:1}
   };
   const registry = {};
