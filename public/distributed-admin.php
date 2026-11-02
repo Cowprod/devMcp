@@ -360,26 +360,10 @@ foreach ($localSnapshot['projects'] as $project) {
 }
 // Surface journal entries alongside registry and local projects without granting actions.
 $projectRows = \Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection::merge($projectRows, $provisioningRows);
-// The web SQL account may not have SELECT on preview reservations. A fresh
-// privileged local snapshot can supply the same reservation without widening
-// SQL grants. Never use a stale snapshot, another machine or an inactive project.
-if ($localFresh) {
-    $snapshotHost = $localSnapshot['host']['name'] ?? null;
-    foreach ($localSnapshot['projects'] as $localProject) {
-        $id = $localProject['id'];
-        $port = $localProject['preview_port'] ?? null;
-        if (!is_int($port) || !isset($projectRows[$id])) {
-            continue;
-        }
-        if (($projectRows[$id]['provisioning_state'] ?? null) !== 'active'
-            || ($projectRows[$id]['provisioning_machine'] ?? null) !== $snapshotHost) {
-            continue;
-        }
-        if (!is_int($projectRows[$id]['preview_port'] ?? null)) {
-            $projectRows[$id]['preview_port'] = $port;
-        }
-    }
-}
+// The unprivileged Web account may lack SELECT on preview reservations.
+$projectRows = \\Cowprod\\DevMcp\\Distributed\\Admin\\ProvisioningProjectProjection::applyLocalPreviewPorts(
+    $projectRows, $localSnapshot, $localFresh
+);
 // Prefer an explicitly configured IP; TouchDeck's known ZeroTier IP is a
 // local-lab fallback, never an address inferred for remote agents.
 $previewIp = $config['preview_zerotier_ipv4'] ?? '';
