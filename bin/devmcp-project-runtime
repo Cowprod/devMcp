@@ -1,0 +1,85 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Project\ProjectServiceLaunchPlan;
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+// A fixed systemd template invokes this program with a validated project ID.
+// Only SQL-selected runtimes and project-local paths can be executed.
+if (count($argv) !== 2 || preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $argv[1]) !== 1) {
+    fwrite(STDERR, "Project identifier invalid\n");
+    exit(2);
+}
+try {
+    $configFile = getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php';
+    if (!is_readable($configFile) || !is_array($config = require $configFile)) {
+        throw new RuntimeException('Project configuration unavailable');
+    }
+    $sqlFile = $config['distributed']['config_path']
+        ?? (getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php');
+    if (!is_string($sqlFile) || !is_readable($sqlFile)
+        || !is_array($sql = require $sqlFile)) {
+        throw new RuntimeException('Database configuration unavailable');
+    }
+    $db = DatabaseConnection::connect(
+        (string) $sql['dsn'], (string) $sql['writer_username'],
+        (string) $sql['writer_password']
+    );
+    $query = $db->prepare(
+        'SELECT p.project_id, p.state, p.machine, p.workspace_path, p.actions_enabled, '
+        . 'r.port, x.runtime_type, x.entrypoint, x.document_root, x.desired_state '
+        . 'FROM dm_project_provisioning AS p '
+        . 'JOIN dm_preview_port_reservation AS r '
+        . 'ON r.project_id = p.project_id AND r.machine = p.machine '
+        . 'JOIN dm_project_runtime AS x ON x.project_id = p.project_id '
+        . "JOIN dm_runtime_type AS t ON t.code = x.runtime_type "
+        . "AND t.supervisor = 'systemd' AND t.protocol = 'http' AND t.selectable = 1 "
+        . 'WHERE p.project_id = ? LIMIT 1'
+    );
+    $query->execute([$argv[1]]);
+    $record = $query->fetch(PDO::FETCH_ASSOC);
+    $hostname = gethostname();
+    if (!is_array($record) || !is_string($hostname)
+        || $record['machine'] !== $hostname
+        || (int) $record['actions_enabled'] !== 1) {
+        throw new RuntimeException('Project not authorized on this host');
+    }
+    $record['port'] = (int) $record['port'];
+    $root = $config['project_provisioning']['local_workspace_root']
+        ?? '/srv/devmcp/workspaces';
+    if (!is_string($root)) {
+        throw new RuntimeException('Workspace root invalid');
+    }
+    // A service must bind a verified local ZeroTier interface, not 0.0.0.0.
+    $ip = $config['preview_zerotier_ipv4']
+        ?? ($hostname === 'touchdeck' ? '192.168.194.189' : null);
+    if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+        throw new RuntimeException('ZeroTier IPv4 unavailable');
+    }
+    $probe = @stream_socket_server(
+        'tcp://' . $ip . ':0', $errno, $message,
+        STREAM_SERVER_BIND | STREAM_SERVER_LISTEN
+    );
+    if ($probe === false) {
+        throw new RuntimeException('ZeroTier address not assigned locally');
+    }
+    fclose($probe);
+    $plan = ProjectServiceLaunchPlan::build($record, $root, $ip);
+    echo 'devMcp service: ', $argv[1], ' ', $plan['runtime'], ' ',
+        $ip, ':', $plan['port'], "\n";
+    $process = new Process($plan['argv'], $plan['cwd'], $plan['env'], null, null);
+    // Application services are intentionally long-lived, unlike short MCP jobs.
+    $process->setTimeout(null);
+    $process->run(static function (string $type, string $output): void {
+        fwrite($type === Process::ERR ? STDERR : STDOUT, $output);
+    });
+    exit($process->getExitCode() ?? 1);
+} catch (Throwable $exception) {
+    fwrite(STDERR, 'devMcp service unavailable: ', get_class($exception), "\n");
+    exit(1);
+}
