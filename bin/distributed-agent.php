@@ -59,6 +59,41 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
+// Advertise the actual zt-interface IP only when the central server has
+// negotiated support. This keeps upgraded agents compatible with older cores.
+$probePath = __DIR__ . '/agent-preview-port-probe.php';
+if (($data['zerotier_address_supported'] ?? false) === true
+    && is_file($probePath) && !is_link($probePath)) {
+    require_once $probePath;
+    $interfaceIp = \Cowprod\DevMcp\Agent\PreviewPortProbe::zerotierIpv4();
+    if (is_string($interfaceIp)) {
+        $addressBody = json_encode([
+            'protocol_version' => 1, 'zerotier_ipv4' => $interfaceIp,
+        ], JSON_THROW_ON_ERROR);
+        $addressHandle = curl_init($server . '/v1/agent/ping');
+        curl_setopt_array($addressHandle, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => $addressBody,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $credential,
+                'X-DevMcp-Machine: ' . $config['machine_id'],
+            ],
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_CAINFO => $config['ca_file'],
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+        $addressResult = curl_exec($addressHandle);
+        $addressStatus = curl_getinfo($addressHandle, CURLINFO_RESPONSE_CODE);
+        curl_close($addressHandle);
+        $addressReply = is_string($addressResult) ? json_decode($addressResult, true, 8) : null;
+        if ($addressStatus !== 200
+            || !is_array($addressReply)
+            || ($addressReply['zerotier_address_saved'] ?? false) !== true) {
+            fwrite(STDERR, "devMcp: ZeroTier peer IPv4 not verified by central server\n");
+        }
+    }
+}
 // Only an ACTIVE server-assigned project may request a TCP port. The agent
 // probes its own IPv4 network namespace; central never probes a remote host.
 $previewRequests = $data['preview_port_requests'] ?? [];
