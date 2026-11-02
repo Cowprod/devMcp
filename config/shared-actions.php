@@ -29,6 +29,22 @@ return [
         'cwd' => '.', 'timeout' => 15, 'sync' => true,
     ],
 
+    // Privileged systemd operations go through an unprivileged bounded queue.
+    // A root-owned timer rechecks SQL and the reserved port before any action.
+    'project.service' => [
+        'description' => 'Gestion locale du service applicatif (choix Node, start, stop, restart, status, logs).',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-service',
+            ['param' => 'operation']],
+        'cwd' => '.', 'timeout' => 85, 'target' => 'local',
+        'parameters' => [
+            'operation' => [
+                'type' => 'enum',
+                'description' => 'Opération bornée; aucune commande shell autorisée.',
+                'values' => ['select-node', 'start', 'stop', 'restart', 'status', 'logs'],
+            ],
+        ],
+    ],
+
     // Test jobs have durable stdout/stderr and status via the existing MCP job API.
     // No free-form command argument: only declared project test scripts are run.
     'project.test' => [
