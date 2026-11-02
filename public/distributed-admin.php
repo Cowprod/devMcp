@@ -1018,6 +1018,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
     projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt','Moteur'], key:0, sub:2},
