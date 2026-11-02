@@ -34,6 +34,7 @@ jobs:
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261031_project_provisioning.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261031_sql_project_registry.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261101_preview_port_reservation.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261102_project_runtime_catalog.sql
       - name: SQL integration tests
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
@@ -61,6 +62,20 @@ jobs:
           DEVMCP_TEST_MYSQL_USER: devmcp_test
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
         run: vendor/bin/phpunit tests/Distributed/PreviewPortMigrationTest.php
+
+      - name: Project runtime catalogue persistence and guarding
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/ProjectRuntimeCatalogMySqlTest.php
+
+      - name: Runtime catalogue migration idempotency
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/ProjectRuntimeMigrationTest.php
 
       - name: SQL global.php migration smoke test
         env:
