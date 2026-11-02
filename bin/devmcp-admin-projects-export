@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
+use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 
@@ -46,6 +47,7 @@ try {
             foreach ($snapshot['projects'] as &$project) {
                 if (isset($byProject[$project['id']])) {
                     $project['preview_port'] = $byProject[$project['id']];
+                    $project['preview_http_local'] = PreviewHttpProbe::check($byProject[$project['id']])['state'];
                 }
             }
             unset($project);
