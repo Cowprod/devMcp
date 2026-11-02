@@ -42,14 +42,25 @@ if ($argvToRun === null && is_file($composer) && !is_link($composer)) {
     }
     if (isset($data['scripts']['test'])) {
         $mode = 'php-composer';
-        $argvToRun = ['/usr/bin/composer', 'run-script', '--no-interaction', 'test'];
+        $composerExecutable = is_executable('/usr/bin/composer')
+            ? '/usr/bin/composer' : (is_executable('/usr/local/bin/composer')
+                ? '/usr/local/bin/composer' : null);
+        if ($composerExecutable === null) {
+            fwrite(STDERR, "Composer executable unavailable\\n");
+            exit(2);
+        }
+        $argvToRun = [$composerExecutable, 'run-script', '--no-interaction', 'test'];
     }
 }
-if ($argvToRun === null && is_file($root . '/vendor/bin/phpunit')
-    && !is_link($root . '/vendor/bin/phpunit')
+$phpunit = $root . '/vendor/bin/phpunit';
+$resolvedPhpunit = realpath($phpunit);
+if ($argvToRun === null && $resolvedPhpunit !== false
+    && str_starts_with($resolvedPhpunit, $root . '/vendor/')
+    && is_file($resolvedPhpunit)
     && (is_file($root . '/phpunit.xml') || is_file($root . '/phpunit.xml.dist'))) {
+    // Composer bin proxies are often symlinks; allow only in-vendor targets.
     $mode = 'phpunit';
-    $argvToRun = [PHP_BINARY, $root . '/vendor/bin/phpunit'];
+    $argvToRun = [PHP_BINARY, $resolvedPhpunit];
 }
 if ($argvToRun === null && is_file($root . '/pyproject.toml')
     && is_dir($root . '/tests') && !is_link($root . '/tests')) {

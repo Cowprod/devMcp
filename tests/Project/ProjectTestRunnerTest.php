@@ -19,9 +19,15 @@ final class ProjectTestRunnerTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->root . '/*') ?: [] as $path) {
-            if (is_file($path)) {
-                unlink($path);
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->root, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($files as $file) {
+            if ($file->isDir() && !$file->isLink()) {
+                rmdir($file->getPathname());
+            } else {
+                unlink($file->getPathname());
             }
         }
         rmdir($this->root);
@@ -49,6 +55,20 @@ final class ProjectTestRunnerTest extends TestCase
     {
         $result = $this->runTest(['test', '--', 'unexpected']);
         self::assertSame(2, $result->getExitCode());
+    }
+
+    public function testComposerPhpUnitSymlinkWithinWorkspaceIsAccepted(): void
+    {
+        mkdir($this->root . '/vendor/bin', 0700, true);
+        mkdir($this->root . '/vendor/phpunit', 0700, true);
+        file_put_contents($this->root . '/phpunit.xml', '<phpunit/>');
+        file_put_contents($this->root . '/vendor/phpunit/phpunit',
+            "<?php echo 'PHPUNIT_FIXTURE_OK\\n';");
+        symlink('../phpunit/phpunit', $this->root . '/vendor/bin/phpunit');
+        $result = $this->runTest();
+        self::assertTrue($result->isSuccessful(), $result->getErrorOutput());
+        self::assertStringContainsString('PHPUNIT_FIXTURE_OK', $result->getOutput());
+        self::assertStringContainsString('"mode":"phpunit"', $result->getOutput());
     }
 
     public function testNodeScriptExecutesAndPublishesStructuredSuccess(): void
