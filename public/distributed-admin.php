@@ -377,6 +377,18 @@ if (!is_string($previewIp) || filter_var($previewIp, FILTER_VALIDATE_IP, FILTER_
 foreach ($projectRows as &$projectRow) {
     $port = $projectRow['preview_port'] ?? null;
     $host = $projectRow['provisioning_machine'] ?? '';
+    // A reservation is not a server. Checks from TouchDeck's own network
+    // namespace cannot certify connectivity from a remote ZeroTier peer.
+    $httpLocal = $projectRow['preview_http_local'] ?? null;
+    $httpZeroTierHost = $projectRow['preview_http_zerotier_host'] ?? null;
+    $projectRow['preview_status_label'] = match (true) {
+        $httpZeroTierHost === 'http' => 'HTTP sur IP ZeroTier (test local) · accès distant non vérifié',
+        $httpLocal === 'http' && $httpZeroTierHost === 'offline' => 'HTTP local OK · IP ZeroTier inaccessible depuis cet hôte',
+        $httpLocal === 'http' => 'HTTP local répond · accès ZeroTier distant non vérifié',
+        $httpLocal === 'tcp' || $httpZeroTierHost === 'tcp' => 'TCP répond · protocole HTTP non confirmé',
+        $httpLocal === 'offline' => 'Port réservé · connexion TCP locale refusée',
+        default => 'Port réservé · service non vérifié',
+    };
     $projectRow['preview_url'] = $previewIp !== '' && $host === $localHost && is_int($port)
         && $port >= 1024 && $port <= 65535
         ? 'http://' . $previewIp . ':' . $port : '';
