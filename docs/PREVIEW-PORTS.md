@@ -110,6 +110,36 @@ ZeroTier tiers puisse atteindre le service. Ne publier une URL distante
 qu'après découverte de l'IP ZeroTier réelle de la machine cible et distinguer
 son état HTTP de la réservation SQL.
 
+## Adresse ZeroTier réelle des agents distants
+
+L'agent **mis à jour** recherche une adresse IPv4 sur une interface réseau
+Linux active dont le nom commence par `zt`. Il la transmet uniquement après
+négociation de la capacité par le serveur (les agents récents restent ainsi
+compatibles avec une version ancienne du serveur).
+
+Le serveur compare cette adresse avec la véritable
+`REMOTE_ADDR` de la connexion TLS authentifiée reçue sur son écoute
+**ZeroTier uniquement**. Une adresse différente, falsifiée, loopback ou
+multicast est rejetée : le serveur ne reprend jamais une IP fournie
+sans comparaison au pair effectivement connecté.
+
+La migration `migrations/20261102_agent_zerotier_address.sql` crée
+`dm_agent_zerotier_address` (une adresse observée et horodatée par identité
+machine), automatiquement via la procédure de déploiement privilégiée.
+L'admin ne forme un lien distant
+`http://<IP-ZeroTier-agent>:<port-réservé>` que pour un projet actif
+avec réservation persistante **et** une observation de l'adresse datant
+de moins de dix minutes. Le compte SQL de lecture Web doit pouvoir
+effectuer un `SELECT` sur cette table ; sinon l'URL distante n'est pas
+proposée et l'admin reste disponible.
+
+Cette observation d'adresse vérifie la provenance réseau au moment du
+heartbeat. **Elle ne teste pas le HTTP applicatif**, ni ne garantit que
+l'agent écoute le port réservé ; ce contrôle doit encore être effectué
+depuis un second pair ZeroTier après activation explicite d'un service.
+
+Aucune règle NAT/WAN, proxy HTTPS applicatif ni serveur projet n'est créé.
+
 ## Limites de ce jalon
 
 - **Projets historiques** : aucun port n'est attribué rétroactivement sans
