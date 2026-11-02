@@ -57,7 +57,7 @@ final class ProjectRuntimeCatalog
                 'SELECT p.project_id FROM dm_project_provisioning p '
                 . 'INNER JOIN dm_preview_port_reservation r ON r.project_id = p.project_id '
                 . 'AND r.machine = p.machine '
-                . "WHERE p.project_id = ? AND p.state = 'active' FOR UPDATE"
+                . "WHERE p.project_id = ? AND p.state = 'active' AND r.port BETWEEN 1024 AND 65535 FOR UPDATE"
             );
             $project->execute([$projectId]);
             if ($project->fetchColumn() === false) {
