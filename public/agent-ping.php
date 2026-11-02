@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 use Cowprod\DevMcp\Project\RemotePreviewPortClaims;
+use Cowprod\DevMcp\Distributed\Agent\VerifiedZeroTierAddress;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -24,11 +25,15 @@ try {
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
     if (!is_array($payload) || ($payload['protocol_version'] ?? null) !== 1
-        || count($payload) < 1 || count($payload) > 2
-        || array_diff(array_keys($payload), ['protocol_version', 'preview_port_claim']) !== []) {
+        || count($payload) < 1 || count($payload) > 3
+        || array_diff(array_keys($payload), ['protocol_version', 'preview_port_claim', 'zerotier_ipv4']) !== []) {
         throw new RuntimeException('Invalid protocol');
     }
     $claim = $payload['preview_port_claim'] ?? null;
+    $reportedIp = $payload['zerotier_ipv4'] ?? null;
+    if (array_key_exists('zerotier_ipv4', $payload) && !is_string($reportedIp)) {
+        throw new RuntimeException('Invalid IPv4 report');
+    }
     if (array_key_exists('preview_port_claim', $payload)
         && (!is_array($claim) || count($claim) !== 2
             || array_diff(array_keys($claim), ['project_id', 'ports']) !== []
@@ -61,7 +66,7 @@ try {
         (string) $config['writer_password'],
     );
     // Pending agents may heartbeat but MUST NOT reserve ports.
-    (new AgentAuthenticator($db))->authenticate($machineId, $match[1], $claim === null);
+    (new AgentAuthenticator($db))->authenticate($machineId, $match[1], $claim === null && $reportedIp === null);
     $statement = $db->prepare(
         "UPDATE dm_machine SET last_seen_at = UTC_TIMESTAMP(6) WHERE id = ? AND status IN ('pending','active')"
     );
@@ -79,6 +84,25 @@ try {
     }
 
     $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments];
+    // Capability is advertised only after the migration is readable.
+    $response['zerotier_address_supported'] = false;
+    try {
+        $db->query('SELECT machine_id, ipv4, observed_at FROM dm_agent_zerotier_address LIMIT 0');
+        $response['zerotier_address_supported'] = true;
+    } catch (PDOException $exception) {
+        error_log('devmcp-agent-zerotier-schema: ' . get_class($exception));
+    }
+    if ($reportedIp !== null) {
+        if ($response['zerotier_address_supported'] !== true) {
+            throw new RuntimeException('ZeroTier address storage unavailable');
+        }
+        // REMOTE_ADDR is the connecting peer at the ZeroTier-only nginx
+        // location, NOT an untrusted forwarded header or client-supplied URL.
+        (new VerifiedZeroTierAddress($db))->record(
+            $machineId, $reportedIp, (string) ($_SERVER['REMOTE_ADDR'] ?? '')
+        );
+        $response['zerotier_address_saved'] = true;
+    }
     $portConfig = is_array($config['preview_ports'] ?? null) ? $config['preview_ports'] : [];
     if (($portConfig['enabled'] ?? true) !== false) {
         $min = $portConfig['min'] ?? 12000;
