@@ -69,6 +69,52 @@ if (isset($_GET['adb_log'])) {
 }
 session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+// Same trusted HTTPS and REMOTE_USER boundary as the administration page.
+// The Web process invokes only the existing local MCP action, never systemctl.
+if (isset($_GET['project_service_api'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    $mode = (string) $_GET['project_service_api'];
+    $method = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($mode === 'request' && $method === 'POST'
+        && !hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+        http_response_code(403);
+        echo '{"error":"Jeton CSRF invalide."}';
+        exit;
+    }
+    try {
+        if (($mode !== 'request' && $mode !== 'poll')
+            || ($mode === 'request' && $method !== 'POST')
+            || ($mode === 'poll' && $method !== 'GET')) {
+            throw new InvalidArgumentException('Opération HTTP non autorisée.');
+        }
+        $projectId = (string) ($mode === 'request'
+            ? ($_POST['project_id'] ?? '') : ($_GET['project_id'] ?? ''));
+        $readDb = DatabaseConnection::connect(
+            (string) ($config['dsn'] ?? ''),
+            (string) ($config['username'] ?? ''),
+            (string) ($config['password'] ?? ''),
+        );
+        $hostname = gethostname();
+        \Cowprod\DevMcp\Distributed\Admin\McpProjectServiceClient::assertLocalProject(
+            $readDb, $projectId, is_string($hostname) ? $hostname : ''
+        );
+        $client = new \Cowprod\DevMcp\Distributed\Admin\McpProjectServiceClient();
+        $reply = $mode === 'request'
+            ? $client->start($projectId, (string) ($_POST['service_operation'] ?? ''))
+            : $client->poll($projectId, (string) ($_GET['job_id'] ?? ''));
+        echo json_encode($reply, JSON_HEX_TAG | JSON_HEX_AMP
+            | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+    } catch (InvalidArgumentException $exception) {
+        http_response_code(400);
+        echo json_encode(['error' => $exception->getMessage()], JSON_THROW_ON_ERROR);
+    } catch (Throwable $exception) {
+        http_response_code(503);
+        error_log('devmcp-admin local service MCP: ' . get_class($exception));
+        echo '{"error":"Contrôleur local indisponible : consulter les journaux devMcp."}';
+    }
+    exit;
+}
 // Read-only metadata endpoint for project job polling: identical HTTPS and proxy auth.
 if (isset($_GET['remote_jobs']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     header('Content-Type: application/json; charset=utf-8');
@@ -428,6 +474,10 @@ foreach ($projectRows as &$projectRow) {
         && ($projectRow['provisioning_state'] ?? null) === 'active'
         && is_int($projectRow['preview_port'] ?? null)
         && $projectRow['preview_port'] >= 1024;
+    $projectRow['service_control_available'] = $projectRow['runtime_configurable']
+        && $localFresh
+        && ($projectRow['provisioning_machine'] ?? '') === $localHost
+        && in_array('project.service', $projectRow['actions'] ?? [], true);
     $port = $projectRow['preview_port'] ?? null;
     $host = $projectRow['provisioning_machine'] ?? '';
     // A reservation is not a server. Checks from TouchDeck's own network
@@ -652,7 +702,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th><th>Moteur</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>" data-service-control="<?= !empty($project['service_control_available']) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1"><?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?></span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
