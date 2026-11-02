@@ -335,6 +335,29 @@ try {
     // In a staged rollout, the existing inventory remains readable.
     error_log('devmcp-admin preview port inventory unavailable: ' . get_class($exception));
 }
+// Real remote ZeroTier IPs are authenticated and matched against the TLS peer
+// source by the agent API; only recent observations may become browser links.
+$remoteZeroTierIps = [];
+try {
+    $verifiedAddresses = $db->query(
+        "SELECT a.machine_id, a.ipv4, a.observed_at "
+        . "FROM dm_agent_zerotier_address a "
+        . "INNER JOIN dm_machine m ON m.id = a.machine_id AND m.status = 'active'"
+    )->fetchAll(\PDO::FETCH_ASSOC);
+    foreach ($verifiedAddresses as $observed) {
+        $ip = $observed['ipv4'] ?? null;
+        $stamp = is_string($observed['observed_at'] ?? null)
+            ? strtotime($observed['observed_at'] . ' UTC') : false;
+        if (is_string($ip)
+            && \Cowprod\DevMcp\Distributed\Agent\VerifiedZeroTierAddress::validIpv4($ip)
+            && $stamp !== false && $stamp >= time() - 600 && $stamp <= time() + 60) {
+            $remoteZeroTierIps[$observed['machine_id']] = $ip;
+        }
+    }
+} catch (PDOException $exception) {
+    // A staged migration or missing SELECT grant must never break admin.
+    error_log('devmcp-admin verified agent address inventory unavailable: ' . get_class($exception));
+}
 // Runtime catalogue is optional until its DDL and read grants are applied.
 // No runtime process can be started through this projection.
 $runtimeTypes = [];
@@ -419,9 +442,17 @@ foreach ($projectRows as &$projectRow) {
         $httpLocal === 'offline' => 'Port réservé · connexion TCP locale refusée',
         default => 'Port réservé · service non vérifié',
     };
-    $projectRow['preview_url'] = $previewIp !== '' && $host === $localHost && is_int($port)
+    $urlIp = $host === $localHost ? $previewIp : ($remoteZeroTierIps[$host] ?? '');
+    // A verified interface address and an SQL reservation do not prove a
+    // service is running; never inherit the local-host HTTP observation.
+    if ($host !== $localHost && $urlIp !== '' && is_int($port)
+        && ($projectRow['provisioning_state'] ?? null) === 'active') {
+        $projectRow['preview_status_label'] = 'IP ZeroTier attestée · HTTP distant non vérifié';
+    }
+    $projectRow['preview_url'] = $urlIp !== '' && is_int($port)
         && $port >= 1024 && $port <= 65535
-        ? 'http://' . $previewIp . ':' . $port : '';
+        && ($projectRow['provisioning_state'] ?? null) === 'active'
+        ? 'http://' . $urlIp . ':' . $port : '';
 }
 unset($projectRow);
 ksort($projectRows);
