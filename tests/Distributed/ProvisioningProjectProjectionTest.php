@@ -116,6 +116,36 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertNull($result['bakery-tracker']['preview_port']);
     }
 
+    public function testLocalSnapshotPortFallbackRequiresFreshMatchingActiveHost(): void
+    {
+        $row = $this->journalRow('active');
+        $row['machine'] = 'touchdeck';
+        $projects = ProvisioningProjectProjection::merge([], [$row]);
+        $snapshot = [
+            'host' => ['name' => 'touchdeck'],
+            'projects' => [['id' => 'bakery-tracker', 'preview_port' => 18373]],
+        ];
+
+        $result = ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true);
+        self::assertSame(18373, $result['bakery-tracker']['preview_port']);
+        self::assertNull(ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, false)['bakery-tracker']['preview_port']);
+
+        $remote = $projects;
+        $remote['bakery-tracker']['provisioning_machine'] = 'case';
+        self::assertNull(ProvisioningProjectProjection::applyLocalPreviewPorts($remote, $snapshot, true)['bakery-tracker']['preview_port']);
+
+        $inactive = $projects;
+        $inactive['bakery-tracker']['provisioning_state'] = 'registered';
+        self::assertNull(ProvisioningProjectProjection::applyLocalPreviewPorts($inactive, $snapshot, true)['bakery-tracker']['preview_port']);
+
+        $reservedSql = $projects;
+        $reservedSql['bakery-tracker']['preview_port'] = 18111;
+        self::assertSame(18111, ProvisioningProjectProjection::applyLocalPreviewPorts($reservedSql, $snapshot, true)['bakery-tracker']['preview_port']);
+
+        $snapshot['projects'][0]['preview_port'] = 80;
+        self::assertNull(ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true)['bakery-tracker']['preview_port']);
+    }
+
     public function testIgnoresMalformedJournalRows(): void
     {
         $invalid = $this->journalRow();
