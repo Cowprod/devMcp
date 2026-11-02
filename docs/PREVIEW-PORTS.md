@@ -75,11 +75,43 @@ continue de fonctionner si le droit manque). Une URL annoncée ne prouve ni
 l'écoute du processus ni l'accessibilité ZeroTier. Effectuer un test réel
 HTTP après avoir configuré le processus applicatif pour écouter sur ce port.
 
+## Réservation sur les agents distants (protocole expérimental)
+
+Le même endpoint de heartbeat **ZeroTier/TLS authentifié**
+`POST /v1/agent/ping` annonce au plus huit projets en état
+`machine_assigned` ou `active` affectés à l'agent actif et sans port réservé.
+L'agent actualisé effectue lui-même des binds TCP temporaires sur **sa propre
+machine** puis soumet jusqu'à 16 candidats. Le serveur valide l'identité
+machine, le projet, son état et sa plage de ports, verrouille la ligne
+de provisionnement et réserve dans la table **existante**
+`dm_preview_port_reservation`. Une contrainte unique SQL (machine,port)
+arbitre les collisions concurrentes. La réservation est idempotente.
+
+La configuration du serveur agent se trouve dans
+`/etc/devmcp-admin/distributed.php` (optionnelle) :
+
+```php
+'preview_ports' => [
+    'enabled' => true,
+    'min' => 12000,
+    'max' => 19999,
+],
+```
+
+Par défaut, le protocole utilise 12000–19999 ; désactiver avec
+`enabled=false`. Les anciens agents continuent leurs heartbeats,
+mais ne peuvent pas attribuer de ports distants avant mise à jour avec
+`agent-preview-port-probe.php`. Le déploiement des binaires agents
+reste une étape de validation distincte.
+
+Une attestation de bind est une observation momentanée :
+elle **ne garantit pas** qu'un service démarre ultérieurement, ni qu'un pair
+ZeroTier tiers puisse atteindre le service. Ne publier une URL distante
+qu'après découverte de l'IP ZeroTier réelle de la machine cible et distinguer
+son état HTTP de la réservation SQL.
+
 ## Limites de ce jalon
 
-- **Agents distants** : la réservation est volontairement absente tant que
-  l'agent ne fournit pas sa propre attestation de disponibilité TCP. Le MCP
-  central ne prétend jamais vérifier à distance les sockets d'un agent.
 - **Projets historiques** : aucun port n'est attribué rétroactivement sans
   activation explicite de la politique et nouveau flux de provisionnement.
 - **État de santé** : l'UI affiche une réservation, pas un contrôle HTTP.
