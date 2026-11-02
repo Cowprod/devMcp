@@ -17,7 +17,7 @@ try {
     $id = ProjectServiceRequestPolicy::projectFromCwd($cwd, '/srv/devmcp/workspaces');
     ProjectServiceRequestPolicy::validate($argv[1], $id);
     $directory = '/var/lib/devmcp/project-service-requests';
-    $results = '/var/lib/devmcp/project-service-results';
+    $results = '/run/devmcp-project-results';
     if (!is_dir($directory) || !is_writable($directory)
         || !is_dir($results) || !is_readable($results)
         || is_link($directory) || is_link($results)) {
@@ -41,7 +41,6 @@ try {
     while (microtime(true) < $deadline) {
         if (is_file($result) && !is_link($result) && filesize($result) <= 16384) {
             $data = file_get_contents($result);
-            @unlink($result);
             $answer = is_string($data) ? json_decode($data, true) : null;
             if (!is_array($answer) || ($answer['request_id'] ?? null) !== $token
                 || ($answer['project_id'] ?? null) !== $id) {
