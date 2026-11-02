@@ -120,6 +120,38 @@ final class ProjectToolsTest extends TestCase
         $this->tools([])->githubRepositoryCreate('Cowprod/demo-new', 'CREATE_PRIVATE_REPOSITORY');
     }
 
+    public function testPreviewObservationOnlyProbesLocalActiveReservations(): void
+    {
+        $method = (new \\ReflectionClass(ProjectTools::class))->getMethod('withLocalPreviewStatus');
+        $method->setAccessible(true);
+        $tools = $this->tools([]);
+        $remote = ['machine' => 'unrelated-agent', 'state' => 'active', 'preview_port' => 12001];
+        self::assertSame($remote, $method->invoke($tools, $remote));
+
+        $hostname = gethostname();
+        if (!is_string($hostname)) {
+            self::markTestSkipped('Hostname unavailable');
+        }
+        $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
+        self::assertIsResource($socket);
+        $address = stream_socket_get_name($socket, false);
+        $port = (int) substr(strrchr($address, ':'), 1);
+        try {
+            $assigned = ['machine' => $hostname, 'state' => 'active', 'preview_port' => $port];
+            $observed = $method->invoke($tools, $assigned);
+            self::assertSame('tcp', $observed['preview_http_local']);
+            self::assertArrayHasKey('preview_http_checked_at_utc', $observed);
+            self::assertContains($observed['preview_http_zerotier_host'],
+                ['http', 'tcp', 'offline', 'not_checked']);
+
+            $notActive = $assigned;
+            $notActive['state'] = 'registered';
+            self::assertSame($notActive, $method->invoke($tools, $notActive));
+        } finally {
+            fclose($socket);
+        }
+    }
+
     /**
      * @param array<string, array<string, mixed>> $actions
      */
