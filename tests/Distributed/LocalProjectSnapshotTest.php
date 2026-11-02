@@ -210,6 +210,45 @@ final class LocalProjectSnapshotTest extends TestCase
         }
     }
 
+    public function testReadOnlyHttpObservationsAreValidated(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'devmcp-probe-snapshot-');
+        try {
+            $snapshot = [
+                'schema_version' => 1,
+                'host' => ['name' => 'touchdeck', 'os' => 'linux', 'architecture' => 'x86_64'],
+                'generated_at_utc' => '2026-11-02T10:00:00Z',
+                'projects' => [[
+                    'id' => 'demo', 'description' => 'Demo', 'workspace_path' => '/safe',
+                    'action_count' => 0, 'actions' => [], 'preview_port' => 14616,
+                    'preview_http_local' => 'offline',
+                    'preview_http_zerotier_host' => 'not_checked',
+                    'preview_http_checked_at_utc' => '2026-11-02T10:00:00Z',
+                    'private' => 'do-not-export',
+                ]],
+            ];
+            file_put_contents($file, json_encode($snapshot, JSON_THROW_ON_ERROR));
+            $loaded = LocalProjectSnapshot::read($file);
+            self::assertTrue($loaded['ok']);
+            self::assertSame('offline', $loaded['projects'][0]['preview_http_local']);
+            self::assertSame('not_checked', $loaded['projects'][0]['preview_http_zerotier_host']);
+            self::assertArrayNotHasKey('private', $loaded['projects'][0]);
+            foreach (['preview_http_local' => 'verified', 'preview_http_zerotier_host' => 'remote_online',
+                'preview_http_checked_at_utc' => ['bad']] as $key => $invalid) {
+                $bad = $snapshot;
+                $bad['projects'][0][$key] = $invalid;
+                file_put_contents($file, json_encode($bad, JSON_THROW_ON_ERROR));
+                self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
+            }
+            $bad = $snapshot;
+            unset($bad['projects'][0]['preview_port']);
+            file_put_contents($file, json_encode($bad, JSON_THROW_ON_ERROR));
+            self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function testDuplicateProjectIdsAreRejected(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'devmcp-dup-');

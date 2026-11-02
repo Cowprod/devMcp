@@ -169,6 +169,21 @@ final class LocalProjectSnapshot
                 $empty['reason'] = 'port de prévisualisation invalide';
                 return $empty;
             }
+            $httpLocal = $project['preview_http_local'] ?? null;
+            if ($httpLocal !== null && !in_array($httpLocal, ['http', 'tcp', 'offline'], true)) {
+                $empty['reason'] = 'état HTTP local invalide';
+                return $empty;
+            }
+            $httpZeroTierHost = $project['preview_http_zerotier_host'] ?? null;
+            $httpCheckedAt = $project['preview_http_checked_at_utc'] ?? null;
+            if (($httpZeroTierHost !== null
+                    && !in_array($httpZeroTierHost, ['http', 'tcp', 'offline', 'not_checked'], true))
+                || ($httpCheckedAt !== null && (!is_string($httpCheckedAt)
+                    || strlen($httpCheckedAt) !== 20))
+                || ($previewPort === null && ($httpLocal !== null || $httpZeroTierHost !== null))) {
+                $empty['reason'] = 'état HTTP de prévisualisation invalide';
+                return $empty;
+            }
             if (isset($projects[$project['id']])) {
                 $empty['reason'] = 'projet local dupliqué';
                 return $empty;
@@ -182,6 +197,9 @@ final class LocalProjectSnapshot
                 'actions' => $project['actions'],
                 'action_details' => $actionDetails,
                 'preview_port' => $previewPort,
+                'preview_http_local' => $httpLocal,
+                'preview_http_zerotier_host' => $httpZeroTierHost,
+                'preview_http_checked_at_utc' => $httpCheckedAt,
             ];
         }
         return [

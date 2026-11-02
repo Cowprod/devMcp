@@ -43,6 +43,18 @@ final class ProvisioningProjectProjection
             if (!is_int($projectRows[$id]['preview_port'] ?? null)) {
                 $projectRows[$id]['preview_port'] = $port;
             }
+            // Never attach observations to another project's or host's port.
+            if ($projectRows[$id]['preview_port'] === $port
+                && in_array($project['preview_http_local'] ?? null, ['http', 'tcp', 'offline'], true)
+                && in_array($project['preview_http_zerotier_host'] ?? null,
+                    ['http', 'tcp', 'offline', 'not_checked'], true)
+                && is_string($project['preview_http_checked_at_utc'] ?? null)
+                && ($checked = strtotime($project['preview_http_checked_at_utc'])) !== false
+                && $checked >= time() - 600 && $checked <= time() + 60) {
+                $projectRows[$id]['preview_http_local'] = $project['preview_http_local'];
+                $projectRows[$id]['preview_http_zerotier_host'] = $project['preview_http_zerotier_host'];
+                $projectRows[$id]['preview_http_checked_at_utc'] = $project['preview_http_checked_at_utc'];
+            }
         }
         return $projectRows;
     }

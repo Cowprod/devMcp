@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\LocalProjectSnapshot;
+use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 
@@ -46,6 +47,15 @@ try {
             foreach ($snapshot['projects'] as &$project) {
                 if (isset($byProject[$project['id']])) {
                     $project['preview_port'] = $byProject[$project['id']];
+                    $project['preview_http_local'] = PreviewHttpProbe::check($byProject[$project['id']])['state'];
+                    $previewIp = $config['preview_zerotier_ipv4'] ?? '';
+                    if ($previewIp === '' && $snapshot['host']['name'] === 'touchdeck') {
+                        $previewIp = '192.168.194.189';
+                    }
+                    $project['preview_http_zerotier_host'] = is_string($previewIp)
+                        && filter_var($previewIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+                        ? PreviewHttpProbe::check($byProject[$project['id']], $previewIp)['state'] : 'not_checked';
+                    $project['preview_http_checked_at_utc'] = gmdate('Y-m-d\\TH:i:s\\Z');
                 }
             }
             unset($project);

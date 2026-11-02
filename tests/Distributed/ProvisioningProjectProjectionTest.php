@@ -146,6 +146,34 @@ final class ProvisioningProjectProjectionTest extends TestCase
         self::assertNull(ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true)['bakery-tracker']['preview_port']);
     }
 
+    public function testOnlyFreshHttpObservationsForSameReservedPortArePublished(): void
+    {
+        $row = $this->journalRow('active');
+        $row['machine'] = 'touchdeck';
+        $projects = ProvisioningProjectProjection::merge([], [$row]);
+        $snapshot = [
+            'host' => ['name' => 'touchdeck'],
+            'projects' => [[
+                'id' => 'bakery-tracker', 'preview_port' => 14616,
+                'preview_http_local' => 'http', 'preview_http_zerotier_host' => 'offline',
+                'preview_http_checked_at_utc' => gmdate('Y-m-d\\TH:i:s\\Z'),
+            ]],
+        ];
+        $result = ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true);
+        self::assertSame('http', $result['bakery-tracker']['preview_http_local']);
+        self::assertSame('offline', $result['bakery-tracker']['preview_http_zerotier_host']);
+
+        $snapshot['projects'][0]['preview_http_checked_at_utc'] = '2021-01-01T00:00:00Z';
+        $old = ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true);
+        self::assertArrayNotHasKey('preview_http_local', $old['bakery-tracker']);
+
+        $snapshot['projects'][0]['preview_http_checked_at_utc'] = gmdate('Y-m-d\\TH:i:s\\Z');
+        $projects['bakery-tracker']['preview_port'] = 18000;
+        $other = ProvisioningProjectProjection::applyLocalPreviewPorts($projects, $snapshot, true);
+        self::assertSame(18000, $other['bakery-tracker']['preview_port']);
+        self::assertArrayNotHasKey('preview_http_local', $other['bakery-tracker']);
+    }
+
     public function testIgnoresMalformedJournalRows(): void
     {
         $invalid = $this->journalRow();
