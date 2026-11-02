@@ -201,7 +201,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
                 break;
             case 'project.runtime.select':
-                (new \\Cowprod\\DevMcp\\Project\\ProjectRuntimeCatalog($writer))->select(
+                (new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($writer))->select(
                     (string) ($_POST['project_id'] ?? ''),
                     (string) ($_POST['runtime_type'] ?? ''),
                     filter_var($_POST['revision'] ?? '', FILTER_VALIDATE_INT) !== false
