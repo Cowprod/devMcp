@@ -122,7 +122,7 @@ final class ProjectToolsTest extends TestCase
 
     public function testPreviewObservationOnlyProbesLocalActiveReservations(): void
     {
-        $method = (new \\ReflectionClass(ProjectTools::class))->getMethod('withLocalPreviewStatus');
+        $method = (new \ReflectionClass(ProjectTools::class))->getMethod('withLocalPreviewStatus');
         $method->setAccessible(true);
         $tools = $this->tools([]);
         $remote = ['machine' => 'unrelated-agent', 'state' => 'active', 'preview_port' => 12001];
