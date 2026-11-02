@@ -31,36 +31,11 @@ final class McpProjectCreationClient
             throw new InvalidArgumentException('Description de projet invalide.');
         }
 
-        $initialize = $this->exchange([
-            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize',
-            'params' => [
-                'protocolVersion' => self::PROTOCOL,
-                'capabilities' => (object) [],
-                'clientInfo' => ['name' => 'devmcp-web-admin', 'version' => '1.0.0'],
-            ],
-        ], null);
-        $session = $initialize['session'] ?? null;
-        $init = self::rpcResult($initialize);
-        if (!is_array($init['capabilities'] ?? null)) {
-            throw new RuntimeException('Initialisation MCP invalide.');
-        }
-
-        $this->exchange([
-            'jsonrpc' => '2.0', 'method' => 'notifications/initialized',
-        ], $session);
-
-        $call = $this->exchange([
-            'jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/call',
-            'params' => [
-                'name' => 'project_create',
-                'arguments' => [
-                    'project_id' => $projectId,
-                    'description' => $description,
-                    'confirmation' => 'CREATE_PROJECT',
-                ],
-            ],
-        ], $session);
-        $result = self::rpcResult($call);
+        $result = $this->callTool('project_create', [
+            'project_id' => $projectId,
+            'description' => $description,
+            'confirmation' => 'CREATE_PROJECT',
+        ]);
         if (($result['isError'] ?? false) === true) {
             throw new RuntimeException('La création MCP a échoué : consulter le journal du serveur devMcp.');
         }
@@ -83,6 +58,123 @@ final class McpProjectCreationClient
             throw new RuntimeException('Résultat MCP non confirmé : vérifier le journal avant tout nouvel essai.');
         }
         return $created;
+    }
+
+    /**
+     * Enqueue one strictly enumerated local application-service action. The
+     * unprivileged web process never executes systemctl or handles root secrets.
+     * @return array<string,mixed>
+     */
+    public function enqueueService(string $projectId, string $operation): array
+    {
+        if (preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D', $projectId) !== 1
+            || in_array($projectId, ['.', '..'], true)
+            || !in_array($operation, ['start', 'stop', 'restart', 'status', 'logs'], true)) {
+            throw new InvalidArgumentException('Projet ou opération de service invalide.');
+        }
+        $result = $this->callTool('action_start', [
+            'project' => $projectId,
+            'action' => 'project.service',
+            'arguments' => ['operation' => $operation],
+        ]);
+        $job = self::structured($result);
+        if (($result['isError'] ?? false) === true
+            || ($job['project'] ?? null) !== $projectId
+            || ($job['action'] ?? null) !== 'project.service'
+            || !is_string($job['job_id'] ?? null)
+            || preg_match('/^[a-f0-9]{32}$/D', $job['job_id']) !== 1) {
+            throw new RuntimeException('Action non confirmée par le serveur MCP.');
+        }
+        return $job;
+    }
+
+    /**
+     * Read a single opaque job. A queued job must never appear as a running
+     * application; only the root-owned controller's completed result can do so.
+     * @return array<string,mixed>
+     */
+    public function serviceJob(string $jobId): array
+    {
+        if (preg_match('/^[a-f0-9]{32}$/D', $jobId) !== 1) {
+            throw new InvalidArgumentException('Identifiant de job invalide.');
+        }
+        $result = $this->callTool('job_status', ['job_id' => $jobId]);
+        $job = self::structured($result);
+        if (($result['isError'] ?? false) === true || ($job['job_id'] ?? null) !== $jobId
+            || ($job['action'] ?? null) !== 'project.service'
+            || ($job['target'] ?? null) !== 'local') {
+            throw new RuntimeException('Job de service local introuvable.');
+        }
+        $public = array_intersect_key($job, array_flip([
+            'job_id', 'project', 'action', 'status', 'exit_code',
+            'created_at', 'started_at', 'finished_at',
+        ]));
+        if (in_array($job['status'] ?? null, ['succeeded', 'failed', 'cancelled'], true)) {
+            $outputResult = $this->callTool('job_output', ['job_id' => $jobId]);
+            $output = self::structured($outputResult);
+            if (($outputResult['isError'] ?? false) !== true
+                && ($output['job_id'] ?? null) === $jobId) {
+                $stdout = $output['stdout']['content'] ?? $output['stdout']['data'] ?? '';
+                if (is_string($stdout) && strlen($stdout) <= 16384) {
+                    $decoded = json_decode(trim($stdout), true);
+                    if (is_array($decoded)) {
+                        $public['result'] = array_intersect_key($decoded, array_flip([
+                            'ok', 'project_id', 'desired_state', 'selected_runtime',
+                            'service_started', 'runtime_type', 'service', 'port',
+                            'url', 'http_checked', 'http_status', 'note',
+                            'logs', 'error', 'error_class', 'processed_at_utc',
+                        ]));
+                    }
+                }
+            }
+        }
+        return $public;
+    }
+
+    /** @param array<string,mixed> $arguments @return array<string,mixed> */
+    private function callTool(string $name, array $arguments): array
+    {
+        $initialize = $this->exchange([
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize',
+            'params' => [
+                'protocolVersion' => self::PROTOCOL,
+                'capabilities' => (object) [],
+                'clientInfo' => ['name' => 'devmcp-web-admin', 'version' => '1.0.0'],
+            ],
+        ], null);
+        $session = $initialize['session'] ?? null;
+        $init = self::rpcResult($initialize);
+        if (!is_array($init['capabilities'] ?? null)) {
+            throw new RuntimeException('Initialisation MCP invalide.');
+        }
+
+        $this->exchange([
+            'jsonrpc' => '2.0', 'method' => 'notifications/initialized',
+        ], $session);
+
+        $call = $this->exchange([
+            'jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/call',
+            'params' => ['name' => $name, 'arguments' => $arguments],
+        ], $session);
+        return self::rpcResult($call);
+    }
+
+    /** @param array<string,mixed> $result @return array<string,mixed> */
+    private static function structured(array $result): array
+    {
+        if (is_array($result['structuredContent'] ?? null)) {
+            return $result['structuredContent'];
+        }
+        foreach (($result['content'] ?? []) as $part) {
+            if (is_array($part) && ($part['type'] ?? null) === 'text'
+                && is_string($part['text'] ?? null)) {
+                $parsed = json_decode($part['text'], true);
+                if (is_array($parsed)) {
+                    return $parsed;
+                }
+            }
+        }
+        return [];
     }
 
     /** @param array<string,mixed> $request @return array{status:int,body:string,session?:string} */
