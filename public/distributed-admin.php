@@ -360,6 +360,10 @@ foreach ($localSnapshot['projects'] as $project) {
 }
 // Surface journal entries alongside registry and local projects without granting actions.
 $projectRows = \Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection::merge($projectRows, $provisioningRows);
+// The unprivileged Web account may lack SELECT on preview reservations.
+$projectRows = \Cowprod\DevMcp\Distributed\Admin\ProvisioningProjectProjection::applyLocalPreviewPorts(
+    $projectRows, $localSnapshot, $localFresh
+);
 // Prefer an explicitly configured IP; TouchDeck's known ZeroTier IP is a
 // local-lab fallback, never an address inferred for remote agents.
 $previewIp = $config['preview_zerotier_ipv4'] ?? '';

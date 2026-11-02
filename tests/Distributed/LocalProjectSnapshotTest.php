@@ -175,6 +175,41 @@ final class LocalProjectSnapshotTest extends TestCase
         }
     }
 
+    public function testPreviewPortIsStrictlyValidatedAndRetainedWithoutOtherFields(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'devmcp-preview-snapshot-');
+        try {
+            $snapshot = [
+                'schema_version' => 1,
+                'host' => ['name' => 'touchdeck', 'os' => 'linux', 'architecture' => 'x86_64'],
+                'generated_at_utc' => '2026-11-02T09:00:00Z',
+                'projects' => [[
+                    'id' => 'chattrackme', 'description' => 'POC', 'workspace_path' => '/safe',
+                    'action_count' => 0, 'actions' => [],
+                    'preview_port' => 18373, 'secret_token' => 'must-not-leak',
+                ]],
+            ];
+            file_put_contents($file, json_encode($snapshot, JSON_THROW_ON_ERROR));
+            $loaded = LocalProjectSnapshot::read($file);
+            self::assertTrue($loaded['ok']);
+            self::assertSame(18373, $loaded['projects'][0]['preview_port']);
+            self::assertArrayNotHasKey('secret_token', $loaded['projects'][0]);
+
+            foreach ([null, '18373', 80, 0, 65536, ['port' => 18373]] as $invalidPort) {
+                $snapshot['projects'][0]['preview_port'] = $invalidPort;
+                file_put_contents($file, json_encode($snapshot, JSON_THROW_ON_ERROR));
+                self::assertFalse(LocalProjectSnapshot::read($file)['ok']);
+            }
+            unset($snapshot['projects'][0]['preview_port']);
+            file_put_contents($file, json_encode($snapshot, JSON_THROW_ON_ERROR));
+            $loaded = LocalProjectSnapshot::read($file);
+            self::assertTrue($loaded['ok']);
+            self::assertNull($loaded['projects'][0]['preview_port']);
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function testDuplicateProjectIdsAreRejected(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'devmcp-dup-');
