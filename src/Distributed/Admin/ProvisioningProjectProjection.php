@@ -11,6 +11,43 @@ namespace Cowprod\DevMcp\Distributed\Admin;
 final class ProvisioningProjectProjection
 {
     /**
+     * Use only fresh, privileged local reservation metadata as a fallback when
+     * the Web SQL account cannot read the reservation table. A reservation is
+     * never evidence that an HTTP server is listening.
+     *
+     * @param array<string, array<string, mixed>> $projectRows
+     * @param array<string, mixed> $localSnapshot
+     * @return array<string, array<string, mixed>>
+     */
+    public static function applyLocalPreviewPorts(array $projectRows, array $localSnapshot, bool $fresh): array
+    {
+        $host = $localSnapshot['host']['name'] ?? null;
+        $projects = $localSnapshot['projects'] ?? null;
+        if (!$fresh || !is_string($host) || !is_array($projects)) {
+            return $projectRows;
+        }
+        foreach ($projects as $project) {
+            if (!is_array($project) || !is_string($project['id'] ?? null)) {
+                continue;
+            }
+            $id = $project['id'];
+            $port = $project['preview_port'] ?? null;
+            if (!is_int($port) || $port < 1024 || $port > 65535
+                || !isset($projectRows[$id])) {
+                continue;
+            }
+            if (($projectRows[$id]['provisioning_state'] ?? null) !== 'active'
+                || ($projectRows[$id]['provisioning_machine'] ?? null) !== $host) {
+                continue;
+            }
+            if (!is_int($projectRows[$id]['preview_port'] ?? null)) {
+                $projectRows[$id]['preview_port'] = $port;
+            }
+        }
+        return $projectRows;
+    }
+
+    /**
      * @param array<string, array<string, mixed>> $projectRows
      * @param list<array<string, mixed>> $provisioningRows
      * @return array<string, array<string, mixed>>
