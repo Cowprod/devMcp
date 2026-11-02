@@ -6,11 +6,12 @@ set -euo pipefail
 base="https://raw.githubusercontent.com/Cowprod/devMcp/$1"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-for file in distributed-agent.php inspect-workspace.php; do
+for file in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php; do
   curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 "$base/bin/$file" -o "$tmp/$file"
   php -l "$tmp/$file"
 done
 install -m 0755 -o root -g root "$tmp/inspect-workspace.php" /opt/devmcp-agent/bin/inspect-workspace.php
+install -m 0755 -o root -g root "$tmp/agent-preview-port-probe.php" /opt/devmcp-agent/bin/agent-preview-port-probe.php
 install -m 0755 -o root -g root "$tmp/distributed-agent.php" /opt/devmcp-agent/bin/distributed-agent.php
 systemctl start devmcp-agent.service
 journalctl -u devmcp-agent.service -n 8 --no-pager
