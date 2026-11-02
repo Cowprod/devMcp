@@ -46,7 +46,7 @@ final class ProjectServiceLaunchPlan
         $docroot = $record['document_root'] ?? null;
         $entrypoint = $record['entrypoint'] ?? null;
         if ($runtime === 'static' || $runtime === 'php') {
-            $default = is_dir($workspace . '/public') ? 'public' : '.';
+            $default = 'public';
             $directory = self::path($workspace, $docroot ?? $default, true);
             $argv = $runtime === 'static'
                 ? ['/usr/bin/python3', '-m', 'http.server', (string) $port, '--bind', $bindIp, '--directory', $directory]
