@@ -200,6 +200,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $editor->updateMachine((string) ($_POST['machine_id'] ?? ''), (string) ($_POST['name'] ?? ''),
                     (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
                 break;
+            case 'project.runtime.select':
+                (new \\Cowprod\\DevMcp\\Project\\ProjectRuntimeCatalog($writer))->select(
+                    (string) ($_POST['project_id'] ?? ''),
+                    (string) ($_POST['runtime_type'] ?? ''),
+                    filter_var($_POST['revision'] ?? '', FILTER_VALIDATE_INT) !== false
+                        ? (int) $_POST['revision'] : -1
+                );
+                break;
             case 'project.update':
                 $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
                     (string) ($_POST['repository_url'] ?? ''));
@@ -241,6 +249,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
+                'project.runtime.select' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
                 'remote.readonly.enqueue' => 'projects', default => 'dashboard'
