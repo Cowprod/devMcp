@@ -6,6 +6,7 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
 use Cowprod\DevMcp\Project\ProjectServiceLaunchPlan;
+use Cowprod\DevMcp\Project\ProjectServicePortGuard;
 use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
 use Symfony\Component\Process\Process;
 
@@ -181,6 +182,13 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         if ($operation === 'restart' && $row['desired_state'] !== 'running') {
             throw new RuntimeException('Cannot restart a stopped service');
         }
+        // A port collision must be rejected before changing SQL desired_state.
+        // For an already active unit, only a matching running state is valid.
+        $currentService = controllerServiceStatus($unit);
+        ProjectServicePortGuard::assertStartAllowed(
+            $ip, $port, (string) $row['desired_state'],
+            (string) $currentService['ActiveState']
+        );
         if ($operation === 'start' && $row['desired_state'] === 'stopped') {
             $change = $db->prepare("UPDATE dm_project_runtime SET desired_state = 'running', "
                 . 'revision = revision + 1 WHERE project_id = ? '
