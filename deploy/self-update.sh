@@ -50,6 +50,10 @@ sql_cutover=0
 case "$sql_import_output" in
     *"SQL registry READY"*) sql_cutover=1 ;;
 esac
+# Publish the standard test action after SQL import, without changing legacy
+# manual projects. This only configures a job action; no tests run on deploy.
+update_stage=project-test-action
+/usr/bin/php /opt/devmcp/bin/migrate-project-test-action.php --execute MIGRATE_PROJECT_TEST
 # Preview-port reservations must exist before code that allocates a port is
 # reloaded. This fixed, idempotent migration never modifies existing rows.
 update_stage=preview-port-migration
