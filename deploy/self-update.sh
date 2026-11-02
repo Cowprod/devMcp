@@ -57,6 +57,9 @@ update_stage=preview-port-migration
 # Runtime catalogue is data-only; never starts project servers during migration.
 update_stage=runtime-catalog-migration
 /usr/bin/php /opt/devmcp/bin/migrate-project-runtime-catalog.php --execute MIGRATE_PROJECT_RUNTIMES
+# The agent address table is metadata only; the server remains ZeroTier-only.
+update_stage=agent-zerotier-address-migration
+/usr/bin/php /opt/devmcp/bin/migrate-agent-zerotier-address.php --execute MIGRATE_AGENT_ZEROTIER_ADDRESS
 # Provisioning runs inside systemd's read-only sandbox, unlike local CLI
 # diagnostics. Reconcile only the approved workspace root and narrow unit
 # drop-ins before the runtime is restarted.
