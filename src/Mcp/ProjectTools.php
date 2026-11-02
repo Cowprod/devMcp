@@ -14,6 +14,7 @@ use Cowprod\DevMcp\Project\ProvisioningState;
 use Cowprod\DevMcp\Project\ProvisioningStore;
 use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
 use Cowprod\DevMcp\Project\LocalWorkspaceProvisioningException;
+use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 use InvalidArgumentException;
 
 final class ProjectTools
@@ -77,6 +78,10 @@ final class ProjectTools
                 }
             }
         }
+        foreach ($projects as &$entry) {
+            $entry = $this->withLocalPreviewStatus($entry);
+        }
+        unset($entry);
         return [
             'projects' => $projects,
             'host' => $this->hostTools->capabilities(),
@@ -229,6 +234,23 @@ final class ProjectTools
             'state' => 'active',
             'actions_authorized' => (bool) $project['actions_enabled'],
         ];
+    }
+
+    /** Attach a current host-only observation; never infer remote peer access. */
+    private function withLocalPreviewStatus(array $row): array
+    {
+        $host = gethostname();
+        $port = $row['preview_port'] ?? null;
+        $state = $row['provisioning_state'] ?? $row['state'] ?? null;
+        if (!is_string($host) || ($row['machine'] ?? null) !== $host
+            || $state !== 'active' || !is_int($port) || $port < 1024 || $port > 65535) {
+            return $row;
+        }
+        $row['preview_http_local'] = PreviewHttpProbe::check($port)['state'];
+        $row['preview_http_zerotier_host'] = $host === 'touchdeck'
+            ? PreviewHttpProbe::check($port, '192.168.194.189')['state'] : 'not_checked';
+        $row['preview_http_checked_at_utc'] = gmdate('Y-m-d\\TH:i:s\\Z');
+        return $row;
     }
 
     public function projectRepositoryConfirm(string $project_id, string $repository, int $revision, string $confirmation): array
@@ -471,7 +493,7 @@ final class ProjectTools
         if (($provisioningRows = $this->provisioningRows()) !== null) {
             foreach ($provisioningRows as $entry) {
                 if ($entry['project_id'] === $project) {
-                    return $this->provisioning->get($project);
+                    return $this->withLocalPreviewStatus($this->provisioning->get($project));
                 }
             }
         }
