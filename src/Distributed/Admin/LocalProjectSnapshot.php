@@ -161,6 +161,14 @@ final class LocalProjectSnapshot
                     $seenParameterIds[$parameter['id']] = true;
                 }
             }
+            // The privileged bridge may publish a TCP reservation, not a running service.
+            // Treat malformed ports as invalid rather than forwarding arbitrary values.
+            $previewPort = $project['preview_port'] ?? null;
+            if (array_key_exists('preview_port', $project)
+                && (!is_int($previewPort) || $previewPort < 1024 || $previewPort > 65535)) {
+                $empty['reason'] = 'port de prévisualisation invalide';
+                return $empty;
+            }
             if (isset($projects[$project['id']])) {
                 $empty['reason'] = 'projet local dupliqué';
                 return $empty;
@@ -173,6 +181,7 @@ final class LocalProjectSnapshot
                 'action_count' => $project['action_count'],
                 'actions' => $project['actions'],
                 'action_details' => $actionDetails,
+                'preview_port' => $previewPort,
             ];
         }
         return [
