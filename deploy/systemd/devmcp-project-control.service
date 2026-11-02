@@ -1,0 +1,22 @@
+[Unit]
+Description=devMcp local project service request controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/devmcp
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-project-service-control
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/devmcp/project-service-requests /var/lib/devmcp/project-service-results /run/lock
+UMask=0077
