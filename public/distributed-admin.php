@@ -335,6 +335,19 @@ try {
     // In a staged rollout, the existing inventory remains readable.
     error_log('devmcp-admin preview port inventory unavailable: ' . get_class($exception));
 }
+// Runtime catalogue is optional until its DDL and read grants are applied.
+// No runtime process can be started through this projection.
+$runtimeTypes = [];
+$projectRuntimes = [];
+$runtimeCatalogueAvailable = false;
+try {
+    $catalog = new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($db);
+    $runtimeTypes = $catalog->types();
+    $projectRuntimes = $catalog->selections();
+    $runtimeCatalogueAvailable = true;
+} catch (PDOException $exception) {
+    error_log('devmcp-admin runtime catalogue unavailable: ' . get_class($exception));
+}
 // Keep distributed registry writes separate from local runtime definitions.
 $projectRows = [];
 foreach ($projects as $project) {
