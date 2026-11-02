@@ -397,6 +397,14 @@ if (!is_string($previewIp) || filter_var($previewIp, FILTER_VALIDATE_IP, FILTER_
     $previewIp = '';
 }
 foreach ($projectRows as &$projectRow) {
+    $selected = $projectRuntimes[$projectRow['id']] ?? null;
+    $projectRow['runtime_type'] = $selected['runtime_type'] ?? '';
+    $projectRow['runtime_revision'] = $selected['revision'] ?? 0;
+    $projectRow['runtime_desired_state'] = $selected['desired_state'] ?? 'stopped';
+    $projectRow['runtime_configurable'] = $runtimeCatalogueAvailable
+        && ($projectRow['provisioning_state'] ?? null) === 'active'
+        && is_int($projectRow['preview_port'] ?? null)
+        && $projectRow['preview_port'] >= 1024;
     $port = $projectRow['preview_port'] ?? null;
     $host = $projectRow['provisioning_machine'] ?? '';
     // A reservation is not a server. Checks from TouchDeck's own network
