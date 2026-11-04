@@ -145,18 +145,26 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         ?? ($hostname === 'touchdeck' ? '192.168.194.189' : null);
     $unit = ProjectServiceRequestPolicy::unit($id);
 
-    if ($operation === 'select-node') {
+    if (in_array($operation, ['select-node', 'select-static', 'select-php'], true)) {
         if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
             throw new RuntimeException('ZeroTier address not configured');
         }
+        $runtime = match ($operation) {
+            'select-node' => 'node',
+            'select-static' => 'static',
+            'select-php' => 'php',
+        };
         $trial = $row;
-        $trial['runtime_type'] = 'node';
-        $trial['entrypoint'] = 'server.js';
+        $trial['runtime_type'] = $runtime;
+        $trial['entrypoint'] = $runtime === 'node' ? 'server.js' : null;
+        $trial['document_root'] = $runtime === 'node' ? null : 'public';
         $trial['desired_state'] = 'running';
         $trial['port'] = $port;
+        // Verify that the expected local server entrypoint/document root exists
+        // before making any database change. No new executable can be supplied.
         ProjectServiceLaunchPlan::build($trial, $root, $ip);
         $revision = isset($row['revision']) ? (int) $row['revision'] : 0;
-        $selected = (new ProjectRuntimeCatalog($db))->select($id, 'node', $revision);
+        $selected = (new ProjectRuntimeCatalog($db))->select($id, $runtime, $revision);
         return ['ok' => true, 'selected_runtime' => $selected['runtime_type'],
             'desired_state' => 'stopped', 'port' => $port, 'service_started' => false];
     }
