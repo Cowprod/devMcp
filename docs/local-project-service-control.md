@@ -16,8 +16,8 @@ Local only. Agent deployment is out of scope; it cannot block chattrackme.
   but not writable by the MCP worker. Logs have size limits and redaction.
 - App process runs as devmcp, with isolated StateDirectory, narrowed writable
   workspace, and no ambient capabilities.
-- Listener uses a verified local ZeroTier address. Node programs must honor
-  HOST; chattrackme rejects 0.0.0.0 explicitly.
+- Listener binds 0.0.0.0 on IPv4; only the published URL uses the verified ZeroTier address. This also exposes dev previews on LAN interfaces: filter ports from untrusted networks using the host firewall. Node apps must honor HOST.
+- After Git synchronization, project.deploy (runtime auto/static/php/node) checks the confined entrypoint, selects the runtime, starts/restarts, and requires HTTP 200 before reporting success.
 
 ## Rollout
 The authorized self-updater installs templates, timer, and SQL action.
