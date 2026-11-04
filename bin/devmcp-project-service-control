@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
+use Cowprod\DevMcp\Project\ProjectDeployRuntime;
 use Cowprod\DevMcp\Project\ProjectServiceLaunchPlan;
 use Cowprod\DevMcp\Project\ProjectServicePortGuard;
 use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
@@ -168,6 +169,44 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         return ['ok' => true, 'selected_runtime' => $selected['runtime_type'],
             'desired_state' => 'stopped', 'port' => $port, 'service_started' => false];
     }
+    $deployRuntime = null;
+    if (str_starts_with($operation, 'deploy-')) {
+        $requested = substr($operation, strlen('deploy-'));
+        $deployRuntime = ProjectDeployRuntime::resolve((string) $row['workspace_path'], $requested);
+        if (!is_string($ip)
+            || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            throw new RuntimeException('ZeroTier address not configured');
+        }
+        $trial = $row;
+        $trial['runtime_type'] = $deployRuntime;
+        $trial['entrypoint'] = $deployRuntime === 'node' ? 'server.js' : null;
+        $trial['document_root'] = $deployRuntime === 'node' ? null : 'public';
+        $trial['desired_state'] = 'running';
+        $trial['port'] = $port;
+        // Preflight before any state mutation: fixed launch argv and confined
+        // entrypoint must be valid for the requested runtime.
+        ProjectServiceLaunchPlan::build($trial, $root, $ip);
+        if ($row['desired_state'] === 'running') {
+            if ($row['runtime_type'] !== $deployRuntime) {
+                throw new RuntimeException('Arrêter le service avant de changer sa technologie');
+            }
+            $operation = 'restart';
+        } else {
+            if ($row['runtime_type'] !== $deployRuntime) {
+                $revision = isset($row['revision']) ? (int) $row['revision'] : 0;
+                (new ProjectRuntimeCatalog($db))->select($id, $deployRuntime, $revision);
+                // Read the committed runtime selection and revision again rather
+                // than assuming the SQL record matches the requested choice.
+                $query->execute([$id]);
+                $row = $query->fetch(PDO::FETCH_ASSOC);
+                if (!is_array($row) || $row['runtime_type'] !== $deployRuntime
+                    || $row['desired_state'] !== 'stopped') {
+                    throw new RuntimeException('Sélection de runtime non confirmée');
+                }
+            }
+            $operation = 'start';
+        }
+    }
     if ($operation === 'start' || $operation === 'restart') {
         if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
             throw new RuntimeException('ZeroTier address not configured');
@@ -226,6 +265,7 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         return array_merge([
             'ok' => $healthy, 'desired_state' => 'running', 'service' => $service,
             'url' => 'http://' . $ip . ':' . $port,
+            'runtime_type' => $deployRuntime ?? $row['runtime_type'],
             'note' => $healthy ? 'HTTP local valide; pair ZeroTier distant non encore teste'
                 : 'Processus/HTTP non confirmes; verifier status et logs',
         ], $health);
