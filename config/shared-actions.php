@@ -32,7 +32,7 @@ return [
     // Privileged systemd operations go through an unprivileged bounded queue.
     // A root-owned timer rechecks SQL and the reserved port before any action.
     'project.service' => [
-        'description' => 'Gestion locale du service applicatif (choix Node, start, stop, restart, status, logs).',
+        'description' => 'Gestion locale du service applicatif (choix Node, statique ou PHP, start, stop, restart, status, logs).',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-service',
             ['param' => 'operation']],
         'cwd' => '.', 'timeout' => 85, 'target' => 'local',
@@ -40,7 +40,7 @@ return [
             'operation' => [
                 'type' => 'enum',
                 'description' => 'Opération bornée; aucune commande shell autorisée.',
-                'values' => ['select-node', 'start', 'stop', 'restart', 'status', 'logs'],
+                'values' => ['select-node', 'select-static', 'select-php', 'start', 'stop', 'restart', 'status', 'logs'],
             ],
         ],
     ],
