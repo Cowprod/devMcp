@@ -64,6 +64,8 @@ final class ProjectServiceRequestPolicyTest extends TestCase
         foreach (ProjectServiceRequestPolicy::OPERATIONS as $operation) {
             ProjectServiceRequestPolicy::validate($operation, 'chattrackme');
         }
-        self::assertCount(6, ProjectServiceRequestPolicy::OPERATIONS);
+        self::assertCount(8, ProjectServiceRequestPolicy::OPERATIONS);
+        self::assertContains('select-static', ProjectServiceRequestPolicy::OPERATIONS);
+        self::assertContains('select-php', ProjectServiceRequestPolicy::OPERATIONS);
     }
 }
