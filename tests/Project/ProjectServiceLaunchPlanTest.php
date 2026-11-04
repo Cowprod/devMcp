@@ -46,7 +46,7 @@ final class ProjectServiceLaunchPlanTest extends TestCase
     {
         $plan = ProjectServiceLaunchPlan::build($this->row(), $this->root, '127.0.0.1');
         self::assertSame(
-            ['/usr/bin/python3', '-m', 'http.server', '17591', '--bind', '127.0.0.1',
+            ['/usr/bin/python3', '-m', 'http.server', '17591', '--bind', '0.0.0.0',
                 '--directory', $this->workspace . '/public'],
             $plan['argv']
         );
@@ -58,7 +58,7 @@ final class ProjectServiceLaunchPlanTest extends TestCase
         $plan = ProjectServiceLaunchPlan::build(
             $this->row(['runtime_type' => 'php']), $this->root, '127.0.0.1',
         );
-        self::assertSame(['/usr/bin/php', '-S', '127.0.0.1:17591',
+        self::assertSame(['/usr/bin/php', '-S', '0.0.0.0:17591',
             '-t', $this->workspace . '/public'], $plan['argv']);
     }
 
@@ -68,7 +68,8 @@ final class ProjectServiceLaunchPlanTest extends TestCase
             $this->row(['runtime_type' => 'node']), $this->root, '127.0.0.1',
         );
         self::assertSame(['/usr/bin/node', $this->workspace . '/server.js'], $plan['argv']);
-        self::assertSame('127.0.0.1', $plan['env']['HOST']);
+        self::assertSame('0.0.0.0', $plan['env']['HOST']);
+        self::assertSame('0.0.0.0', $plan['bind_ip']);
     }
 
     public function testPreventsSymlinkEscape(): void
