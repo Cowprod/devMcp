@@ -11,6 +11,17 @@ use Symfony\Component\Process\Process;
 
 final class PreviewHttpProbeTest extends TestCase
 {
+    public function testPrimaryLocalStatusUsesActualReachableAddress(): void
+    {
+        $offline = ['state' => 'offline', 'status_code' => null];
+        $http = ['state' => 'http', 'status_code' => 200];
+        $tcp = ['state' => 'tcp', 'status_code' => null];
+        self::assertSame('http', PreviewHttpProbe::effectiveState($offline, $http));
+        self::assertSame('http', PreviewHttpProbe::effectiveState($http, $offline));
+        self::assertSame('tcp', PreviewHttpProbe::effectiveState($offline, $tcp));
+        self::assertSame('offline', PreviewHttpProbe::effectiveState($offline, null));
+    }
+
     public function testRejectsInvalidTargets(): void
     {
         foreach ([[80, '127.0.0.1'], [65536, '127.0.0.1'], [12000, 'example.org']] as [$port, $ip]) {
