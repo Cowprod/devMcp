@@ -21,6 +21,28 @@ final class PreviewHttpProbe
      * @return array{state:string,status_code:?int}
      * States: offline (TCP connect failed), tcp (no valid HTTP status), http.
      */
+    /**
+     * The primary host-local status is the best verified HTTP endpoint, not
+     * necessarily 127.0.0.1: our systemd previews bind ZeroTier exclusively.
+     *
+     * @param array{state:string,status_code:?int} $loopback
+     * @param ?array{state:string,status_code:?int} $zeroTier
+     */
+    public static function effectiveState(array $loopback, ?array $zeroTier): string
+    {
+        foreach ([$zeroTier, $loopback] as $probe) {
+            if (($probe['state'] ?? null) === 'http') {
+                return 'http';
+            }
+        }
+        foreach ([$zeroTier, $loopback] as $probe) {
+            if (($probe['state'] ?? null) === 'tcp') {
+                return 'tcp';
+            }
+        }
+        return 'offline';
+    }
+
     public static function check(int $port, string $ipv4 = '127.0.0.1'): array
     {
         if ($port < 1024 || $port > 65535
