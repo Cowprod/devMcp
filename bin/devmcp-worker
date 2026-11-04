@@ -39,4 +39,26 @@ if (in_array('--once', $argv, true)) {
     exit($worker->runOnce() ? 0 : 3);
 }
 
-$worker->runForever();
+// A long-lived worker keeps a PDO connection inside ProjectRegistry. MariaDB
+// may close that idle connection while the file-backed job queue remains live
+// (SQLSTATE[HY000] 2006). Refresh the runtime when idle, and after every
+// completed job. Never recycle during a running job. The SQL registry remains
+// authoritative and no failed action is replayed implicitly.
+$runtimeBornAt = hrtime(true);
+while (true) {
+    $processed = $worker->runOnce();
+    if ($processed || hrtime(true) - $runtimeBornAt >= 60_000_000_000) {
+        $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
+        $worker = new JobWorker(
+            $runtime->projects,
+            $runtime->jobsStore,
+            $runtime->audit,
+            $target,
+        );
+        $runtimeBornAt = hrtime(true);
+    }
+    if (!$processed) {
+        usleep(250000);
+    }
+}
+
