@@ -42,7 +42,10 @@ final class ProjectServiceLaunchPlan
         }
 
         $runtime = $record['runtime_type'] ?? null;
-        // Applications listen on every IPv4 interface; the verified ZeroTier IP is only\n        // used for the advertised URL and HTTP health probe.\n        $bindIp = '0.0.0.0';\n        $bind = $bindIp . ':' . $port;
+        // Applications listen on every IPv4 interface; the verified ZeroTier IP is only
+        // used for the advertised URL and HTTP health probe.
+        $bindIp = '0.0.0.0';
+        $bind = $bindIp . ':' . $port;
         $docroot = $record['document_root'] ?? null;
         $entrypoint = $record['entrypoint'] ?? null;
         if ($runtime === 'static' || $runtime === 'php') {
