@@ -17,9 +17,9 @@ final class ProjectServiceLaunchPlan
      * @param array<string, mixed> $record
      * @return array{argv:list<string>,cwd:string,env:array<string,string>,runtime:string,port:int,bind_ip:string}
      */
-    public static function build(array $record, string $workspaceRoot, string $bindIp): array
+    public static function build(array $record, string $workspaceRoot, string $advertisedIpv4): array
     {
-        if (filter_var($bindIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+        if (filter_var($advertisedIpv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
             throw new InvalidArgumentException('Adresse de liaison invalide');
         }
         $projectId = $record['project_id'] ?? null;
@@ -42,6 +42,9 @@ final class ProjectServiceLaunchPlan
         }
 
         $runtime = $record['runtime_type'] ?? null;
+        // Applications listen on every IPv4 interface; the verified ZeroTier IP is only
+        // used for the advertised URL and HTTP health probe.
+        $bindIp = '0.0.0.0';
         $bind = $bindIp . ':' . $port;
         $docroot = $record['document_root'] ?? null;
         $entrypoint = $record['entrypoint'] ?? null;

@@ -30,14 +30,14 @@ final class ProjectServicePortGuardTest extends TestCase
         [$socket, $port] = self::reserve();
         try {
             $this->expectException(RuntimeException::class);
-            $this->expectExceptionMessage('Reserved ZeroTier TCP port is unavailable');
+            $this->expectExceptionMessage('Reserved wildcard TCP port is unavailable');
             ProjectServicePortGuard::assertStartAllowed('127.0.0.1', $port, 'stopped', 'inactive');
         } finally {
             fclose($socket);
         }
     }
 
-    public function testWildcardListenerAlsoBlocksSpecificZeroTierBind(): void
+    public function testWildcardListenerAlsoBlocksWildcardBind(): void
     {
         [$socket, $port] = self::reserve('0.0.0.0');
         try {
@@ -76,7 +76,7 @@ final class ProjectServicePortGuardTest extends TestCase
         ProjectServicePortGuard::assertStartAllowed('127.0.0.1', $port, 'stopped', 'active');
     }
 
-    public function testWildcardAndInvalidStateOrPrivilegedPortAreRefused(): void
+    public function testInvalidAdvertisedAddressStateOrPrivilegedPortAreRefused(): void
     {
         foreach ([['0.0.0.0', 18000, 'stopped'],
                      ['not-an-ip', 18000, 'stopped'],

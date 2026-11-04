@@ -246,9 +246,15 @@ final class ProjectTools
             || $state !== 'active' || !is_int($port) || $port < 1024 || $port > 65535) {
             return $row;
         }
-        $row['preview_http_local'] = PreviewHttpProbe::check($port)['state'];
-        $row['preview_http_zerotier_host'] = $host === 'touchdeck'
-            ? PreviewHttpProbe::check($port, '192.168.194.189')['state'] : 'not_checked';
+        // Preview servers bind the local ZeroTier interface, not loopback.
+        // Keep the loopback diagnostic, but report a working bound interface
+        // as the primary local HTTP state instead of a misleading "offline".
+        $loopback = PreviewHttpProbe::check($port);
+        $zeroTier = $host === 'touchdeck'
+            ? PreviewHttpProbe::check($port, '192.168.194.189') : null;
+        $row['preview_http_loopback'] = $loopback['state'];
+        $row['preview_http_local'] = PreviewHttpProbe::effectiveState($loopback, $zeroTier);
+        $row['preview_http_zerotier_host'] = $zeroTier['state'] ?? 'not_checked';
         $row['preview_http_checked_at_utc'] = gmdate('Y-m-d\\TH:i:s\\Z');
         return $row;
     }

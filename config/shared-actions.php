@@ -45,6 +45,22 @@ return [
         ],
     ],
 
+    // Publish the default web runtime after the source files have been synced.
+    // ChatGPT chooses auto/static/php/node; the root controller validates again.
+    'project.deploy' => [
+        'description' => 'Publie et démarre le site après synchronisation Git; choisir auto par défaut, ou static/php/node. Succès seulement si HTTP 200 sur IP ZeroTier.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-service', 'deploy',
+            ['param' => 'runtime']],
+        'cwd' => '.', 'timeout' => 85, 'target' => 'local',
+        'parameters' => [
+            'runtime' => [
+                'type' => 'enum',
+                'description' => 'Technologie choisie par ChatGPT : auto par défaut, statique, PHP ou Node.',
+                'values' => ['auto', 'static', 'php', 'node'],
+            ],
+        ],
+    ],
+
     // Test jobs have durable stdout/stderr and status via the existing MCP job API.
     // No free-form command argument: only declared project test scripts are run.
     'project.test' => [

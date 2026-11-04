@@ -46,10 +46,12 @@ try {
         throw new RuntimeException('Registre SQL non prêt');
     }
     $actions = require dirname(__DIR__) . '/config/shared-actions.php';
-    $definition = $actions['project.service'] ?? null;
-    if (!is_array($definition) || ($definition['argv'][1] ?? null)
-        !== '/opt/devmcp/bin/devmcp-project-service') {
-        throw new RuntimeException('Action de service absente ou invalide');
+    foreach (['project.service', 'project.deploy'] as $actionId) {
+        $definition = $actions[$actionId] ?? null;
+        if (!is_array($definition) || ($definition['argv'][1] ?? null)
+            !== '/opt/devmcp/bin/devmcp-project-service') {
+            throw new RuntimeException('Action de publication absente ou invalide');
+        }
     }
     $hostname = gethostname();
     if (!is_string($hostname) || $hostname === '') {
@@ -61,7 +63,9 @@ try {
             'INSERT INTO dm_shared_action_config (action_id, config_json) VALUES (?, ?) '
             . 'ON DUPLICATE KEY UPDATE config_json = VALUES(config_json)'
         );
-        $upsert->execute(['project.service', json_encode($definition, JSON_THROW_ON_ERROR)]);
+        foreach (['project.service', 'project.deploy'] as $actionId) {
+            $upsert->execute([$actionId, json_encode($actions[$actionId], JSON_THROW_ON_ERROR)]);
+        }
 
         // Upgrade only provisioned, active workspaces on THIS machine.
         // Existing legacy/manual project privileges are deliberately untouched.
@@ -82,12 +86,17 @@ try {
                 || !array_is_list($item['shared_actions'])) {
                 throw new RuntimeException('Définition locale invalide');
             }
-            if (in_array('project.service', $item['shared_actions'], true)) {
-                continue;
+            $changed = false;
+            foreach (['project.service', 'project.deploy'] as $actionId) {
+                if (!in_array($actionId, $item['shared_actions'], true)) {
+                    $item['shared_actions'][] = $actionId;
+                    $changed = true;
+                }
             }
-            $item['shared_actions'][] = 'project.service';
-            $update->execute([json_encode($item, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), $row['project_id']]);
-            $modified++;
+            if ($changed) {
+                $update->execute([json_encode($item, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), $row['project_id']]);
+                $modified++;
+            }
         }
         $db->commit();
     } catch (Throwable $error) {
