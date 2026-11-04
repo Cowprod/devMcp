@@ -13,7 +13,7 @@ use RuntimeException;
  */
 final class ProjectServiceRequestPolicy
 {
-    public const OPERATIONS = ['select-node', 'start', 'stop', 'restart', 'status', 'logs'];
+    public const OPERATIONS = ['select-node', 'select-static', 'select-php', 'start', 'stop', 'restart', 'status', 'logs'];
 
     public static function projectFromCwd(string $cwd, string $workspaceRoot): string
     {
