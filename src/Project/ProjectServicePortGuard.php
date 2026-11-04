@@ -9,7 +9,7 @@ use RuntimeException;
 
 /**
  * Refuse a service start before SQL desired_state changes if another listener
- * already occupies the port reserved for this project's ZeroTier IP.
+ * already occupies the port reserved across any of this host's IPv4 interfaces.
  * An already active unit may be started idempotently only when SQL agrees.
  */
 final class ProjectServicePortGuard
@@ -33,17 +33,17 @@ final class ProjectServicePortGuard
             return;
         }
 
-        // Test the exact reserved bind address; a wildcard listener occupying
-        // the same port also blocks this bind. Never use the result to pick a
-        // different port: dm_preview_port_reservation is authoritative.
+        // The project will bind 0.0.0.0. Check precisely that wildcard socket,
+        // including collisions on loopback/LAN even if ZeroTier appears free.
+        // Never allocate a different port: the SQL reservation is authoritative.
         $listener = @stream_socket_server(
-            'tcp://' . $ip . ':' . $port,
+            'tcp://0.0.0.0:' . $port,
             $errno,
             $message,
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN
         );
         if ($listener === false) {
-            throw new RuntimeException('Reserved ZeroTier TCP port is unavailable');
+            throw new RuntimeException('Reserved wildcard TCP port is unavailable');
         }
         fclose($listener);
     }
