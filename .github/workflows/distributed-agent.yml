@@ -32,6 +32,10 @@ jobs:
           bash -n deploy/distributed/install-agent-self-update.sh
           shellcheck --severity=error deploy/distributed/self-update-agent.sh
           shellcheck --severity=error deploy/distributed/install-agent-self-update.sh
+      - name: Self-update same-revision integration smoke
+        run: |
+          bash -n tests/Distributed/self-update-agent-smoke.sh
+          bash tests/Distributed/self-update-agent-smoke.sh
       - name: Systemd unit validation
         run: |
           grep -Fx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' deploy/distributed/devmcp-agent.service
