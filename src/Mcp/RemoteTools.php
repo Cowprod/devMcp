@@ -55,7 +55,7 @@ final class RemoteTools
         return new \Cowprod\DevMcp\Project\SqlProjectConfiguration($this->db);
     }
 
-    private const ACTIONS = ['git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
+    private const ACTIONS = ['host.runtime', 'git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
 
     /**
      * Read-only checks for a future provisioning request. Even disabled
