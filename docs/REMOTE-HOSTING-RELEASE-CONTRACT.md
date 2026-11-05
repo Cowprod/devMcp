@@ -22,6 +22,9 @@ Le **fichier local administrateur** contient exactement :
 - `workspace_root=/srv/devmcp-hosting` : seul répertoire autorisé ;
 - `bind_ipv4` : adresse IPv4 spécifiée par l'administrateur, à vérifier
   ensuite comme réellement portée par l'interface ZeroTier ;
+- `zerotier_network_id` : identifiant réseau ZeroTier explicitement épinglé
+  par l'administrateur (16 caractères hexadécimaux minuscules), obligatoire
+  dans la politique locale root-only ;
 - `deployments` : jusqu'à 32 entrées, indexées par `deployment_id`
   hexadécimal, associant `project_id`, `repository`, `runtime`,
   `port`, `minimum_revision` et `enabled`.
