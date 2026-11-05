@@ -191,10 +191,10 @@ final class RemoteHostingGitTreeEvidence
                 throw new InvalidArgumentException('Git tree contains unsupported object or mode');
             }
             $entries[] = [
+                'path' => $m[5],
                 'mode' => $m[1],
                 'object' => $m[3],
                 'size' => (int) $m[4],
-                'path' => $m[5],
             ];
         }
         return $entries;
