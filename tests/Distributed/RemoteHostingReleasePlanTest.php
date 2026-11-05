@@ -25,6 +25,7 @@ final class RemoteHostingReleasePlanTest extends TestCase
             'machine_id' => self::MACHINE,
             'workspace_root' => RemoteHostingReleasePlan::WORKSPACE_ROOT,
             'bind_ipv4' => '192.168.194.180',
+            'zerotier_network_id' => '8056c2e21c000001',
             'deployments' => [
                 self::ID_STATIC => [
                     'project_id' => 'case-demo-static',
@@ -205,6 +206,26 @@ final class RemoteHostingReleasePlanTest extends TestCase
         $policy = self::policy();
         $policy['deployments'][self::ID_STATIC]['minimum_revision'] = 'main';
         $this->reject($policy, self::request());
+    }
+
+    public function testNetworkPinMustBeLocallyApprovedAndCanonical(): void
+    {
+        $policy = self::policy();
+        self::assertSame('8056c2e21c000001',
+            RemoteHostingReleasePlan::preview($policy, self::request())['zerotier_network_id']);
+
+        foreach (['', '123', '8056C2E21C000001', '8056c2e21c000001\n', 123, null] as $bad) {
+            $candidate = $policy;
+            $candidate['zerotier_network_id'] = $bad;
+            $this->reject($candidate, self::request());
+        }
+        $candidate = $policy;
+        unset($candidate['zerotier_network_id']);
+        $this->reject($candidate, self::request());
+
+        $request = self::request();
+        $request['zerotier_network_id'] = '8056c2e21c000002';
+        $this->reject($policy, $request);
     }
 
     public function testUnknownPolicyFieldsCannotSilentlyBecomePermissions(): void

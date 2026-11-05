@@ -35,6 +35,7 @@ final class RemoteHostingUnitDraftTest extends TestCase
             'machine_id' => self::MACHINE,
             'workspace_root' => RemoteHostingReleasePlan::WORKSPACE_ROOT,
             'bind_ipv4' => '192.168.194.180',
+            'zerotier_network_id' => '8056c2e21c000001',
             'deployments' => [
                 $id => [
                     'project_id' => $project,
@@ -63,6 +64,7 @@ final class RemoteHostingUnitDraftTest extends TestCase
         foreach ($expected as $runtime => $command) {
             $draft = RemoteHostingUnitDraft::render($this->plan($runtime));
             self::assertFalse($draft['ready_to_install']);
+            self::assertContains('zerotier_network_policy_pin', $draft['checks_required']);
             self::assertSame('devmcp-hosting-case-demo-' . $runtime . '.service', $draft['service_name']);
             self::assertStringContainsString($command . "\n", $draft['unit']);
             self::assertStringContainsString('WorkingDirectory=/srv/devmcp-hosting/case-demo-' . $runtime . '/current', $draft['unit']);

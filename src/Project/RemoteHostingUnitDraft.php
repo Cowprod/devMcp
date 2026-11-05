@@ -113,6 +113,7 @@ final class RemoteHostingUnitDraft
                 'root_owned_policy_and_release',
                 'verified_git_release',
                 'zerotier_address_on_interface',
+                'zerotier_network_policy_pin',
                 'port_owned_and_free',
                 'no_symlink_workspace_escape',
                 'runtime_entries_and_dependencies',
@@ -130,7 +131,7 @@ final class RemoteHostingUnitDraft
         $expected = [
             'deployment_id', 'project_id', 'machine_id', 'repository',
             'minimum_revision', 'revision', 'workspace', 'runtime',
-            'port', 'bind_ipv4', 'ready_to_execute', 'verification_required',
+            'port', 'bind_ipv4', 'zerotier_network_id', 'ready_to_execute', 'verification_required',
         ];
         sort($keys);
         sort($expected);
@@ -147,6 +148,8 @@ final class RemoteHostingUnitDraft
             || !is_int($plan['port'] ?? null)
             || $plan['port'] < 12000 || $plan['port'] > 19999
             || !self::privateIpv4($plan['bind_ipv4'] ?? null)
+            || !is_string($plan['zerotier_network_id'] ?? null)
+            || preg_match('/^[a-f0-9]{16}$/D', $plan['zerotier_network_id']) !== 1
             || ($plan['workspace'] ?? null)
                 !== RemoteHostingReleasePlan::WORKSPACE_ROOT . '/' . $plan['project_id']
             || ($plan['ready_to_execute'] ?? null) !== false

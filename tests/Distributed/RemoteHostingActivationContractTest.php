@@ -21,6 +21,7 @@ final class RemoteHostingActivationContractTest extends TestCase
             'machine_id' => $machine,
             'workspace_root' => RemoteHostingReleasePlan::WORKSPACE_ROOT,
             'bind_ipv4' => '192.168.194.180',
+            'zerotier_network_id' => '8056c2e21c000001',
             'deployments' => [
                 $deployment => [
                     'project_id' => 'case-pilot',
@@ -55,6 +56,7 @@ final class RemoteHostingActivationContractTest extends TestCase
                 $draft['release_path']
             );
             self::assertContains('unique_operation_nonce_and_fencing', $draft['preflight_required']);
+            self::assertContains('zerotier_network_policy_pin', $draft['preflight_required']);
             self::assertContains('remote_peer_http_or_ws_health', $draft['commit_required']);
         }
     }

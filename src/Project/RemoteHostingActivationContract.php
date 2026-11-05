@@ -60,7 +60,7 @@ final class RemoteHostingActivationContract
         $expected = [
             'deployment_id', 'project_id', 'machine_id', 'repository',
             'minimum_revision', 'revision', 'workspace', 'runtime',
-            'port', 'bind_ipv4', 'ready_to_execute', 'verification_required',
+            'port', 'bind_ipv4', 'zerotier_network_id', 'ready_to_execute', 'verification_required',
         ];
         $keys = array_keys($plan);
         sort($keys);
@@ -81,6 +81,8 @@ final class RemoteHostingActivationContract
             || $plan['port'] < 12000 || $plan['port'] > 19999
             || !is_string($plan['bind_ipv4'] ?? null)
             || filter_var($plan['bind_ipv4'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || !is_string($plan['zerotier_network_id'] ?? null)
+            || preg_match('/^[a-f0-9]{16}$/D', $plan['zerotier_network_id']) !== 1
             || ($plan['workspace'] ?? null) !== RemoteHostingReleasePlan::WORKSPACE_ROOT . '/' . $plan['project_id']
             || ($plan['ready_to_execute'] ?? null) !== false
             || !is_array($plan['verification_required'] ?? null)
@@ -115,6 +117,7 @@ final class RemoteHostingActivationContract
                 'root_owned_policy', 'unique_operation_nonce_and_fencing',
                 'exclusive_local_lock', 'fresh_git_fetch_and_proof',
                 'safe_canonical_paths_and_ownership', 'zerotier_ip_and_port',
+                'zerotier_network_policy_pin',
                 'dependencies_and_unit_review', 'rollback_target_verified',
             ],
             'commit_required' => [

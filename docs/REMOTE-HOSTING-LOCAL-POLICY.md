@@ -16,7 +16,8 @@ exécutable et limité à 64 KiB.
 
 Le JSON utilise exactement les champs déjà définis pour
 `RemoteHostingReleasePlan::preview()` : version, état enabled,
-identité de machine, racine fixe, IP privée et déploiements explicitement
+identité de machine, racine fixe, IP privée, identifiant ZeroTier
+`zerotier_network_id` (exactement 16 caractères hexadécimaux minuscules) et déploiements explicitement
 autorisés par port, runtime, dépôt et révision minimale. Une demande
 distante ne comporte que l'identité de machine, le déploiement, le projet
 et un SHA Git : aucune commande, option systemd ni adresse réseau
@@ -43,10 +44,18 @@ de services, ni la vérification du réseau ou du dépôt.
 **Séparation des responsabilités :** ceci vérifie seulement la
 provenance filesystem et le contrat JSON. Le futur exécuteur devra
 également vérifier l'identité réellement enrôlée de l'agent, la preuve
-Git récente, le propriétaire de l'interface ZeroTier, le verrou
+Git récente, l'identifiant du réseau ZeroTier épinglé, le propriétaire de l'interface, le verrou
 de déploiement, la disponibilité du port, la provenance de la release,
 les permissions du workspace, les tests HTTP/WS depuis un pair et
 le rollback. Une politique JSON valide n'autorise aucune exécution.
 
 La politique n'est pas créée ou activée sur `case` par cette PR. Les
 tests exercent le parseur pur sans modifier `/etc` ni exiger root.
+
+**Phase 2I — réseau autorisé :** la politique JSON root-only doit maintenant
+contenir un `zerotier_network_id` obligatoire. Les anciennes politiques
+sans ce champ sont rejetées fermement ; aucun identifiant transmis par
+la requête MCP n'est accepté. La classe
+`RemoteHostingZeroTierNetworkPin::inspect($request)` recharge la politique
+depuis `/etc/devmcp/hosting-policy.json` et compare l'ID au réseau
+effectivement déclaré par le démon local. Le contrôle reste inerte.

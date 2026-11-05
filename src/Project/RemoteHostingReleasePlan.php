@@ -32,13 +32,14 @@ final class RemoteHostingReleasePlan
      * @return array{deployment_id:string,project_id:string,machine_id:string,
      *   repository:string,minimum_revision:string,revision:string,
      *   workspace:string,runtime:string,port:int,bind_ipv4:string,
+     *   zerotier_network_id:string,
      *   ready_to_execute:bool,verification_required:list<string>}
      */
     public static function preview(array $policy, array $request): array
     {
         self::exactKeys($policy, [
             'version', 'enabled', 'machine_id', 'workspace_root',
-            'bind_ipv4', 'deployments',
+            'bind_ipv4', 'zerotier_network_id', 'deployments',
         ]);
         self::exactKeys($request, [
             'deployment_id', 'machine_id', 'project_id', 'revision',
@@ -49,6 +50,8 @@ final class RemoteHostingReleasePlan
             || !self::hex($policy['machine_id'] ?? null, 32)
             || ($policy['workspace_root'] ?? null) !== self::WORKSPACE_ROOT
             || !self::validBindIp($policy['bind_ipv4'] ?? null)
+            || !is_string($policy['zerotier_network_id'] ?? null)
+            || preg_match('/^[a-f0-9]{16}$/D', $policy['zerotier_network_id']) !== 1
             || !is_array($policy['deployments'] ?? null)
             || count($policy['deployments']) < 1
             || count($policy['deployments']) > 32) {
@@ -107,6 +110,7 @@ final class RemoteHostingReleasePlan
             'runtime' => $deployment['runtime'],
             'port' => $deployment['port'],
             'bind_ipv4' => $policy['bind_ipv4'],
+            'zerotier_network_id' => $policy['zerotier_network_id'],
             'ready_to_execute' => false,
             'verification_required' => [
                 'git_main_ancestry', 'zerotier_interface_owner',
