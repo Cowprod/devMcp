@@ -86,6 +86,7 @@ final class RemoteHostingBindEvidenceTest extends TestCase
             ['bind_ipv4' => ['192.168.194.189']],
             ['ready_to_execute' => true],
             ['workspace' => null],
+            ['workspace' => '/srv/caserouter'],
         ] as $change) {
             $candidate = array_replace($plan, $change);
             try {
@@ -95,5 +96,13 @@ final class RemoteHostingBindEvidenceTest extends TestCase
                 self::assertTrue(true);
             }
         }
+
+        // Even a plausible zt device cannot authorize a public bind address.
+        $publicPlan = array_replace(self::plan(), ['bind_ipv4' => '8.8.8.8']);
+        $publicInterfaces = ['zt12345678' => [
+            'flags' => 1, 'unicast' => [['address' => '8.8.8.8']],
+        ]];
+        $this->expectException(InvalidArgumentException::class);
+        RemoteHostingBindEvidence::check($publicPlan, $publicInterfaces);
     }
 }
