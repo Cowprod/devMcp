@@ -17,11 +17,26 @@ Machine d'états prévue :
 - `prepared -> activated` après bascule atomique contrôlée ;
 - `activated -> verified` après tests de santé indépendants ;
 - `verified -> committed` après validation durable ;
-- `prepared -> rolled_back` par abandon ;
-- `activated/verified -> rolled_back` après restauration validée.
+- `idle -> failed_before_switch` si la préparation échoue (aucune bascule) ;
+- `prepared -> rolled_back` par abandon avant la bascule ;
+- `prepared -> rollback_required` si la bascule/redémarrage est incertain ;
+- `activated -> rollback_required` sur échec du contrôle depuis un pair ZeroTier ;
+- `activated/verified -> rollback_required` sur décision de restauration ;
+- `rollback_required -> rolled_back` uniquement après vérification **locale** de la récupération ;
+- `rollback_required -> manual_recovery_required` si la restauration échoue, avec verrou conservé.
 
 Les transitions sont des **descriptions**, pas des autorisations. Elles restent
-inertes et interdisent les chemins inverses ou les relectures naïves.
+inertes et interdisent les chemins inverses ou les relectures naïves. Le seul
+event `rollback_verified` autorise l'état `rolled_back` après une bascule
+potentielle : un simple événement `rollback` ne doit jamais suffire.
+
+`recovery(state, previousRevision)` décrit le type de récupération :
+restaurer une release antérieure si elle existe, sinon **désactiver** le
+premier service et retirer son pointeur actif. Il refuse les révisions
+invalides et conserve le verrou en cas de restauration incertaine ou échouée.
+Ces recommandations demeurent `ready_to_apply=false`. Le journal durable,
+les attestations de santé et le verrou effectif sont à implémenter dans
+l'exécuteur local root-only ; la classe PHP ne les réalise pas.
 
 ## Obligations du futur exécuteur privilégié
 
