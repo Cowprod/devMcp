@@ -31,6 +31,14 @@ caseRouter.
   l'auto-update ne leur confère pas de nouveaux privilèges.
 - Les six fichiers de code fixés dans `self-update-agent.sh` sont préparés
   dans une zone temporaire et chacun passe `php -l` avant remplacement.
+- Si une nouvelle version de l'updater étend la liste fixe des fichiers
+  distribués, le contrôle suivant vérifie **les fichiers effectivement présents**,
+  même lorsque le SHA mémorisé correspond déjà à `origin/main`. Les helpers
+  manquants sont installés lors de cette passe ; un binaire déjà présent mais
+  différent du SHA attendu provoque un refus explicite (pas d'écrasement silencieux).
+- Le marqueur `installed-revision` est préparé dans un fichier temporaire du
+  même système de fichiers puis remplacé par renommage atomique. Une panne
+  au milieu de cette écriture ne doit pas tronquer le marqueur précédent.
 - Le timer principal de l'agent est arrêté pendant la copie, le service
   est redémarré, puis le timer est rétabli. En cas d'échec de l'activation,
   le script restaure les anciens binaires.
@@ -84,5 +92,9 @@ de l'auto-update et n'est pas implicitement accordée par ce mécanisme.
   réussi du service ne prouve pas que toutes ses fonctions sont correctes.
 - Le rollback couvre une erreur d'activation détectée lors de la mise à jour ;
   il ne détecte pas un dysfonctionnement applicatif apparaissant plus tard.
+- L'écriture atomique du **marqueur** ne rend pas les remplacements des six
+  binaires atomiques comme un groupe. Une coupure d'alimentation pendant la
+  copie peut nécessiter une reprise locale. Cette limitation reste à lever
+  avant un mécanisme de mise à jour transactionnelle complet.
 - La connectivité sortante HTTPS vers GitHub doit être autorisée sur la
   machine cible.
