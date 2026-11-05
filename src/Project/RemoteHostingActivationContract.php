@@ -118,4 +118,9 @@ final class RemoteHostingActivationContract
             'ready_to_apply' => false,
         ];
     }
+    private static function hex(mixed $value, int $length): bool
+    {
+        return is_string($value) && strlen($value) === $length
+            && preg_match('/^[0-9a-f]+$/D', $value) === 1;
+    }
 }
