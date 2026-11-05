@@ -16,7 +16,8 @@ exécutable et limité à 64 KiB.
 
 Le JSON utilise exactement les champs déjà définis pour
 `RemoteHostingReleasePlan::preview()` : version, état enabled,
-identité de machine, racine fixe, IP privée, identifiant ZeroTier\n`zerotier_network_id` (exactement 16 caractères hexadécimaux minuscules) et déploiements explicitement
+identité de machine, racine fixe, IP privée, identifiant ZeroTier
+`zerotier_network_id` (exactement 16 caractères hexadécimaux minuscules) et déploiements explicitement
 autorisés par port, runtime, dépôt et révision minimale. Une demande
 distante ne comporte que l'identité de machine, le déploiement, le projet
 et un SHA Git : aucune commande, option systemd ni adresse réseau
