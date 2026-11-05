@@ -152,6 +152,14 @@ final class RemoteHostingReleasePlanTest extends TestCase
         $policy = self::policy();
         $policy['bind_ipv4'] = '127.0.0.1';
         $this->reject($policy, self::request());
+
+        $policy = self::policy();
+        $policy['bind_ipv4'] = '8.8.8.8';
+        $this->reject($policy, self::request());
+
+        $policy = self::policy();
+        $policy['bind_ipv4'] = '239.255.0.1';
+        $this->reject($policy, self::request());
     }
 
     public function testDisabledDeploymentCannotBeSelected(): void
@@ -180,6 +188,10 @@ final class RemoteHostingReleasePlanTest extends TestCase
 
         $policy = self::policy();
         $policy['deployments'][self::ID_STATIC]['repository'] = 'Cowprod/../secrets';
+        $this->reject($policy, self::request());
+
+        $policy = self::policy();
+        $policy['deployments'][self::ID_STATIC]['repository'] = 'Cowprod/..';
         $this->reject($policy, self::request());
 
         $policy = self::policy();
