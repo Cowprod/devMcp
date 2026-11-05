@@ -82,6 +82,26 @@ PHP et Node, il faudra concevoir et approuver une politique de déploiement
 bornée par projet, répertoire, port et runtime. Cette décision est distincte
 de l'auto-update et n'est pas implicitement accordée par ce mécanisme.
 
+## Diagnostic d'accessibilité après bootstrap
+
+Le succès du service systemd `devmcp-agent-update.service` confirme la
+synchronisation du code, **pas** l'acceptation des pings par le serveur.
+Un `devmcp-agent.service` `inactive (dead)` est normal pour cette unité
+`oneshot` déclenchée par un timer.
+
+Lorsqu'un ping `/v1/agent/ping` n'obtient pas HTTP 200, l'agent journalise
+désormais une catégorie stable, le statut HTTP et le numéro d'erreur cURL
+(mais jamais le jeton, la requête, l'URL complète, le corps de réponse ni
+le texte d'erreur TLS). Le statut HTTP 400 est ambigu : le serveur central
+l'utilise notamment pour plusieurs rejets internes, **sans prouver** que
+l'enrôlement est en cause. HTTP 404 suggère une route absente ; HTTP 0
+avec un numéro d'erreur cURL signale une panne de transport ou TLS.
+Les paramètres d'authentification et la politique restent inchangés.
+
+L'amélioration du journal est distribuée par l'auto-update déjà installé,
+au prochain cycle (environ six heures, plus un délai aléatoire). Aucune
+relance manuelle ni nouvelle autorisation locale n'est requise.
+
 ## Limites
 
 - L'updater suit `main` en mode fast-forward ; le contrôle principal
