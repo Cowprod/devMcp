@@ -15,14 +15,40 @@ use InvalidArgumentException;
  */
 final class RemoteHostingActivationContract
 {
-    private const STATES = ['idle', 'prepared', 'activated', 'verified', 'committed', 'rolled_back'];
+    private const STATES = [
+        'idle', 'prepared', 'activated', 'verified', 'committed',
+        'rollback_required', 'rolled_back', 'failed_before_switch',
+        'manual_recovery_required',
+    ];
     private const TRANSITIONS = [
-        'idle' => ['prepare' => 'prepared'],
-        'prepared' => ['activate' => 'activated', 'abort' => 'rolled_back'],
-        'activated' => ['verify' => 'verified', 'rollback' => 'rolled_back'],
-        'verified' => ['commit' => 'committed', 'rollback' => 'rolled_back'],
+        'idle' => [
+            'prepare' => 'prepared',
+            'prepare_failed' => 'failed_before_switch',
+        ],
+        'prepared' => [
+            'activate' => 'activated',
+            'abort' => 'rolled_back',
+            // A failed/ambiguous symlink switch or restart MAY have changed
+            // the running release. Never treat this as a harmless abort.
+            'activation_uncertain' => 'rollback_required',
+        ],
+        'activated' => [
+            'verify' => 'verified',
+            'peer_health_failed' => 'rollback_required',
+            'rollback_requested' => 'rollback_required',
+        ],
+        'verified' => [
+            'commit' => 'committed',
+            'rollback_requested' => 'rollback_required',
+        ],
+        'rollback_required' => [
+            'rollback_verified' => 'rolled_back',
+            'rollback_failed' => 'manual_recovery_required',
+        ],
         'committed' => [],
         'rolled_back' => [],
+        'failed_before_switch' => [],
+        'manual_recovery_required' => [],
     ];
 
     /**
@@ -118,6 +144,33 @@ final class RemoteHostingActivationContract
             'ready_to_apply' => false,
         ];
     }
+    /**
+     * Advisory recovery decision for a *trusted* local executor.
+     * A mere remote report must never satisfy the rollback health check.
+     *
+     * @return array{rollback_mode:string,rollback_required:bool,release_lock_allowed:bool,ready_to_apply:bool}
+     */
+    public static function recovery(string $state, ?string $previousRevision): array
+    {
+        if (!in_array($state, self::STATES, true)
+            || ($previousRevision !== null && !self::hex($previousRevision, 40))) {
+            throw new InvalidArgumentException('Invalid recovery state');
+        }
+        return [
+            'rollback_mode' => $previousRevision === null
+                ? 'deactivate_first_release' : 'restore_previous_release',
+            'rollback_required' => in_array($state, [
+                'rollback_required', 'manual_recovery_required',
+            ], true),
+            // A failed rollback requires manual recovery with the
+            // per-deployment lock held; do not let a new release race it.
+            'release_lock_allowed' => in_array($state, [
+                'committed', 'rolled_back', 'failed_before_switch',
+            ], true),
+            'ready_to_apply' => false,
+        ];
+    }
+
     private static function hex(mixed $value, int $length): bool
     {
         return is_string($value) && strlen($value) === $length
