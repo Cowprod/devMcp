@@ -114,10 +114,38 @@ final class RemoteTools
     {
         foreach ($this->projects() as $row) {
             if ($row['id'] === $project) {
+                // This is the server-side timestamp of the last authenticated
+                // agent ping, NOT proof that job-poll or a deployment succeeded.
+                $row['agent_last_authenticated_ping_utc'] = $this->lastAuthenticatedPing($project);
                 return $row;
             }
         }
         throw new InvalidArgumentException('Unknown remote project');
+    }
+
+    /**
+     * Read-only scoped heartbeat evidence from the central registry.
+     * Never return credentials, source IPs, policy or raw SQL diagnostics.
+     * Ambiguous deployments and absent/unparseable observations fail closed.
+     */
+    private function lastAuthenticatedPing(string $project): ?string
+    {
+        $query = $this->db->prepare(
+            "SELECT m.last_seen_at FROM dm_deployment AS d "
+            . "INNER JOIN dm_machine AS m ON m.id = d.machine_id "
+            . "WHERE d.project_id = ? AND d.enabled = 1 AND m.status = 'active' "
+            . 'ORDER BY d.id LIMIT 2'
+        );
+        $query->execute([$project]);
+        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
+        if (count($rows) !== 1 || !is_string($rows[0]['last_seen_at'] ?? null)) {
+            return null;
+        }
+        $value = $rows[0]['last_seen_at'];
+        if (preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?$/D', $value) !== 1) {
+            return null;
+        }
+        return str_replace(' ', 'T', substr($value, 0, 19)) . 'Z';
     }
 
     public function actions(string $project): array
