@@ -60,6 +60,29 @@ final class RemoteHostingLocalPolicyTest extends TestCase
         }
     }
 
+    public function testPreviewRejectsSpoofedEnrolledIdentityForEveryRuntime(): void
+    {
+        foreach (['static', 'php', 'node'] as $runtime) {
+            $policy = json_encode(self::policy($runtime), JSON_THROW_ON_ERROR);
+            $valid = RemoteHostingLocalPolicy::previewJsonForEnrolledMachine(
+                $policy, self::request(), self::MACHINE
+            );
+            self::assertSame(self::MACHINE, $valid['machine_id']);
+            self::assertFalse($valid['ready_to_execute']);
+
+            foreach ([str_repeat('f', 32), '', strtoupper(self::MACHINE), 'not-a-machine-id'] as $enrolledId) {
+                try {
+                    RemoteHostingLocalPolicy::previewJsonForEnrolledMachine(
+                        $policy, self::request(), $enrolledId
+                    );
+                    self::fail('Accepted an enrollment identity different from local machine');
+                } catch (InvalidArgumentException) {
+                    self::assertTrue(true);
+                }
+            }
+        }
+    }
+
     public function testRejectsWrongMachineDeploymentAndExtraCommand(): void
     {
         $policy = json_encode(self::policy('node'), JSON_THROW_ON_ERROR);
