@@ -91,8 +91,8 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
     public function testRejectsSymbolicLinksGitlinksNonCanonicalPathsAndSecrets(): void
     {
         foreach ([
-            self::file('index.html', 10, '120000'),
-            self::file('index.html', 10, '160000'),
+            self::file('bad.js', 10, '120000'),
+            self::file('bad.js', 10, '160000'),
             self::file('../index.html'),
             self::file('/index.html'),
             self::file('public//index.html'),
@@ -105,22 +105,22 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
             self::file('cfg/.env.production'),
             self::file('secrets/id.key'),
             self::file('image name.jpg'),
-            self::file('INDEX.html'),
+            self::file('public/INDEX.HTML'),
             self::file('src/' . str_repeat('a', 130)),
             self::file('src/' . implode('/', array_fill(0, 12, 'folder'))),
         ] as $invalid) {
-            $this->assertDenied(self::plan('static'), [self::file('index.html'), $invalid]);
+            $this->assertDenied(self::plan('static'), [self::file('public/index.html'), $invalid]);
         }
     }
 
     public function testRejectsCaseAliasesDirectoryCollisionsAndUnsafeSize(): void
     {
-        $this->assertDenied(self::plan('static'), [self::file('index.html'), self::file('INDEX.HTML')]);
-        $this->assertDenied(self::plan('static'), [self::file('index.html'), self::file('A'), self::file('a/file.js')]);
-        $this->assertDenied(self::plan('static'), [self::file('index.html', 33554433)]);
-        $this->assertDenied(self::plan('static'), [self::file('index.html', -1)]);
-        $this->assertDenied(self::plan('static'), [self::file('index.html', 0, '100664')]);
-        $this->assertDenied(self::plan('static'), array_fill(0, 5001, self::file('index.html')));
+        $this->assertDenied(self::plan('static'), [self::file('public/index.html'), self::file('public/INDEX.HTML')]);
+        $this->assertDenied(self::plan('static'), [self::file('public/index.html'), self::file('A'), self::file('a/file.js')]);
+        $this->assertDenied(self::plan('static'), [self::file('public/index.html', 33554433)]);
+        $this->assertDenied(self::plan('static'), [self::file('public/index.html', -1)]);
+        $this->assertDenied(self::plan('static'), [self::file('public/index.html', 0, '100664')]);
+        $this->assertDenied(self::plan('static'), array_fill(0, 5001, self::file('public/index.html')));
     }
 
     public function testRejectsExecutableOrRewrittenPlansAndMissingEntrypoints(): void
@@ -129,13 +129,13 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
         $this->assertDenied(self::plan('node'), [self::file('server.js')]);
         $plan = self::plan('node');
         $plan['ready_to_execute'] = true;
-        $this->assertDenied($plan, [self::file('package.json')]);
+        $this->assertDenied($plan, [self::file('package.json'), self::file('server.js')]);
         $plan = self::plan('node');
         $plan['verification_required'] = [];
         $this->assertDenied($plan, [self::file('package.json')]);
         $plan = self::plan('static');
         $plan['workspace'] = '/opt/caserouter';
-        $this->assertDenied($plan, [self::file('index.html')]);
+        $this->assertDenied($plan, [self::file('public/index.html')]);
     }
 
     public function testParsesActualNullDelimitedGitFormatAndRejectsLinks(): void
