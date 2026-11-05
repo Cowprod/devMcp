@@ -71,6 +71,28 @@ effectués. **La validation de schéma ne vaut pas autorisation de déploiement.
    isolé, validation de la politique de publication et installation des
    services de publication **sans toucher aux fonctions routeur**.
 
+## Phase 2B partielle — preuve Git sans exécution
+
+`RemoteHostingGitProof::verify()` fournit désormais un contrôle de
+provenance sur un **checkout local déjà récupéré de manière fiable**.
+Il refuse les dépôts modifiés ou shallow, les symlinks de checkout,
+une origine différente de `https://github.com/Cowprod/<repo>.git`,
+les branches `origin/main` manquantes, les objets non-commit,
+les révisions antérieures au `minimum_revision` local et les révisions
+étrangères à la branche distante `main`.
+
+L'exécution Git passe par des arguments fixes (sans shell), avec délai
+maximal et variables `GIT_*` nettoyées. Aucune action Git réseau ni
+activation de service n'est réalisée par cette classe. Les tests utilisent
+un dépôt Git temporaire et ses commits synthétiques.
+
+**Reste obligatoire avant la publication réelle** : un fetch HTTPS récent
+et authentifié par le composant privilégié, un dépôt physique root-only,
+la validation locale des interfaces ZeroTier, des ports et de l'isolation,
+ainsi que les verrous, le fencing et le rollback applicatif.
+La preuve renvoie explicitement `ready_to_execute=false` même en cas
+de succès : elle ne doit jamais être confondue avec un ordre de déployer.
+
 ## Compatibilité avec l'auto-update
 
 L'auto-update introduit en PR #106 met à jour les six binaires PHP
