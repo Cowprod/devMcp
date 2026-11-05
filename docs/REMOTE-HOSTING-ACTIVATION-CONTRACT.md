@@ -46,7 +46,8 @@ l'exécuteur local root-only ; la classe PHP ne les réalise pas.
    confirmation d'état provenant exclusivement du serveur central.
 3. Récupérer le commit depuis le dépôt HTTPS approuvé puis valider la preuve
    Git et les chemins canoniques sans symlink ni écriture par l'app.
-4. Vérifier la possession de l'adresse ZeroTier et la réservation/occupation
+4. Vérifier la possession de l'adresse ZeroTier, le réseau effectif du démon
+   contre `zerotier_network_id` de la politique root-only, et la réservation/occupation
    effective du port ; ne modifier aucune règle réseau.
 5. Préparer une release immuable et l'unité systemd sous compte confiné.
 6. Journaliser durablement avant et après toute bascule ; assurer la reprise
