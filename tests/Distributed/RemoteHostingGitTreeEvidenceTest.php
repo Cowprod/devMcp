@@ -47,7 +47,7 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
     public function testThreeRuntimesProvideInertBlobManifestEvidence(): void
     {
         foreach ([
-            'static' => ['index.html', 'assets/main.css'],
+            'static' => ['public/index.html', 'assets/main.css'],
             'php' => ['public/index.php', 'src/Controller.php'],
             'node' => ['package.json', 'server.js'],
         ] as $runtime => $paths) {
@@ -60,6 +60,32 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
             self::assertFalse($result['ready_to_execute']);
             self::assertContains('checked_out_release_tree_hardlink_mount_and_inode_integrity', $result['remaining_checks']);
         }
+    }
+
+    public function testEntrypointsMustMatchTheActualFixedServiceCommands(): void
+    {
+        // UnitDraft always serves static/PHP from current/public, and
+        // always starts current/server.js for Node (not npm scripts).
+        foreach ([
+            'static' => [
+                [self::file('public/index.html')],
+                [self::file('index.html')],
+            ],
+            'php' => [
+                [self::file('public/index.php')],
+                [self::file('index.php')],
+            ],
+            'node' => [
+                [self::file('package.json'), self::file('server.js')],
+                [self::file('package.json')],
+            ],
+        ] as $runtime => [$accepted, $denied]) {
+            $result = RemoteHostingGitTreeEvidence::check(self::plan($runtime), $accepted);
+            self::assertFalse($result['ready_to_execute']);
+            $this->assertDenied(self::plan($runtime), $denied);
+        }
+        $this->assertDenied(self::plan('node'), [self::file('package.json'), self::file('index.js')]);
+        $this->assertDenied(self::plan('node'), [self::file('server.js')]);
     }
 
     public function testRejectsSymbolicLinksGitlinksNonCanonicalPathsAndSecrets(): void
