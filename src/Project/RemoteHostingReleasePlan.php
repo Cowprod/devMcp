@@ -76,8 +76,7 @@ final class RemoteHostingReleasePlan
             $port = $entry['port'] ?? null;
             if (!self::validProjectId($project)
                 || !is_string($entry['repository'] ?? null)
-                || preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$~D', $entry['repository']) !== 1
-                || !str_starts_with($entry['repository'], 'Cowprod/')
+                || preg_match('~^Cowprod/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$~D', $entry['repository']) !== 1
                 || !in_array($entry['runtime'] ?? null, self::RUNTIMES, true)
                 || !is_int($port) || $port < 12000 || $port > 19999
                 || !self::hex($entry['minimum_revision'] ?? null, 40)
@@ -144,12 +143,14 @@ final class RemoteHostingReleasePlan
 
     private static function validBindIp(mixed $value): bool
     {
-        return is_string($value)
-            && filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
-            && $value !== '0.0.0.0'
-            && !str_starts_with($value, '127.')
-            && !str_starts_with($value, '169.254.')
-            && !str_starts_with($value, '224.')
-            && $value !== '255.255.255.255';
+        if (!is_string($value)
+            || filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return false;
+        }
+        // A deployment bind must be private IPv4; ownership by the actual
+        // ZeroTier interface still requires a separate runtime verification.
+        [$a, $b] = array_map('intval', explode('.', $value));
+        return $a === 10 || ($a === 172 && $b >= 16 && $b <= 31)
+            || ($a === 192 && $b === 168);
     }
 }
