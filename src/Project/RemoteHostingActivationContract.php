@@ -60,7 +60,7 @@ final class RemoteHostingActivationContract
         $expected = [
             'deployment_id', 'project_id', 'machine_id', 'repository',
             'minimum_revision', 'revision', 'workspace', 'runtime',
-            'port', 'bind_ipv4', 'ready_to_execute', 'verification_required',
+            'port', 'bind_ipv4', 'zerotier_network_id', 'ready_to_execute', 'verification_required',
         ];
         $keys = array_keys($plan);
         sort($keys);
@@ -81,6 +81,8 @@ final class RemoteHostingActivationContract
             || $plan['port'] < 12000 || $plan['port'] > 19999
             || !is_string($plan['bind_ipv4'] ?? null)
             || filter_var($plan['bind_ipv4'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || !is_string($plan['zerotier_network_id'] ?? null)
+            || preg_match('/^[a-f0-9]{16}$/D', $plan['zerotier_network_id']) !== 1
             || ($plan['workspace'] ?? null) !== RemoteHostingReleasePlan::WORKSPACE_ROOT . '/' . $plan['project_id']
             || ($plan['ready_to_execute'] ?? null) !== false
             || !is_array($plan['verification_required'] ?? null)
