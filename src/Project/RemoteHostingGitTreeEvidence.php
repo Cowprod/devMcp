@@ -184,7 +184,7 @@ final class RemoteHostingGitTreeEvidence
         }
         $entries = [];
         foreach ($rows as $row) {
-            if (preg_match('/\A([0-7]{6}) ([a-z]+) ([a-f0-9]{40}) ([0-9]+|-)\t(.+)\z/sD', $row, $m) !== 1
+            if (preg_match('/\A([0-7]{6}) ([a-z]+) ([a-f0-9]{40}) +([0-9]+|-)\t(.+)\z/sD', $row, $m) !== 1
                 || $m[2] !== 'blob'
                 || !in_array($m[1], ['100644', '100755'], true)
                 || preg_match('/^[0-9]{1,8}$/D', $m[4]) !== 1) {
