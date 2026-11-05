@@ -93,6 +93,41 @@ ainsi que les verrous, le fencing et le rollback applicatif.
 La preuve renvoie explicitement `ready_to_execute=false` même en cas
 de succès : elle ne doit jamais être confondue avec un ordre de déployer.
 
+## Phase 2C — brouillons de services systemd isolés, sans activation
+
+`RemoteHostingUnitDraft::render()` produit trois variantes **inertes**
+de service systemd, exclusivement à partir d'un plan validé en 2A.
+Aucune installation, écriture, commande, connexion réseau ou réservation
+de port n'est faite par ce composant. `ready_to_install=false` persiste.
+
+| Runtime | Démarrage imposé localement | Arborescence attendue |
+| --- | --- | --- |
+| statique | `/usr/bin/python3 -m http.server` | `current/public/` |
+| PHP | `/usr/bin/php -S` (pilote de laboratoire seulement) | `current/public/` |
+| Node/WebSocket | `/usr/bin/node` | `current/server.js` |
+
+Les ports 12000–19999 et l'adresse IPv4 de bind sont ceux de la
+**politique locale**. Pour Node, `HOST` et `PORT` sont exportés mais
+l'application doit encore prouver qu'elle s'y conforme. Le service
+utilise `DynamicUser`, `NoNewPrivileges`, un jeu de capacités vide,
+un système de fichiers protégé, des restrictions sur les familles de
+sockets et les bind autorisés, ainsi que des limites mémoire/processus.
+Ce modèle limite le risque sans constituer un confinement applicatif
+intégral ; les accès sortants et le comportement réseau des applications
+restent à auditer.
+
+La commande `php -S` est un serveur de développement, **pas une
+solution PHP de production**. Avant tout usage autre que ce lab privé,
+prévoir un serveur PHP approprié, durcissement et revue de charge.
+
+Il reste impératif de vérifier avant installation : appartenance de
+l'IP à l'interface ZeroTier, port libre et réservé localement,
+répertoire `current` et releases non modifiables par l'agent,
+dépendances réellement installées, preuve Git sur un checkout root-only,
+mécanisme d'activation atomique et rollback, contrôle HTTP/WebSocket
+depuis un autre pair ZeroTier, politique root-only et canal d'action
+distinct avec anti-rejeu. Les unités ne sont pas distribuées sur `case`.
+
 ## Compatibilité avec l'auto-update
 
 L'auto-update introduit en PR #106 met à jour les six binaires PHP
