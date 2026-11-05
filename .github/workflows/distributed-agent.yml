@@ -24,6 +24,8 @@ jobs:
           php -l public/distributed-admin.php
           php -l public/agent-ping.php
           php -l src/Distributed/Security/AgentAuthenticator.php
+      - name: Bounded agent ping diagnostic regression
+        run: php tests/Distributed/agent-ping-diagnostic-smoke.php
       - name: Bash syntax and static analysis
         run: |
           bash -n deploy/distributed/install-agent.sh
