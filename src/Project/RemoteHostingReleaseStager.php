@@ -113,14 +113,22 @@ final class RemoteHostingReleaseStager
             // Independently reject unexpected input even though production
             // obtains this list from validatedManifest(), never an MCP caller.
             if (!is_string($path) || !preg_match('~^[A-Za-z0-9_.@+-]+(?:/[A-Za-z0-9_.@+-]+)*$~D', $path)
-                || str_contains($path, '..') || !in_array($entry['mode'] ?? null, ['100644', '100755'], true)
+                || !in_array($entry['mode'] ?? null, ['100644', '100755'], true)
                 || !is_string($entry['object'] ?? null)
                 || preg_match('/^[a-f0-9]{40}$/D', $entry['object']) !== 1
                 || !is_int($entry['size'] ?? null) || $entry['size'] < 0 || $entry['size'] > 33554432) {
                 throw new InvalidArgumentException('Invalid Git blob staging input');
             }
             $parts = explode('/', $path);
+            // GitTreeEvidence forbids traversal *components*; embedded '..'
+            // in a valid filename (e.g. app..min.js) is not traversal.
+            if (in_array('.', $parts, true) || in_array('..', $parts, true)) {
+                throw new InvalidArgumentException('Invalid Git blob staging component');
+            }
             $name = array_pop($parts);
+            if ($name === '.' || $name === '..') {
+                throw new InvalidArgumentException('Invalid Git blob staging component');
+            }
             $directory = $stage;
             foreach ($parts as $part) {
                 $directory .= '/' . $part;
@@ -170,8 +178,15 @@ final class RemoteHostingReleaseStager
                         throw new RuntimeException('Git blob exceeded declared size');
                     }
                     hash_update($hash, $chunk);
-                    if ($chunk !== '' && fwrite($file, $chunk) !== strlen($chunk)) {
-                        throw new RuntimeException('Git blob disk write failed');
+                    // A regular-file write may legally be short; retry the
+                    // unwritten suffix rather than treating a short write as
+                    // a valid completed blob or silently truncating it.
+                    $chunkLength = strlen($chunk);
+                    for ($offset = 0; $offset < $chunkLength; $offset += $written) {
+                        $written = fwrite($file, substr($chunk, $offset));
+                        if (!is_int($written) || $written < 1) {
+                            throw new RuntimeException('Git blob disk write failed');
+                        }
                     }
                 }
                 fclose($pipes[1]);
