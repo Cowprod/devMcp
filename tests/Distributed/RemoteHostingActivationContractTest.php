@@ -56,6 +56,7 @@ final class RemoteHostingActivationContractTest extends TestCase
                 $draft['release_path']
             );
             self::assertContains('unique_operation_nonce_and_fencing', $draft['preflight_required']);
+            self::assertContains('zerotier_network_policy_pin', $draft['preflight_required']);
             self::assertContains('remote_peer_http_or_ws_health', $draft['commit_required']);
         }
     }
