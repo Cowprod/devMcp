@@ -113,6 +113,7 @@ final class RemoteHostingUnitDraft
                 'root_owned_policy_and_release',
                 'verified_git_release',
                 'zerotier_address_on_interface',
+                'zerotier_network_policy_pin',
                 'port_owned_and_free',
                 'no_symlink_workspace_escape',
                 'runtime_entries_and_dependencies',
