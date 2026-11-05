@@ -39,12 +39,21 @@ final class RemoteHostingBindEvidence
     public static function check(array $plan, array $interfaces): array
     {
         $address = $plan['bind_ipv4'] ?? null;
+        $project = $plan['project_id'] ?? null;
         if (!is_string($address)
             || filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || !is_string($project)
+            || preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/D', $project) !== 1
             || ($plan['ready_to_execute'] ?? null) !== false
-            || ($plan['workspace'] ?? null) === null
+            || ($plan['workspace'] ?? null) !== RemoteHostingReleasePlan::WORKSPACE_ROOT . '/' . $project
             || count($interfaces) > 256) {
             throw new InvalidArgumentException('Invalid read-only hosting bind preflight');
+        }
+        // Preserve the strict private-address constraint of the release plan.
+        [$first, $second] = array_map('intval', explode('.', $address));
+        if (!($first === 10 || ($first === 172 && $second >= 16 && $second <= 31)
+            || ($first === 192 && $second === 168))) {
+            throw new InvalidArgumentException('Bind IPv4 must be RFC1918 private');
         }
 
         $owners = [];
