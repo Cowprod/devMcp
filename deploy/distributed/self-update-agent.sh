@@ -8,6 +8,8 @@ root=/var/lib/devmcp-agent-update
 bin=/opt/devmcp-agent/bin
 marker=/var/lib/devmcp-agent-update/installed-revision
 files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php"
+updater_src="$checkout/deploy/distributed/self-update-agent.sh"
+updater_dst="$bin/self-update-agent.sh"
 [[ "$(id -u)" -eq 0 && "$#" -eq 0 ]] || { echo 'Requires root; no arguments' >&2; exit 2; }
 [[ -f /etc/devmcp/agent.php && ! -L /etc/devmcp/agent.php ]] || { echo 'Agent not enrolled' >&2; exit 1; }
 [[ -d "$root" && ! -L "$root" && -d "$bin" && ! -L "$bin" ]] || { echo 'Invalid agent directories' >&2; exit 1; }
@@ -40,7 +42,25 @@ stage="$(mktemp -d "$root/.agent-update-XXXXXXXX")"
 mkdir -m 0700 "$stage/backup"
 timer_stopped=0
 replacing=0
+self_replaced=0
 finished=0
+
+# Atomic replacement is essential: bash must keep reading the old inode
+# while this updater is still executing. A direct 'install' to the live path
+# could truncate the running script.
+replace_updater() {
+  local source="$1"
+  local temporary
+  temporary="$(mktemp "$bin/.self-update-agent.XXXXXXXX")"
+  if ! install -m 0750 -o root -g root "$source" "$temporary"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  if ! mv -f -- "$temporary" "$updater_dst"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
 cleanup() {
   rc=$?
   trap - EXIT
@@ -54,6 +74,9 @@ cleanup() {
       fi
     done
     systemctl start devmcp-agent.service || true
+  fi
+  if [[ "$self_replaced" -eq 1 && "$finished" -eq 0 ]]; then
+    replace_updater "$stage/backup-self-update-agent.sh" || true
   fi
   if [[ "$timer_stopped" -eq 1 ]]; then
     systemctl start devmcp-agent.timer || true
@@ -70,6 +93,16 @@ for name in $files; do
   install -m 0600 "$src" "$stage/$name"
   if [[ -f "$dst" ]]; then cp -p "$dst" "$stage/backup/$name"; fi
 done
+# The updater itself is deliberately part of the fixed release allowlist.
+# New *future* PHP helpers can therefore be added to the script in main
+# without another manual bootstrap on every remote host.
+[[ -f "$updater_src" && ! -L "$updater_src" && -f "$updater_dst" && ! -L "$updater_dst" ]] || {
+  echo 'Missing or linked self-updater artifact' >&2
+  exit 1
+}
+bash -n "$updater_src"
+install -m 0600 "$updater_src" "$stage/next-self-update-agent.sh"
+cp -p "$updater_dst" "$stage/backup-self-update-agent.sh"
 systemctl stop devmcp-agent.timer
 timer_stopped=1
 systemctl stop devmcp-agent.service
@@ -77,7 +110,11 @@ replacing=1
 for name in $files; do install -m 0755 -o root -g root "$stage/$name" "$bin/$name"; done
 systemctl start devmcp-agent.service
 systemctl start devmcp-agent.timer
-# Commit the version only after service and timer both recover.
+# Install the future updater atomically *after* the active agent is healthy,
+# but *before* committing the version. Rollback also restores this script.
+replace_updater "$stage/next-self-update-agent.sh"
+self_replaced=1
+# Commit the version only after service, timer and updater have recovered.
 printf '%s\n' "$target" > "$stage/revision"
 install -m 0644 -o root -g root "$stage/revision" "$marker"
 finished=1

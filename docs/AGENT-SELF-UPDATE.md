@@ -21,6 +21,14 @@ caseRouter.
   par l'utilisateur non privilégié `devmcp-agent`.
 - Le script refuse un dépôt non conforme, les modifications locales,
   les liens symboliques et les révisions Git non fast-forward.
+- L'updater se **met également à jour lui-même** : sa nouvelle version est
+  vérifiée avec `bash -n` puis remplacée par renommage atomique, après
+  redémarrage réussi du service et du timer de l'agent. Il conserve une
+  sauvegarde de l'ancien script jusqu'à la validation de la révision.
+  Une future mise à jour pourra étendre la liste fixe des fichiers PHP
+  distribués sans exiger un nouveau bootstrap sur chaque machine.
+  Les unités systemd restent épinglées à l'installation initiale :
+  l'auto-update ne leur confère pas de nouveaux privilèges.
 - Les six fichiers de code fixés dans `self-update-agent.sh` sont préparés
   dans une zone temporaire et chacun passe `php -l` avant remplacement.
 - Le timer principal de l'agent est arrêté pendant la copie, le service
