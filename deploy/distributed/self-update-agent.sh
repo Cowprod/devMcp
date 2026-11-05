@@ -76,9 +76,10 @@ systemctl stop devmcp-agent.service
 replacing=1
 for name in $files; do install -m 0755 -o root -g root "$stage/$name" "$bin/$name"; done
 systemctl start devmcp-agent.service
+systemctl start devmcp-agent.timer
+# Commit the version only after service and timer both recover.
 printf '%s\n' "$target" > "$stage/revision"
 install -m 0644 -o root -g root "$stage/revision" "$marker"
 finished=1
-systemctl start devmcp-agent.timer
 timer_stopped=0
 echo "PASS: agent updated to $target; local authorizations unchanged"
