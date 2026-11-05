@@ -28,10 +28,17 @@ jobs:
         run: |
           bash -n deploy/distributed/install-agent.sh
           shellcheck --severity=error deploy/distributed/install-agent.sh
+          bash -n deploy/distributed/self-update-agent.sh
+          bash -n deploy/distributed/install-agent-self-update.sh
+          shellcheck --severity=error deploy/distributed/self-update-agent.sh
+          shellcheck --severity=error deploy/distributed/install-agent-self-update.sh
       - name: Systemd unit validation
         run: |
           grep -Fx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' deploy/distributed/devmcp-agent.service
           grep -Fx 'Unit=devmcp-agent.service' deploy/distributed/devmcp-agent.timer
+          grep -Fx 'ExecStart=/bin/bash /opt/devmcp-agent/bin/self-update-agent.sh' deploy/distributed/devmcp-agent-update.service
+          grep -Fx 'Unit=devmcp-agent-update.service' deploy/distributed/devmcp-agent-update.timer
+          grep -F '/var/lib/devmcp-agent-update' deploy/distributed/devmcp-agent-update.service
       - name: Fail-closed agent test
         run: |
           set +e
