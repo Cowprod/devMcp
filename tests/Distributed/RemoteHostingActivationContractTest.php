@@ -73,8 +73,13 @@ final class RemoteHostingActivationContractTest extends TestCase
             ['activated', 'verify', 'verified'],
             ['verified', 'commit', 'committed'],
             ['prepared', 'abort', 'rolled_back'],
-            ['activated', 'rollback', 'rolled_back'],
-            ['verified', 'rollback', 'rolled_back'],
+            ['activated', 'peer_health_failed', 'rollback_required'],
+            ['activated', 'rollback_requested', 'rollback_required'],
+            ['verified', 'rollback_requested', 'rollback_required'],
+            ['prepared', 'activation_uncertain', 'rollback_required'],
+            ['idle', 'prepare_failed', 'failed_before_switch'],
+            ['rollback_required', 'rollback_verified', 'rolled_back'],
+            ['rollback_required', 'rollback_failed', 'manual_recovery_required'],
         ] as [$from, $event, $to]) {
             $transition = RemoteHostingActivationContract::transition($from, $event);
             self::assertSame($to, $transition['to']);
@@ -90,6 +95,9 @@ final class RemoteHostingActivationContractTest extends TestCase
             ['rolled_back', 'activate'],
             ['activated', 'activate'],
             ['prepared', 'verify'],
+            ['activated', 'rollback'],
+            ['rollback_required', 'commit'],
+            ['manual_recovery_required', 'rollback_verified'],
             ['unknown', 'prepare'],
         ] as [$state, $event]) {
             try {
@@ -115,6 +123,50 @@ final class RemoteHostingActivationContractTest extends TestCase
         $plan['command'] = 'systemctl stop caserouter';
         $this->expectException(InvalidArgumentException::class);
         RemoteHostingActivationContract::draft($plan, str_repeat('e', 32), null);
+    }
+
+
+    public function testRollbackCannotBeSkippedAndLockSurvivesUncertainActivation(): void
+    {
+        $uncertain = RemoteHostingActivationContract::transition('prepared', 'activation_uncertain');
+        self::assertSame('rollback_required', $uncertain['to']);
+        $recovery = RemoteHostingActivationContract::recovery($uncertain['to'], str_repeat('a', 40));
+        self::assertTrue($recovery['rollback_required']);
+        self::assertFalse($recovery['release_lock_allowed']);
+        self::assertSame('restore_previous_release', $recovery['rollback_mode']);
+        self::assertFalse($recovery['ready_to_apply']);
+
+        $failed = RemoteHostingActivationContract::transition($uncertain['to'], 'rollback_failed');
+        self::assertSame('manual_recovery_required', $failed['to']);
+        self::assertFalse(RemoteHostingActivationContract::recovery($failed['to'], null)['release_lock_allowed']);
+
+        $restored = RemoteHostingActivationContract::transition($uncertain['to'], 'rollback_verified');
+        self::assertSame('rolled_back', $restored['to']);
+        self::assertTrue(RemoteHostingActivationContract::recovery($restored['to'], null)['release_lock_allowed']);
+    }
+
+    public function testFirstReleaseFailureUsesDeactivationAndDoesNotInventAnOldRelease(): void
+    {
+        $status = RemoteHostingActivationContract::recovery('rollback_required', null);
+        self::assertSame('deactivate_first_release', $status['rollback_mode']);
+        self::assertFalse($status['release_lock_allowed']);
+        self::assertTrue($status['rollback_required']);
+
+        $noSwitch = RemoteHostingActivationContract::transition('idle', 'prepare_failed');
+        self::assertSame('failed_before_switch', $noSwitch['to']);
+        self::assertTrue(RemoteHostingActivationContract::recovery($noSwitch['to'], null)['release_lock_allowed']);
+    }
+
+    public function testRecoveryRefusesInvalidStateOrPriorSha(): void
+    {
+        foreach ([['unexpected', null], ['rollback_required', 'xyz'], ['healthy', str_repeat('A', 40)]] as [$state, $revision]) {
+            try {
+                RemoteHostingActivationContract::recovery($state, $revision);
+                self::fail('Invalid recovery accepted');
+            } catch (InvalidArgumentException $e) {
+                self::assertSame('Invalid recovery state', $e->getMessage());
+            }
+        }
     }
 
     public function testRejectsIdenticalOldAndNewRevision(): void
