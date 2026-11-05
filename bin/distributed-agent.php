@@ -74,6 +74,9 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
     fwrite(STDERR, "devMcp: invalid server response\n");
     exit(1);
 }
+// Explicitly distinguish a successful authenticated central ping from later
+// local-policy and job-poll failures. Never log the response, token or URL.
+fwrite(STDOUT, "devMcp: central ping accepted (protocol=1)\n");
 // Advertise the actual zt-interface IP only when the central server has
 // negotiated support. This keeps upgraded agents compatible with older cores.
 $probePath = __DIR__ . '/agent-preview-port-probe.php';
