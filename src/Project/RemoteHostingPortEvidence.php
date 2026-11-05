@@ -149,7 +149,7 @@ final class RemoteHostingPortEvidence
             throw new InvalidArgumentException('Oversized kernel TCP table');
         }
         $header = array_shift($lines);
-        if (!is_string($header) || preg_match('/\blocal_address\s+rem_address\s+st\b/', $header) !== 1) {
+        if (!is_string($header) || preg_match('/\blocal_address\s+(?:rem|remote)_address\s+st\b/', $header) !== 1) {
             throw new InvalidArgumentException('Unknown kernel TCP table format');
         }
         $listeners = 0;
