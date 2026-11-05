@@ -23,6 +23,7 @@ final class RemoteHostingZeroTierMembershipTest extends TestCase
             'machine_id' => $machine,
             'workspace_root' => RemoteHostingReleasePlan::WORKSPACE_ROOT,
             'bind_ipv4' => '192.168.194.189',
+            'zerotier_network_id' => '8056c2e21c000001',
             'deployments' => [
                 $deployment => [
                     'project_id' => 'example',
