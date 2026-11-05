@@ -47,11 +47,26 @@ curl_setopt_array($handle, [
     CURLOPT_FOLLOWLOCATION => false,
 ]);
 $result = curl_exec($handle);
-$status = curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+$status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+$curlErrno = curl_errno($handle);
 curl_close($handle);
 if ($result === false || $status !== 200) {
-    // Expected while pending approval; never bypass server authorization.
-    fwrite(STDOUT, "devMcp: awaiting server approval or agent API availability\n");
+    // Log only bounded numeric transport details, never the body, token, URL
+    // or cURL error string. Central currently maps many failures to HTTP 400,
+    // so 400 alone is NOT proof of an enrollment/authorization problem.
+    $reason = match (true) {
+        $curlErrno !== 0 => 'transport_error',
+        $status === 400 => 'request_rejected',
+        $status === 401 || $status === 403 => 'authorization_rejected',
+        $status === 404 => 'endpoint_missing',
+        $status === 429 => 'rate_limited',
+        $status >= 500 && $status <= 599 => 'server_error',
+        default => 'unexpected_http_status',
+    };
+    fwrite(STDOUT, sprintf(
+        "devMcp: central ping unavailable (%s; http=%d; curl_errno=%d)\n",
+        $reason, $status, $curlErrno
+    ));
     exit(0);
 }
 $data = json_decode($result, true);
