@@ -10,6 +10,11 @@ declare(strict_types=1);
 function remoteReadonlyActionCatalog(): array
 {
     return [
+        'host.runtime' => [
+            'description' => 'Vérifier en lecture seule les prérequis statique, PHP, Node et systemd de l agent.',
+            'needs_path' => false,
+            'supports_filter' => false,
+        ],
         'git.head' => [
             'description' => 'Lire le SHA Git du workspace distant.',
             'needs_path' => false,
