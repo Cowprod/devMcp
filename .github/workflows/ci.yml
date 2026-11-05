@@ -29,6 +29,7 @@ jobs:
           php -l src/Project/RemoteHostingZeroTierNetworkPin.php
           php -l src/Project/RemoteHostingPortEvidence.php
           php -l src/Project/RemoteHostingWorkspaceEvidence.php
+          php -l src/Project/RemoteHostingGitEvidence.php
           php -l src/Project/RemoteHostingActivationContract.php
           php -l src/Project/ProvisioningStore.php
           php -l bin/devmcp-workspace-sync
