@@ -27,16 +27,51 @@ fi
 git -C "$checkout" -c core.hooksPath=/dev/null fetch --quiet --no-tags origin main
 target="$(git -C "$checkout" rev-parse refs/remotes/origin/main)"
 [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid Git revision' >&2; exit 1; }
+# A pinned SHA alone cannot prove that all files in a newly self-updated
+# helper allowlist have been installed on the previous run.
+[[ ! -L "$marker" ]] || { echo 'Linked revision marker rejected' >&2; exit 1; }
+current=
 if [[ -f "$marker" ]]; then
-  [[ ! -L "$marker" ]] || exit 1
   current="$(cat "$marker")"
-  [[ "$current" =~ ^[0-9a-f]{40}$ ]] || exit 1
-  [[ "$current" != "$target" ]] || { echo "Agent already current: $target"; exit 0; }
-  git -C "$checkout" merge-base --is-ancestor "$current" "$target" || {
-    echo 'Non fast-forward update refused' >&2; exit 1;
-  }
+  [[ "$current" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid installed revision' >&2; exit 1; }
+  if [[ "$current" != "$target" ]]; then
+    git -C "$checkout" merge-base --is-ancestor "$current" "$target" || {
+      echo 'Non fast-forward update refused' >&2; exit 1;
+    }
+  fi
 fi
 git -C "$checkout" -c core.hooksPath=/dev/null checkout --quiet --detach "$target"
+
+if [[ "$current" == "$target" ]]; then
+  # Missing helpers may be added by a self-update: complete them on the
+  # next run. Altered existing binaries fail closed instead of being
+  # overwritten without explicit administrative inspection.
+  missing_helpers=0
+  for name in $files; do
+    src="$checkout/bin/$name"
+    dst="$bin/$name"
+    [[ -f "$src" && ! -L "$src" && ! -L "$dst" ]] || {
+      echo "Invalid release helper: $name" >&2; exit 1;
+    }
+    if [[ ! -e "$dst" ]]; then
+      missing_helpers=1
+    elif ! cmp -s -- "$src" "$dst"; then
+      echo "Installed helper drift detected: $name" >&2
+      exit 1
+    fi
+  done
+  [[ -f "$updater_src" && ! -L "$updater_src" && -f "$updater_dst" && ! -L "$updater_dst" ]] || {
+    echo 'Invalid updater files' >&2; exit 1;
+  }
+  cmp -s -- "$updater_src" "$updater_dst" || {
+    echo 'Installed updater drift detected' >&2; exit 1;
+  }
+  if [[ "$missing_helpers" -eq 0 ]]; then
+    echo "Agent already current: $target"
+    exit 0
+  fi
+  echo "Completing missing release helpers at $target"
+fi
 
 stage="$(mktemp -d "$root/.agent-update-XXXXXXXX")"
 mkdir -m 0700 "$stage/backup"
@@ -116,7 +151,17 @@ replace_updater "$stage/next-self-update-agent.sh"
 self_replaced=1
 # Commit the version only after service, timer and updater have recovered.
 printf '%s\n' "$target" > "$stage/revision"
-install -m 0644 -o root -g root "$stage/revision" "$marker"
+# Update the revision marker by atomic rename on the same filesystem.
+# A crash must not leave a truncated marker that blocks later recovery.
+marker_tmp="$(mktemp "$root/.installed-revision.XXXXXXXX")"
+if ! install -m 0644 -o root -g root "$stage/revision" "$marker_tmp"; then
+  rm -f -- "$marker_tmp"
+  exit 1
+fi
+if ! mv -f -- "$marker_tmp" "$marker"; then
+  rm -f -- "$marker_tmp"
+  exit 1
+fi
 finished=1
 timer_stopped=0
 echo "PASS: agent updated to $target; local authorizations unchanged"
