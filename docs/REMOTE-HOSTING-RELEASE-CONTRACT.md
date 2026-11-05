@@ -138,3 +138,27 @@ publication, sans prétendre que la PR #106 a déjà équipé `case`.
 
 Aucune nouvelle permission locale ni ouverture de port n'est créée par
 cette phase.
+
+
+## Phase 2H — preuve de liaison IPv4 au noyau, lecture seule
+
+`RemoteHostingBindEvidence::inspect()` interroge localement
+`net_get_interfaces()` (sans shell et sans changement réseau).
+Le contrôle exige que l'IPv4 `bind_ipv4` soit présente sur une seule
+interface active dont le nom a la forme Linux habituelle `zt…`.
+Il refuse les adresses absentes, les interfaces arrêtées et les cas
+ambiguës (la même IPv4 trouvée sur une interface LAN).
+
+Ce contrôle **ne prouve pas** que l'interface appartient au réseau
+ZeroTier approuvé : le nom `zt…` est seulement un indice, pas une
+attestation du démon. Il ne vérifie ni la disponibilité du port ni
+l'appartenance à la configuration locale ZeroTier. Le résultat
+`ready_to_execute=false` reste obligatoire. L'exécuteur privilégié
+devra rapprocher ces données de l'identité réelle du réseau ZeroTier et
+revalider l'état au moment de l'activation, indépendamment des informations
+déclarées par le serveur central. La méthode `check()` reçoit un instantané
+pour les tests hors ligne et ne doit jamais prendre une structure d'interfaces
+provenant d'une requête distante comme preuve d'autorisation.
+
+Le helper n'est pas distribué automatiquement sur `case` par
+l'auto-updater actuel et ne lance aucun des trois services.
