@@ -116,7 +116,7 @@ final class RemoteHostingGitTreeEvidenceTest extends TestCase
     {
         $parser = new ReflectionMethod(RemoteHostingGitTreeEvidence::class, 'parseListing');
         $blob = str_repeat('e', 40);
-        $line = "100644 blob {$blob} 10\tindex.html\0";
+        $line = "100644 blob {$blob}       10\tindex.html\0";
         $parsed = $parser->invoke(null, $line);
         self::assertSame([self::file('index.html')], $parsed);
         $this->assertParserDenied($parser, rtrim($line, "\0"));
