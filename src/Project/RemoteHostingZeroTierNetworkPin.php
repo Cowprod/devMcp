@@ -53,7 +53,7 @@ final class RemoteHostingZeroTierNetworkPin
             'git_and_workspace_integrity', 'runtime_sandbox_and_peer_health',
         ];
         $remaining = $membership['remaining_checks'] ?? null;
-        if (is_array($remaining)) {
+        if (is_array($remaining) && array_is_list($remaining)) {
             sort($remaining);
         }
         sort($required);
