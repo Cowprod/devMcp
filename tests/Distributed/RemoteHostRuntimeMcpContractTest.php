@@ -17,10 +17,10 @@ final class RemoteHostRuntimeMcpContractTest extends TestCase
         }
         $db = new PDO('sqlite::memory:');
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, name TEXT, status TEXT)');
+        $db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, name TEXT, status TEXT, last_seen_at TEXT)');
         $db->exec('CREATE TABLE dm_project (id TEXT PRIMARY KEY)');
         $db->exec('CREATE TABLE dm_deployment (id TEXT PRIMARY KEY, project_id TEXT, machine_id TEXT, enabled INTEGER, workspace_path TEXT)');
-        $db->exec("INSERT INTO dm_machine VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'case', 'active')");
+        $db->exec("INSERT INTO dm_machine VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'case', 'active', NULL)");
         $db->exec("INSERT INTO dm_project VALUES ('caserouter')");
         $db->exec("INSERT INTO dm_deployment VALUES ('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'caserouter', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, '/opt/caserouter')");
         $tools = new RemoteTools($db);
