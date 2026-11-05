@@ -161,7 +161,11 @@ final class RemoteHostingReleaseTransactionTest extends TestCase
     /** @param callable():mixed $callable */
     private function reject(callable $callable): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $callable();
+        try {
+            $callable();
+            self::fail('Untrusted hosting transition accepted');
+        } catch (InvalidArgumentException $expected) {
+            self::assertNotSame('', $expected->getMessage());
+        }
     }
 }
