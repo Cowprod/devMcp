@@ -138,3 +138,40 @@ publication, sans prétendre que la PR #106 a déjà équipé `case`.
 
 Aucune nouvelle permission locale ni ouverture de port n'est créée par
 cette phase.
+
+
+## Phase 2D — transaction de release et rollback (contrat pur)
+
+`RemoteHostingReleaseTransaction` est un automate **sans effet de bord**
+pour documenter le comportement attendu du futur exécuteur root-only.
+Il dérive exclusivement de `RemoteHostingReleasePlan::preview()` et des
+brouillons de service validés : un `operation_id` hexadécimal, un SHA exact
+de release et éventuellement un SHA précédent. Les chemins sont calculés
+sous `/srv/devmcp-hosting/<project>/releases/<sha>` ; le seul pointeur
+actif prévu est `current`. Ni chemin ni commande arbitraire ne sont acceptés.
+
+Séquence normale : `awaiting_stage → staged → awaiting_health → healthy`.
+Un échec de préparation termine **avant** toute bascule. Si la bascule
+ou le redémarrage sont incertains, ou si le contrôle HTTP/WebSocket depuis
+un autre pair ZeroTier échoue, l'état devient `rollback_required`.
+Pour une mise à jour, on prévoit la restauration de l'ancienne release ;
+pour un premier déploiement, la désactivation du service et le retrait du
+pointeur `current`. Tant que le rollback n'est pas vérifié, le verrou ne
+doit pas être levé. Si sa vérification échoue, état
+`manual_recovery_required` : intervention locale et verrou conservé.
+Les événements répétés ou hors ordre sont refusés.
+
+**Ce n'est pas un moteur de déploiement.** Les événements de transition
+ne peuvent provenir que d'un futur exécuteur **local de confiance** avec
+preuve durable ; une requête MCP ne constitue jamais une preuve. Le modèle
+ne fournit ni journal durable, ni garantie anti-rejeu, ni changement
+atomique d'un lien symbolique, ni service systemd, ni contrôle de santé.
+Un déploiement réel exige encore : politique et dépôt root-only vérifiés,
+fencing et verrou persistants, fetch Git contrôlé, vérification de port et
+de l'interface ZeroTier, séquence d'activation atomique + récupération
+après crash, contrôle de santé depuis un pair distinct et canal d'actions
+expressément approuvé. Les résultats conservent
+`ready_to_execute=false` en toutes circonstances.
+
+Aucune action de déploiement n'a été ajoutée à la file distante
+`remote-readonly-job` et aucune configuration de `caseRouter` n'est modifiée.
