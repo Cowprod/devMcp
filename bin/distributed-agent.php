@@ -237,17 +237,44 @@ $post = static function (string $endpoint, string $body) use ($server, $headers,
         CURLOPT_CAINFO => $config['ca_file'], CURLOPT_FOLLOWLOCATION => false,
     ]);
     $response = curl_exec($request);
-    $code = curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+    $code = (int) curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+    $curlErrno = curl_errno($request);
     curl_close($request);
     if (!is_string($response) || $code !== 200) {
+        // The ping can succeed while the remote read-only queue endpoint
+        // fails. Log fixed labels and bounded numbers only; never the
+        // credential, request/response body, machine ID or remote URL.
+        $reason = match (true) {
+            $curlErrno !== 0 => 'transport_error',
+            $code === 400 => 'request_rejected',
+            $code === 401 || $code === 403 => 'authorization_rejected',
+            $code === 404 => 'endpoint_missing',
+            $code === 429 => 'rate_limited',
+            $code >= 500 && $code <= 599 => 'server_error',
+            default => 'unexpected_http_status',
+        };
+        fwrite(STDERR, sprintf(
+            "devMcp: remote read-only %s unavailable (%s; http=%d; curl_errno=%d)\n",
+            $endpoint === '/v1/agent/job-poll' ? 'poll' : 'result',
+            $reason, $code, $curlErrno
+        ));
         return null;
     }
     $decoded = json_decode($response, true, 8);
-    return is_array($decoded) ? $decoded : null;
+    if (!is_array($decoded)) {
+        fwrite(STDERR, "devMcp: remote read-only response is not JSON object\n");
+        return null;
+    }
+    return $decoded;
 };
 $poll = $post('/v1/agent/job-poll', '{"protocol_version":1}');
-if (!is_array($poll) || ($poll['protocol_version'] ?? null) !== 1
+if ($poll === null) {
+    // Transport/HTTP/JSON failure was already diagnosed above.
+    exit(0);
+}
+if (($poll['protocol_version'] ?? null) !== 1
     || !is_array($poll['jobs'] ?? null) || count($poll['jobs']) > 1) {
+    fwrite(STDERR, "devMcp: invalid remote read-only poll protocol\n");
     exit(0);
 }
 foreach ($poll['jobs'] as $job) {
