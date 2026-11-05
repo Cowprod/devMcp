@@ -117,6 +117,7 @@ final class RemoteHostingActivationContract
                 'root_owned_policy', 'unique_operation_nonce_and_fencing',
                 'exclusive_local_lock', 'fresh_git_fetch_and_proof',
                 'safe_canonical_paths_and_ownership', 'zerotier_ip_and_port',
+                'zerotier_network_policy_pin',
                 'dependencies_and_unit_review', 'rollback_target_verified',
             ],
             'commit_required' => [
