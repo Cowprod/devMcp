@@ -28,12 +28,12 @@ final class RemoteAuditTailTest extends TestCase
         $db = new PDO('sqlite::memory:');
         $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $db->exec('CREATE TABLE dm_project (id TEXT PRIMARY KEY)');
-        $db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, name TEXT, status TEXT)');
+        $db->exec('CREATE TABLE dm_machine (id TEXT PRIMARY KEY, name TEXT, status TEXT, last_seen_at TEXT)');
         $db->exec('CREATE TABLE dm_deployment (id TEXT PRIMARY KEY, machine_id TEXT, project_id TEXT, workspace_path TEXT, enabled INTEGER)');
         $db->exec('CREATE TABLE dm_remote_readonly_job (id TEXT PRIMARY KEY, deployment_id TEXT, action_name TEXT, state TEXT, created_at TEXT, claimed_at TEXT, finished_at TEXT, arguments_json TEXT, result_json TEXT)');
 
         $db->exec("INSERT INTO dm_project VALUES ('caserouter'), ('other'), ('disabled')");
-        $db->exec("INSERT INTO dm_machine VALUES ('m1', 'agent-1', 'active')");
+        $db->exec("INSERT INTO dm_machine VALUES ('m1', 'agent-1', 'active', NULL)");
         $db->exec("INSERT INTO dm_deployment VALUES ('d1', 'm1', 'caserouter', '/tmp/router', 1), ('d2', 'm1', 'other', '/tmp/other', 1), ('d3', 'm1', 'disabled', '/tmp/disabled', 0)");
 
         $insert = $db->prepare('INSERT INTO dm_remote_readonly_job VALUES (?,?,?,?,?,?,?,?,?)');
