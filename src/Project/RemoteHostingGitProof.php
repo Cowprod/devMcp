@@ -33,7 +33,8 @@ final class RemoteHostingGitProof
             || preg_match('~^Cowprod/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$~D', $repository) !== 1
             || !self::sha($minimum) || !self::sha($revision)
             || ($plan['ready_to_execute'] ?? null) !== false
-            || !in_array('git_main_ancestry', $plan['verification_required'] ?? [], true)) {
+            || !is_array($plan['verification_required'] ?? null)
+            || !in_array('git_main_ancestry', $plan['verification_required'], true)) {
             throw new InvalidArgumentException('Untrusted hosting Git plan');
         }
         if ($checkout === '' || $checkout[0] !== '/'
@@ -95,14 +96,16 @@ final class RemoteHostingGitProof
                 $env[$name] = false;
             }
         }
-        $env += [
+        $env = array_replace($env, [
             'GIT_CONFIG_NOSYSTEM' => '1',
             'GIT_CONFIG_GLOBAL' => '/dev/null',
             'GIT_NO_REPLACE_OBJECTS' => '1',
             'GIT_TERMINAL_PROMPT' => '0',
             'GIT_OPTIONAL_LOCKS' => '0',
             'LC_ALL' => 'C',
-        ];
+            'LD_PRELOAD' => false,
+            'LD_LIBRARY_PATH' => false,
+        ]);
         $process = new Process(
             array_merge(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-C', $checkout], $args),
             null,
