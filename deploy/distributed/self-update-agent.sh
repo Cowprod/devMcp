@@ -3,10 +3,10 @@
 set -euo pipefail
 umask 077
 repo=https://github.com/Cowprod/devMcp.git
-checkout=/var/lib/devmcp-agent/update-repository
-root=/var/lib/devmcp-agent
+checkout=/var/lib/devmcp-agent-update/repository
+root=/var/lib/devmcp-agent-update
 bin=/opt/devmcp-agent/bin
-marker=/var/lib/devmcp-agent/installed-agent-revision
+marker=/var/lib/devmcp-agent-update/installed-revision
 files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php"
 [[ "$(id -u)" -eq 0 && "$#" -eq 0 ]] || { echo 'Requires root; no arguments' >&2; exit 2; }
 [[ -f /etc/devmcp/agent.php && ! -L /etc/devmcp/agent.php ]] || { echo 'Agent not enrolled' >&2; exit 1; }
