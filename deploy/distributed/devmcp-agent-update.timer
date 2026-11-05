@@ -1,0 +1,13 @@
+[Unit]
+Description=devMcp agent automatic revision checks
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=6h
+RandomizedDelaySec=5min
+AccuracySec=1min
+Persistent=true
+Unit=devmcp-agent-update.service
+
+[Install]
+WantedBy=timers.target
