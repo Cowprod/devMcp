@@ -26,9 +26,11 @@ le démon ZeroTier, via `zerotier-cli -j listnetworks`.
 
 Une vérification positive est uniquement un **constat à un instant donné**.
 Elle ne valide pas le réseau ZeroTier **approuvé par l'administrateur**.
-Le `network_id` retourné devra être comparé à un identifiant explicitement
-épinglé dans une politique locale root-only, sans valeur transmise par le
-demandeur distant. La concordance d'interface et l'adresse IP ne suffisent
+Le `network_id` retourné est désormais comparé par
+`RemoteHostingZeroTierNetworkPin::inspect()` au champ obligatoire
+`zerotier_network_id` de `/etc/devmcp/hosting-policy.json`, vérifié root-only
+par `RemoteHostingLocalPolicy::preview()`. L'identifiant n'est jamais accepté
+depuis la demande distante. La concordance d'interface et l'adresse IP ne suffisent
 pas à exclure un autre réseau ZeroTier.
 
 Les droits de lecture nécessaires au démon peuvent ne pas être accessibles
