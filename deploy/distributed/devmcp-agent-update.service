@@ -1,0 +1,21 @@
+[Unit]
+Description=devMcp distributed agent self-update (fixed release channel)
+After=network-online.target zerotier-one.service
+Wants=network-online.target
+ConditionPathExists=/etc/devmcp/agent.php
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/bin/bash /opt/devmcp-agent/bin/self-update-agent.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/devmcp-agent/bin /var/lib/devmcp-agent /run/lock
+ReadOnlyPaths=/etc/devmcp
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+TimeoutStartSec=180
