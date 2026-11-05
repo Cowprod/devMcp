@@ -33,7 +33,9 @@ final class RemoteHostingLocalPolicy
         if (!is_string($bytes) || strlen($bytes) > self::MAX_BYTES) {
             throw new InvalidArgumentException('Local hosting policy unreadable or too large');
         }
-        return self::previewJson($bytes, $request);
+        // The remotely asserted machine_id is never an identity proof. Bind
+        // the preview to the identity enrolled locally by install-agent.sh.
+        return self::previewJsonForEnrolledMachine($bytes, $request, self::enrolledMachineId());
     }
 
     /**
@@ -62,6 +64,55 @@ final class RemoteHostingLocalPolicy
         // keys, a matching machine/deployment/project identity, unique ports,
         // a fixed workspace and fixed runtimes.
         return RemoteHostingReleasePlan::preview($policy, $request);
+    }
+
+    /**
+     * Pure contract for offline tests. The enrolled ID MUST come from a
+     * verified local enrollment file, never from a remote request. This does
+     * not authorize execution or read a live enrollment on its own.
+     *
+     * @param array<string,mixed> $request
+     * @return array<string,mixed>
+     */
+    public static function previewJsonForEnrolledMachine(
+        string $json,
+        array $request,
+        string $enrolledMachineId
+    ): array {
+        $plan = self::previewJson($json, $request);
+        if (preg_match('/^[a-f0-9]{32}$/D', $enrolledMachineId) !== 1
+            || !hash_equals($enrolledMachineId, $plan['machine_id'])) {
+            throw new InvalidArgumentException('Hosting policy does not match locally enrolled machine');
+        }
+        return $plan;
+    }
+
+    private static function enrolledMachineId(): string
+    {
+        // install-agent.sh creates this root-owned 0640 file: the agent
+        // group may read it, but nobody except root may modify it.
+        // Never apply the hosting policy's stricter 0600 check here.
+        $path = '/etc/devmcp/agent.php';
+        clearstatcache(true, $path);
+        $meta = @lstat($path);
+        if (!is_array($meta)
+            || ($meta['mode'] & 0170000) !== 0100000
+            || $meta['uid'] !== 0
+            || ($meta['mode'] & 0022) !== 0
+            || ($meta['mode'] & 0007) !== 0
+            || ($meta['mode'] & 0111) !== 0
+            || ($meta['mode'] & 0400) === 0
+            || $meta['size'] < 1 || $meta['size'] > self::MAX_BYTES) {
+            throw new InvalidArgumentException('Local enrolled identity file is untrusted');
+        }
+        // The containing directory was already verified root-owned and
+        // non-writable by unprivileged users in preview().
+        $configuration = require $path;
+        $id = is_array($configuration) ? ($configuration['machine_id'] ?? null) : null;
+        if (!is_string($id) || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1) {
+            throw new InvalidArgumentException('Local enrolled identity is invalid');
+        }
+        return $id;
     }
 
     private static function verifyMetadata(string $path, int $expectedType, bool $file): void
