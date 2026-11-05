@@ -37,6 +37,14 @@ grep -Fqx 'Unit=devmcp-agent-update.service' "$stage/devmcp-agent-update.timer"
    && ! -L /etc/systemd/system/devmcp-agent-update.timer ]] || {
   echo 'Refusing to overwrite symbolic links' >&2; exit 1;
 }
+# Separate trusted release state from /var/lib/devmcp-agent, which is writable
+# by the unprivileged agent account. The root updater must not consume a
+# Git checkout controlled by that account.
+[[ ! -L /var/lib/devmcp-agent-update ]] || { echo 'Linked update state rejected' >&2; exit 1; }
+install -d -m 0700 -o root -g root /var/lib/devmcp-agent-update
+[[ "$(stat -c %u /var/lib/devmcp-agent-update)" == 0 ]] || {
+  echo 'Update state must be root-owned' >&2; exit 1;
+}
 install -m 0750 -o root -g root "$stage/self-update-agent.sh" /opt/devmcp-agent/bin/self-update-agent.sh
 install -m 0644 -o root -g root "$stage/devmcp-agent-update.service" /etc/systemd/system/devmcp-agent-update.service
 install -m 0644 -o root -g root "$stage/devmcp-agent-update.timer" /etc/systemd/system/devmcp-agent-update.timer
