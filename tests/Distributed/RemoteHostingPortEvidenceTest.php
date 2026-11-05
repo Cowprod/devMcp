@@ -53,7 +53,7 @@ final class RemoteHostingPortEvidenceTest extends TestCase
 
     private static function table(int $ipLength, ?string $state = null, string $port = '47C5'): string
     {
-        $header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n";
+        $header = "  sl  local_address " . ($ipLength === 32 ? "remote_address" : "rem_address") . "   st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n";
         if ($state === null) {
             return $header;
         }
