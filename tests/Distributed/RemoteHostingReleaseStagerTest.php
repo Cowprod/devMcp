@@ -135,6 +135,32 @@ final class RemoteHostingReleaseStagerTest extends TestCase
         $this->write([$entry]);
     }
 
+    public function testAcceptsSafeEmbeddedDotDotInBlobNamesAndStreamsLargeBlobs(): void
+    {
+        // GitTreeEvidence accepts these names. They must remain deployable.
+        $large = str_repeat('abc123XYZ', 32768);
+        $entry = $this->blob('public/app..min.js', $large);
+        $this->write([$entry]);
+        self::assertSame($large, file_get_contents($this->stage . '/public/app..min.js'));
+        self::assertSame($entry['object'], sha1('blob ' . strlen($large) . "\0" . $large));
+    }
+
+    public function testRejectsDotAndDotDotPathComponents(): void
+    {
+        $entry = $this->blob('public/index.html', 'hello');
+        foreach (['public/./index.html', 'public/../escape'] as $path) {
+            $entry['path'] = $path;
+            try {
+                $this->write([$entry]);
+                self::fail('Traversal component was accepted: ' . $path);
+            } catch (InvalidArgumentException $e) {
+                self::assertSame('Invalid Git blob staging component', $e->getMessage());
+            }
+        }
+        self::assertFileDoesNotExist($this->stage . '/escape');
+        self::assertFileDoesNotExist($this->stage . '/public/index.html');
+    }
+
     public function testRejectsExecutablePermissionForging(): void
     {
         $entry = $this->blob('public/index.html', 'hello');
