@@ -23,6 +23,23 @@ et un SHA Git : aucune commande, option systemd ni adresse réseau
 ne peut y figurer. Les plans produits portent toujours
 `ready_to_execute=false`.
 
+**Liaison à l'enrôlement (phase 2G) :** `preview()` lit en plus
+`/etc/devmcp/agent.php`, après contrôle des métadonnées du fichier :
+régulier, propriétaire root, non modifiable par le groupe/autres, non
+lisible par les autres, non exécutable et taille limitée. Le mode `0640`
+installé par `install-agent.sh` reste autorisé afin que le groupe
+`devmcp-agent` puisse lire son identité, mais jamais la modifier.
+L'identifiant `machine_id` lu localement doit correspondre à celui
+de la politique **et** à celui de la demande distante. Aucun champ
+fourni par le client n'est accepté comme preuve d'identité enrôlée.
+
+La méthode `previewJsonForEnrolledMachine()` permet les tests purs
+sur des identifiants fictifs ; son troisième argument n'est pas une
+attestation. **Seule `preview()` lit et vérifie la source locale.**
+Un résultat reste non exécutable (`ready_to_execute=false`) et ne
+garantit ni l'authentification du job sur le serveur, ni le lancement
+de services, ni la vérification du réseau ou du dépôt.
+
 **Séparation des responsabilités :** ceci vérifie seulement la
 provenance filesystem et le contrat JSON. Le futur exécuteur devra
 également vérifier l'identité réellement enrôlée de l'agent, la preuve
