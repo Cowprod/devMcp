@@ -22,8 +22,18 @@ final class RemoteHostingGitTreeEvidence
     /** @param array<string,mixed> $request @return array<string,mixed> */
     public static function inspect(array $request): array
     {
-        // GitEvidence checks root-owned mirror paths, the exact origin, bare
-        // repository, minimum revision and ancestry before this extra probe.
+        return self::validatedManifest($request)['evidence'];
+    }
+
+    /**
+     * Return manifest data obtained only from the locally verified bare mirror.
+     * The caller MUST NOT substitute any remote-provided file list.
+     *
+     * @param array<string,mixed> $request
+     * @return array{plan:array<string,mixed>,entries:list<array<string,mixed>>,evidence:array<string,mixed>}
+     */
+    public static function validatedManifest(array $request): array
+    {
         $proof = RemoteHostingGitEvidence::inspect($request);
         $plan = RemoteHostingLocalPolicy::preview($request);
         if (($proof['local_bare_mirror_ancestry_verified'] ?? null) !== true
@@ -31,10 +41,9 @@ final class RemoteHostingGitTreeEvidence
             || ($proof['repository'] ?? null) !== ($plan['repository'] ?? null)) {
             throw new InvalidArgumentException('Untrusted Git tree context');
         }
-
         $mirror = RemoteHostingGitEvidence::MIRROR_ROOT . '/' . $plan['deployment_id'] . '.git';
-        $listing = self::readGitTree($mirror, $plan['revision']);
-        return self::check($plan, self::parseListing($listing));
+        $entries = self::parseListing(self::readGitTree($mirror, $plan['revision']));
+        return ['plan' => $plan, 'entries' => $entries, 'evidence' => self::check($plan, $entries)];
     }
 
     /**
