@@ -147,20 +147,19 @@ final class RemoteHostingGitTreeEvidence
             }
         }
 
+        // Keep the manifest contract aligned with the fixed, non-shell
+        // ExecStart and document roots in RemoteHostingUnitDraft. A root-level
+        // index would pass the old check but remain invisible to the service.
+        // A package.json alone cannot start the fixed Node server.js.
         $entrypoints = match ($runtime) {
-            'static' => ['index.html', 'public/index.html'],
-            'php' => ['index.php', 'public/index.php'],
-            'node' => ['package.json'],
+            'static' => ['public/index.html'],
+            'php' => ['public/index.php'],
+            'node' => ['package.json', 'server.js'],
         };
-        $found = false;
         foreach ($entrypoints as $entrypoint) {
-            if (isset($seen[$entrypoint])) {
-                $found = true;
-                break;
+            if (!isset($seen[$entrypoint])) {
+                throw new InvalidArgumentException('Git tree is missing fixed runtime entrypoint');
             }
-        }
-        if (!$found) {
-            throw new InvalidArgumentException('Git tree has no expected runtime entrypoint');
         }
 
         return [
