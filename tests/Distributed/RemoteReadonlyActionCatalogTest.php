@@ -14,7 +14,7 @@ final class RemoteReadonlyActionCatalogTest extends TestCase
     {
         $catalog = remoteReadonlyActionCatalog();
         self::assertSame([
-            'git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find',
+            'host.runtime', 'git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find',
         ], array_keys($catalog));
 
         foreach ($catalog as $action => $spec) {
@@ -43,6 +43,14 @@ final class RemoteReadonlyActionCatalogTest extends TestCase
         }
         self::assertFalse(remoteJobAllowed('workspace.find', ['path' => '.', 'filter' => 'exe']));
         self::assertFalse(remoteJobAllowed('workspace.read', ['path' => '.', 'filter' => 'php']));
+    }
+
+    public function testHostingPreflightRequiresNoArgumentsAndDoesNotGrantDeploy(): void
+    {
+        self::assertTrue(remoteJobAllowed('host.runtime', []));
+        self::assertFalse(remoteJobAllowed('host.runtime', ['path' => '.']));
+        self::assertFalse(remoteJobAllowed('host.runtime', ['runtime' => 'node']));
+        self::assertFalse(remoteJobAllowed('project.deploy', ['runtime' => 'node']));
     }
 
     public function testGitHeadCannotAcquireArgumentsThroughTheCatalog(): void

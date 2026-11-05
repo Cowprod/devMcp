@@ -8,6 +8,23 @@ function remoteWorkspaceAction(string $workspace, string $action, array $argumen
     if ($root === false || !is_dir($root) || is_link($workspace)) {
         return ['ok' => false, 'error' => 'workspace_missing'];
     }
+    if ($action === 'host.runtime') {
+        // Read-only, fixed-path checks. No shell, service control, binary
+        // invocation, privilege elevation, or arbitrary file reads.
+        return [
+            'ok' => true,
+            'remote_execution_enabled' => false,
+            'hosting_deployment_enabled' => false,
+            'runtimes' => [
+                'static' => is_executable('/usr/bin/python3'),
+                'php' => is_executable('/usr/bin/php'),
+                'node' => is_executable('/usr/bin/node'),
+            ],
+            'systemd_available' => is_dir('/run/systemd/system'),
+            'workspace_canonical' => $root === $workspace,
+            'network_binding_policy' => 'unconfigured',
+        ];
+    }
     if ($action === 'git.head') {
         require_once __DIR__ . '/inspect-workspace.php';
         $result = inspectWorkspace($root);

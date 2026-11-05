@@ -14,10 +14,11 @@ require_once dirname(__DIR__, 2) . '/bin/remote-job-policy.php';
  */
 final class AdminRemoteActionCatalogueTest extends TestCase
 {
-    public function testRemoteCatalogueIsOnlyTheFiveReadOnlyActions(): void
+    public function testRemoteCatalogueIsOnlyTheSixReadOnlyActions(): void
     {
         $catalogue = \remoteReadonlyActionCatalog();
         self::assertSame([
+            'host.runtime',
             'git.head',
             'workspace.list',
             'workspace.read',
@@ -93,7 +94,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringNotContainsString("split(',').map(v=>v.trim())", $source);
 
         // The search only toggles catalogue visibility; it must not alter
-        // the five-action queue allowlist, form content or agent policy.
+        // the six-action queue allowlist, form content or agent policy.
         self::assertStringContainsString('function bindProjectActionFilter(', $source);
         self::assertStringContainsString('entry.dataset.actionSearch=', $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
@@ -132,7 +133,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
 
         // Neither new action IDs nor a direct execution endpoint are introduced.
         self::assertStringNotContainsString("form.submit()", $source);
-        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+        self::assertSame(6, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testProjectActionOriginFilterOnlyChangesVisibleCatalogueEntries(): void
@@ -150,7 +151,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         // Only the catalogue entries are hidden; no submitted field, queue or permission changes.
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
-        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+        self::assertSame(6, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testProjectActionSearchSupportsUnorderedKeywordsAndAccentInsensitiveMatching(): void
@@ -167,7 +168,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         self::assertStringContainsString("catalogue.classList.toggle('d-none',origin==='local'||(terms.length>0&&!hasMatch));", $source);
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
-        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+        self::assertSame(6, count(\remoteReadonlyActionCatalog()));
     }
 
 
@@ -190,7 +191,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         // Hiding an action must not clear prepared values or bypass submission.
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
         self::assertStringContainsString("submit.type='submit';", $source);
-        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+        self::assertSame(6, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testProjectCatalogueSearchIncludesOnlyPublishedParameterNamesAndTypes(): void
@@ -224,7 +225,7 @@ final class AdminRemoteActionCatalogueTest extends TestCase
         // Filtering only changes presentation; submission and execution remain gated.
         self::assertStringContainsString("entry.classList.toggle('d-none',!matched);", $source);
         self::assertStringContainsString("hidden('operation','remote.readonly.enqueue');", $source);
-        self::assertSame(5, count(\remoteReadonlyActionCatalog()));
+        self::assertSame(6, count(\remoteReadonlyActionCatalog()));
     }
 
     public function testAdminPageSharesTheCatalogueForFallbackAndProjectDetails(): void
