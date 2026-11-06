@@ -34,6 +34,18 @@ final class RemoteHostingActivationJournal
 
         // The separately validated workspace is root-owned and not writable
         // by any other account. All relevant names are fixed locally.
+        clearstatcache(true, $lockPath);
+        $existingLock = @lstat($lockPath);
+        if ($existingLock !== false && (
+            ($existingLock['mode'] & 0170000) !== 0100000
+            || $existingLock['uid'] !== 0
+            || ($existingLock['mode'] & 0077) !== 0
+            || ($existingLock['mode'] & 0111) !== 0
+            || $existingLock['nlink'] !== 1
+        )) {
+            // Do not even open a pre-existing linked or untrusted lock file.
+            throw new InvalidArgumentException('Untrusted activation lock');
+        }
         $oldUmask = umask(0077);
         try {
             $lock = @fopen($lockPath, 'c+b');
