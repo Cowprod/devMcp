@@ -80,10 +80,20 @@ final class RemoteHostingReleaseStager
             $renamed = false;
             try {
                 self::writeManifest($staging, $mirror, $entries);
-                if (!chmod($staging, 0755) || !@rename($staging, $release)) {
+                if (!chmod($staging, 0755)) {
+                    throw new RuntimeException('Cannot set staged release permissions');
+                }
+                // A successful rename is atomic, but not necessarily durable:
+                // persist blob data, file modes and each directory before it.
+                self::syncStagedDirectories($staging);
+                if (!@rename($staging, $release)) {
                     throw new RuntimeException('Cannot commit staged release');
                 }
                 $renamed = true;
+                // Persist the new release directory entry. If this fails,
+                // leave the unactivated release for inspection, never claim
+                // staging succeeded.
+                self::syncDirectory($releases);
                 $checked = RemoteHostingReleaseFilesystemEvidence::inspect($request);
                 return [
                     'release_path' => $release,
@@ -195,7 +205,8 @@ final class RemoteHostingReleaseStager
                 if ($processExit !== 0 || $size !== $entry['size']
                     || !hash_equals($entry['object'], hash_final($hash))
                     || !fflush($file)
-                    || !chmod($destination, $entry['mode'] === '100755' ? 0755 : 0644)) {
+                    || !chmod($destination, $entry['mode'] === '100755' ? 0755 : 0644)
+                    || !fsync($file)) {
                     throw new RuntimeException('Git blob integrity or permissions rejected');
                 }
             } finally {
@@ -248,6 +259,51 @@ final class RemoteHostingReleaseStager
             if ($mount === $workspace || str_starts_with($mount, $workspace . '/')) {
                 throw new InvalidArgumentException('Mountpoint in hosting workspace');
             }
+        }
+    }
+
+    /**
+     * Flush leaf directories before their parents, then the stage itself.
+     * Calling this only on our unpredictable, root-owned staging tree avoids
+     * fsyncing arbitrary paths or following links from remote Git manifests.
+     */
+    private static function syncStagedDirectories(string $stage): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($stage, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $item) {
+            if ($item->isLink() || (!$item->isDir() && !$item->isFile())) {
+                throw new InvalidArgumentException('Untrusted staged filesystem entry');
+            }
+            if ($item->isDir()) {
+                self::syncDirectory($item->getPathname());
+            }
+        }
+        self::syncDirectory($stage);
+    }
+
+    private static function syncDirectory(string $path): void
+    {
+        clearstatcache(true, $path);
+        $before = @lstat($path);
+        if (!is_array($before) || ($before['mode'] & 0170000) !== 0040000) {
+            throw new InvalidArgumentException('Cannot sync untrusted release directory');
+        }
+        $handle = @fopen($path, 'rb');
+        if (!is_resource($handle)) {
+            throw new RuntimeException('Cannot open release directory for fsync');
+        }
+        try {
+            $after = fstat($handle);
+            if (!is_array($after) || $before['dev'] !== $after['dev']
+                || $before['ino'] !== $after['ino']
+                || ($after['mode'] & 0170000) !== 0040000 || !fsync($handle)) {
+                throw new RuntimeException('Cannot durably sync release directory');
+            }
+        } finally {
+            fclose($handle);
         }
     }
 
