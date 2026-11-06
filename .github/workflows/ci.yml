@@ -35,6 +35,7 @@ jobs:
           php -l src/Project/RemoteHostingReleaseStager.php
           php -l src/Project/RemoteHostingActivationContract.php
           php -l src/Project/RemoteHostingActivationJournal.php
+          php -l src/Project/RemoteHostingActivationRecoveryEvidence.php
           php -l src/Project/ProvisioningStore.php
           php -l bin/devmcp-workspace-sync
           php -l bin/devmcp-workspace-inspect
