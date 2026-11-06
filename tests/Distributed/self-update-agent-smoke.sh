@@ -21,6 +21,22 @@ sed -e "s|/var/lib/devmcp-agent-update|$tmp/state|g" \
 bash -n "$tmp/updater.sh"
 cp "$tmp/updater.sh" "$tmp/state/repository/deploy/distributed/self-update-agent.sh"
 cp "$tmp/updater.sh" "$tmp/agent-bin/self-update-agent.sh"
+cp deploy/distributed/stage-hosting-source-bundle.sh \
+  "$tmp/state/repository/deploy/distributed/stage-hosting-source-bundle.sh"
+mkdir -p "$tmp/state/repository/src/Project"
+hosting_classes=(
+  RemoteHostingActivationContract RemoteHostingActivationJournal
+  RemoteHostingActivationRecoveryEvidence RemoteHostingBindEvidence
+  RemoteHostingGitEvidence RemoteHostingGitProof
+  RemoteHostingGitTreeEvidence RemoteHostingLocalPolicy
+  RemoteHostingPortEvidence RemoteHostingReleaseFilesystemEvidence
+  RemoteHostingReleasePlan RemoteHostingReleaseStager RemoteHostingUnitDraft
+  RemoteHostingUnitInstaller RemoteHostingWorkspaceEvidence
+  RemoteHostingZeroTierMembership RemoteHostingZeroTierNetworkPin
+)
+for name in "${hosting_classes[@]}"; do
+  printf '%s\n' '<?php declare(strict_types=1);' > "$tmp/state/repository/src/Project/$name.php"
+done
 
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
   remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
@@ -35,6 +51,7 @@ case " $* " in
   *"status --porcelain --untracked-files=no"*) : ;;
   *"fetch --quiet --no-tags origin main"*) : ;;
   *"rev-parse refs/remotes/origin/main"*) echo 1111111111111111111111111111111111111111 ;;
+  *"rev-parse HEAD"*) echo 1111111111111111111111111111111111111111 ;;
   *"checkout --quiet --detach"*) : ;;
   *"merge-base --is-ancestor"*) : ;;
   *) echo "Unmocked git action: $*" >&2; exit 9 ;;
@@ -59,6 +76,15 @@ while (( $# )); do
 done
 exec /usr/bin/install "${args[@]}"
 STUB
+cat > "$tmp/fake/stat" <<'STUB'
+#!/usr/bin/env bash
+# The smoke sandbox simulates the root-owned metadata of the real installation.
+if [[ "${1:-}" == -c && "${2:-}" == %u ]]; then
+  echo 0
+else
+  exec /usr/bin/stat "$@"
+fi
+STUB
 chmod +x "$tmp/fake/"*
 export PATH="$tmp/fake:$PATH"
 
@@ -66,6 +92,9 @@ export PATH="$tmp/fake:$PATH"
 bash "$tmp/updater.sh" > "$tmp/out1"
 grep -Fq "Agent already current: $target" "$tmp/out1"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
+bundle="$tmp/agent-bin/hosting-bundles/$target"
+[[ -f "$bundle/Project/RemoteHostingUnitInstaller.php" ]]
+[[ "$(find "$bundle" -type f | wc -l)" -eq "${#hosting_classes[@]}" ]]
 
 # 2) Same SHA, one newly required helper missing: complete it unattended.
 rm "$tmp/agent-bin/remote-job-policy.php"
@@ -86,4 +115,35 @@ if bash "$tmp/updater.sh" > "$tmp/out3" 2>&1; then
 fi
 grep -Fq 'Installed helper drift detected' "$tmp/out3"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
-echo 'PASS: idempotence, missing helper completion, drift refusal'
+# 4) An altered, already staged source bundle fails closed without stopping
+# the live agent. A new release is never silently used to repair drift.
+cp "$tmp/state/repository/bin/remote-job-policy.php" "$tmp/agent-bin/remote-job-policy.php"
+printf '%s\n' '<?php return false;' > "$bundle/Project/RemoteHostingReleasePlan.php"
+: > "$SYSTEMCTL_LOG"
+if bash "$tmp/updater.sh" > "$tmp/out4" 2>&1; then
+  echo 'FAIL: altered inert hosting source was silently replaced' >&2
+  exit 1
+fi
+grep -Fq 'Hosting bundle drift: RemoteHostingReleasePlan' "$tmp/out4"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+
+# 5) Unknown files cannot be smuggled into a revision-pinned bundle.
+cp "$tmp/state/repository/src/Project/RemoteHostingReleasePlan.php" \
+  "$bundle/Project/RemoteHostingReleasePlan.php"
+printf '%s\n' '<?php return true;' > "$bundle/Project/unreviewed.php"
+if bash "$tmp/updater.sh" > "$tmp/out5" 2>&1; then
+  echo 'FAIL: unexpected bundle file was accepted' >&2
+  exit 1
+fi
+grep -Fq 'Unexpected hosting bundle inventory' "$tmp/out5"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+# 6) A Git tree symlink in an ancestor cannot redirect fixed class names.
+mv "$tmp/state/repository/src/Project" "$tmp/state/repository/src/Project-original"
+ln -s Project-original "$tmp/state/repository/src/Project"
+if bash "$tmp/updater.sh" > "$tmp/out6" 2>&1; then
+  echo 'FAIL: linked source directory accepted' >&2
+  exit 1
+fi
+grep -Fq 'Untrusted hosting source directories' "$tmp/out6"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+echo 'PASS: agent self-update and immutable inert hosting bundle'

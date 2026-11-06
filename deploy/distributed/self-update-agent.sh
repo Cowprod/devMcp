@@ -42,6 +42,17 @@ if [[ -f "$marker" ]]; then
 fi
 git -C "$checkout" -c core.hooksPath=/dev/null checkout --quiet --detach "$target"
 
+# Package the root-owned hosting primitives without installing units, adding
+# remote actions or changing system services. A legacy updater first replaces
+# itself; on its next timer tick this new updater completes the same-SHA bundle.
+# The immutable bundle path is revision-specific, with strict drift refusal.
+hosting_bundle="$checkout/deploy/distributed/stage-hosting-source-bundle.sh"
+[[ -f "$hosting_bundle" && ! -L "$hosting_bundle" ]] || {
+  echo 'Missing or linked fixed hosting bundle helper' >&2; exit 1;
+}
+bash -n "$hosting_bundle"
+bash "$hosting_bundle" "$checkout" "$bin" "$target"
+
 if [[ "$current" == "$target" ]]; then
   # Missing helpers may be added by a self-update: complete them on the
   # next run. Altered existing binaries fail closed instead of being

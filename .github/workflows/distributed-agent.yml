@@ -35,6 +35,8 @@ jobs:
           bash -n deploy/distributed/self-update-agent.sh
           bash -n deploy/distributed/install-agent-self-update.sh
           shellcheck --severity=error deploy/distributed/self-update-agent.sh
+          bash -n deploy/distributed/stage-hosting-source-bundle.sh
+          shellcheck --severity=error deploy/distributed/stage-hosting-source-bundle.sh
           shellcheck --severity=error deploy/distributed/install-agent-self-update.sh
       - name: Self-update same-revision integration smoke
         run: |
