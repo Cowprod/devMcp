@@ -43,6 +43,12 @@ if [[ ! -e "$bundle_root" && ! -L "$bundle_root" ]]; then
   install -d -m 0755 -o root -g root "$bundle_root"
 fi
 trusted_directory "$bundle_root" || { echo 'Untrusted hosting bundle parent' >&2; exit 1; }
+# Both ancestors must be real directories, never Git-tracked symlinks that
+# could redirect even a fixed filename outside the private checkout.
+[[ -d "$checkout/src" && ! -L "$checkout/src"
+   && -d "$checkout/src/Project" && ! -L "$checkout/src/Project" ]] || {
+  echo 'Untrusted hosting source directories' >&2; exit 1;
+}
 # Fully validate all immutable Git source files before any write.
 for name in "${classes[@]}"; do
   source_path="$checkout/src/Project/$name.php"
