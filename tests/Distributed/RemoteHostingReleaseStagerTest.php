@@ -168,4 +168,27 @@ final class RemoteHostingReleaseStagerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->write([$entry]);
     }
+
+    public function testFsyncsNestedReleaseDirectoriesWithoutActivatingCurrent(): void
+    {
+        self::assertTrue(mkdir($this->stage . '/public'));
+        self::assertTrue(mkdir($this->stage . '/public/js'));
+        self::assertSame(4, file_put_contents($this->stage . '/public/js/app.js', 'test'));
+        $sync = new \ReflectionMethod(RemoteHostingReleaseStager::class, 'syncStagedDirectories');
+        $sync->invoke(null, $this->stage);
+        self::assertSame('test', file_get_contents($this->stage . '/public/js/app.js'));
+        self::assertFileDoesNotExist($this->stage . '/current');
+    }
+
+    public function testDirectoryFsyncRefusesSymbolicLinksInStagingTree(): void
+    {
+        $outside = $this->folder . '/outside';
+        self::assertTrue(mkdir($outside));
+        self::assertTrue(symlink($outside, $this->stage . '/public'));
+        $sync = new \ReflectionMethod(RemoteHostingReleaseStager::class, 'syncStagedDirectories');
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Untrusted staged filesystem entry');
+        $sync->invoke(null, $this->stage);
+    }
+
 }
