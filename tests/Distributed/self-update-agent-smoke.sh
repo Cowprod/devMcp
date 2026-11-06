@@ -137,4 +137,13 @@ if bash "$tmp/updater.sh" > "$tmp/out5" 2>&1; then
 fi
 grep -Fq 'Unexpected hosting bundle inventory' "$tmp/out5"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
+# 6) A Git tree symlink in an ancestor cannot redirect fixed class names.
+mv "$tmp/state/repository/src/Project" "$tmp/state/repository/src/Project-original"
+ln -s Project-original "$tmp/state/repository/src/Project"
+if bash "$tmp/updater.sh" > "$tmp/out6" 2>&1; then
+  echo 'FAIL: linked source directory accepted' >&2
+  exit 1
+fi
+grep -Fq 'Untrusted hosting source directories' "$tmp/out6"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
 echo 'PASS: agent self-update and immutable inert hosting bundle'
