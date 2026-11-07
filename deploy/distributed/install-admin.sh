@@ -42,6 +42,23 @@ sed -e "s|__ZT_IP__|$DEVMCP_ADMIN_ZT_IP|g" \
     -e "s|__FPM_SOCKET__|$SOCKET|g" \
     "$SOURCE/deploy/distributed/nginx-admin.conf.example" > /etc/nginx/sites-available/devmcp-admin.conf
 ln -sfn /etc/nginx/sites-available/devmcp-admin.conf /etc/nginx/sites-enabled/devmcp-admin.conf
+# Keep the HTTPS bind strictly on ZeroTier. On cold boots the private IP may
+# not be assigned when nginx first starts; systemd must retry without any
+# fallback wildcard listener. Preserve the operator's existing override.
+RETRY_TEMPLATE="$SOURCE/deploy/distributed/nginx-zerotier-retry.conf"
+RETRY_DIR=/etc/systemd/system/nginx.service.d
+RETRY_DEST="$RETRY_DIR/restart.conf"
+[[ -f "$RETRY_TEMPLATE" && ! -L "$RETRY_TEMPLATE" ]] || { echo "Missing trusted nginx retry template" >&2; exit 1; }
+install -d -m 0755 -o root -g root "$RETRY_DIR"
+if [[ -e "$RETRY_DEST" || -L "$RETRY_DEST" ]]; then
+  [[ -f "$RETRY_DEST" && ! -L "$RETRY_DEST" ]] && cmp -s -- "$RETRY_TEMPLATE" "$RETRY_DEST" || {
+    echo "Existing nginx restart override differs; refusing to overwrite" >&2
+    exit 1
+  }
+else
+  install -m 0644 -o root -g root "$RETRY_TEMPLATE" "$RETRY_DEST"
+fi
+systemctl daemon-reload
 nginx -t
 systemctl reload nginx
-echo "HTTPS vhost configured. Database credentials and migrations must be configured separately."
+echo "HTTPS vhost configured with persistent ZeroTier bind retry. Database credentials and migrations must be configured separately."
