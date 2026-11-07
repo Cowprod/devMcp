@@ -98,9 +98,17 @@ final class RemoteHostingUnitDraftTest extends TestCase
                 'MemoryMax=512M',
                 'TasksMax=64',
                 'BindsTo=zerotier-one.service',
+                'StartLimitIntervalSec=0',
+                'Restart=on-failure',
+                'RestartSec=10s',
             ] as $directive) {
                 self::assertStringContainsString($directive . "\n", $unit);
             }
+            // A five-second restart with a burst limit of three fails
+            // permanently if ZeroTier has not yet assigned its IPv4.
+            self::assertStringNotContainsString('StartLimitBurst=', $unit);
+            self::assertStringNotContainsString('StartLimitIntervalSec=60', $unit);
+            self::assertSame(1, substr_count($unit, 'RestartSec='));
             foreach (['/bin/sh', 'sudo ', 'ExecStartPre=', 'ExecReload=', 'ReadWritePaths=', 'User=root', '/opt/caseRouter', '0.0.0.0'] as $unsafe) {
                 self::assertStringNotContainsString($unsafe, $unit);
             }

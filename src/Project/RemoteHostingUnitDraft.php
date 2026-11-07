@@ -56,8 +56,9 @@ final class RemoteHostingUnitDraft
             'Wants=network-online.target',
             'BindsTo=zerotier-one.service',
             'RequiresMountsFor=/srv/devmcp-hosting',
-            'StartLimitIntervalSec=60',
-            'StartLimitBurst=3',
+            // ZeroTier's daemon may start before the private IPv4 is assigned.
+            // Do not exhaust systemd's start limit while waiting for that IP.
+            'StartLimitIntervalSec=0',
             '',
             '[Service]',
             'Type=simple',
@@ -93,7 +94,7 @@ final class RemoteHostingUnitDraft
             'TasksMax=64',
             'LimitNOFILE=1024',
             'Restart=on-failure',
-            'RestartSec=5s',
+            'RestartSec=10s',
             'TimeoutStopSec=15s',
             'StandardOutput=journal',
             'StandardError=journal',
