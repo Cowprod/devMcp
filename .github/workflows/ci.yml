@@ -60,6 +60,8 @@ jobs:
           bash -n deploy/distributed/apply-local-admin-bridge.sh
           bash -n deploy/distributed/install-admin.sh
           bash tests/distributed/nginx-zerotier-startup-smoke.sh
+      - name: Smoke-test inert static hosting example (loopback only)
+        run: python3 tests/distributed/remote-hosting-static-smoke.py
       - name: Smoke-test workspace inspection boundaries
         run: |
           mkdir -p /tmp/devmcp-inspect-fixture/sub
