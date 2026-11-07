@@ -62,6 +62,10 @@ jobs:
           bash tests/distributed/nginx-zerotier-startup-smoke.sh
       - name: Smoke-test inert static hosting example (loopback only)
         run: python3 tests/distributed/remote-hosting-static-smoke.py
+      - name: Smoke-test inert PHP hosting example (loopback only)
+        run: |
+          php -l examples/remote-hosting-php/public/index.php
+          python3 tests/distributed/remote-hosting-php-smoke.py
       - name: Smoke-test workspace inspection boundaries
         run: |
           mkdir -p /tmp/devmcp-inspect-fixture/sub
