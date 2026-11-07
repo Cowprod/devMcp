@@ -66,6 +66,10 @@ jobs:
         run: |
           php -l examples/remote-hosting-php/public/index.php
           python3 tests/distributed/remote-hosting-php-smoke.py
+      - name: Smoke-test inert Node WebSocket hosting example (loopback only)
+        run: |
+          node --check examples/remote-hosting-node/server.js
+          python3 tests/distributed/remote-hosting-node-ws-smoke.py
       - name: Smoke-test workspace inspection boundaries
         run: |
           mkdir -p /tmp/devmcp-inspect-fixture/sub
