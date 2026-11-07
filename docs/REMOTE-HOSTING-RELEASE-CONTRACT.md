@@ -115,6 +115,15 @@ l'application doit encore prouver qu'elle s'y conforme. Le service
 utilise `DynamicUser`, `NoNewPrivileges`, un jeu de capacités vide,
 un système de fichiers protégé, des restrictions sur les familles de
 sockets et les bind autorisés, ainsi que des limites mémoire/processus.
+Le démarrage initial d'un service ZeroTier peut précéder l'attribution de son
+IPv4. Les unités ont donc `Restart=on-failure`, `RestartSec=10s` et
+`StartLimitIntervalSec=0` : une erreur de bind temporaire ne bloque pas
+définitivement les tentatives de redémarrage. Ce réglage **ne démarre aucun
+service** et ne résout pas, à lui seul, la remise en route après l'arrêt
+complet du démon ZeroTier (`BindsTo=`) : cette reprise doit être vérifiée
+au banc d'essai lors de l'activation locale. La politique locale et le
+contrôle depuis un autre pair ZeroTier restent obligatoires.
+
 Ce modèle limite le risque sans constituer un confinement applicatif
 intégral ; les accès sortants et le comportement réseau des applications
 restent à auditer.
