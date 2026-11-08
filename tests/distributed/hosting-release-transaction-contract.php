@@ -11,9 +11,11 @@ declare(strict_types=1);
  */
 require_once dirname(__DIR__, 2) . '/src/Project/RemoteHostingGitTreeEvidence.php';
 require_once dirname(__DIR__, 2) . '/src/Project/RemoteHostingReleaseSwap.php';
+require_once dirname(__DIR__, 2) . '/src/Project/RemoteHostingActivationRecoveryEvidence.php';
 
 use Cowprod\DevMcp\Project\RemoteHostingGitTreeEvidence;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
+use Cowprod\DevMcp\Project\RemoteHostingActivationRecoveryEvidence;
 
 function privateMethod(string $class, string $method, mixed ...$args): mixed
 {
@@ -61,15 +63,18 @@ try {
     $record = [
         'version' => 1, 'operation_id' => str_repeat('c', 32),
         'deployment_id' => str_repeat('d', 32),
-        'machine_id' => str_repeat('e', 32), 'project_id' => 'demo',
-        'target_revision' => $new, 'previous_revision' => $old,
-        'phase' => 'prepared',
+        'target_revision' => $new, 'expected_previous_revision' => $old,
+        'state' => 'idle', 'ready_to_apply' => false,
     ];
-    privateMethod(RemoteHostingReleaseSwap::class, 'writeJournal', $journal, $record, false);
-    assert(privateMethod(RemoteHostingReleaseSwap::class, 'readJournal', $journal)['phase'] === 'prepared');
-    $record['phase'] = 'switched';
-    privateMethod(RemoteHostingReleaseSwap::class, 'writeJournal', $journal, $record, true);
-    assert(privateMethod(RemoteHostingReleaseSwap::class, 'readJournal', $journal)['phase'] === 'switched');
+    privateMethod(RemoteHostingReleaseSwap::class, 'writeJournal', $journal, $record);
+    assert(privateMethod(RemoteHostingReleaseSwap::class, 'readJournal', $journal)['state'] === 'idle');
+    assert(RemoteHostingActivationRecoveryEvidence::parseSnapshot(file_get_contents($journal)) === $record);
+    try {
+        privateMethod(RemoteHostingReleaseSwap::class, 'writeJournal', $journal, $record);
+        throw new LogicException('Existing activation journal was overwritten');
+    } catch (RuntimeException $e) {
+        assert(str_contains($e->getMessage(), 'Cannot create activation journal'));
+    }
     assert(privateMethod(RemoteHostingReleaseSwap::class, 'locked', $workspace, static fn() => 42) === 42);
 
     privateMethod(RemoteHostingReleaseSwap::class, 'swap', $workspace, null);
