@@ -18,6 +18,7 @@ jobs:
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
+          php -l bin/devmcp-hosting-root
           php -l bin/devmcp-worker
           php -l bin/devmcp-doctor
           php -l bin/import-global-projects-to-sql.php
@@ -53,6 +54,10 @@ jobs:
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Verify local hosting release swap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
+      - name: Reject unprivileged hosting executor invocation
+        run: |
+          ! php bin/devmcp-hosting-root prepare </dev/null
+          ! php bin/devmcp-hosting-root arbitrary </dev/null
       - name: Lint deployment scripts
         run: |
           sh -n deploy/self-update.sh
