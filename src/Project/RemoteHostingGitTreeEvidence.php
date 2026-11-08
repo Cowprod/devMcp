@@ -151,11 +151,11 @@ final class RemoteHostingGitTreeEvidence
         // Keep the manifest contract aligned with the fixed, non-shell
         // ExecStart and document roots in RemoteHostingUnitDraft. A root-level
         // index would pass the old check but remain invisible to the service.
-        // The Node lab demo uses built-in modules and needs only server.js.
+        // The fixed Node server.js is mandatory; package.json documents its dependency policy.
         $entrypoints = match ($runtime) {
             'static' => ['public/index.html'],
             'php' => ['public/index.php'],
-            'node' => ['server.js'],
+            'node' => ['package.json', 'server.js'],
         };
         foreach ($entrypoints as $entrypoint) {
             if (!isset($seen[$entrypoint])) {
