@@ -26,18 +26,18 @@ $observe = new ReflectionMethod(RemoteHostingReleaseSwitcher::class, 'currentRev
 
 try {
     $swap->invoke(null, $workspace, $device, null, $one);
-    assert($observe->invoke(null, $workspace, $device) === $one);
-    assert(readlink($workspace . '/current') === 'releases/' . $one);
+    if (!($observe->invoke(null, $workspace, $device) === $one)) { throw new RuntimeException('Hosting release switch assertion failed'); }
+    if (!(readlink($workspace . '/current') === 'releases/' . $one)) { throw new RuntimeException('Hosting release switch assertion failed'); }
     $swap->invoke(null, $workspace, $device, $one, $two);
-    assert($observe->invoke(null, $workspace, $device) === $two);
+    if (!($observe->invoke(null, $workspace, $device) === $two)) { throw new RuntimeException('Hosting release switch assertion failed'); }
     $swap->invoke(null, $workspace, $device, $two, $one);
-    assert($observe->invoke(null, $workspace, $device) === $one);
+    if (!($observe->invoke(null, $workspace, $device) === $one)) { throw new RuntimeException('Hosting release switch assertion failed'); }
     $swap->invoke(null, $workspace, $device, $one, null);
-    assert($observe->invoke(null, $workspace, $device) === null);
-    assert(!is_link($workspace . '/current'));
+    if (!($observe->invoke(null, $workspace, $device) === null)) { throw new RuntimeException('Hosting release switch assertion failed'); }
+    if (!(!is_link($workspace . '/current'))) { throw new RuntimeException('Hosting release switch assertion failed'); }
 
     symlink('/etc', $workspace . '/current');
-    assert($observe->invoke(null, $workspace, $device) === '');
+    if (!($observe->invoke(null, $workspace, $device) === '')) { throw new RuntimeException('Hosting release switch assertion failed'); }
     try {
         $swap->invoke(null, $workspace, $device, null, $one);
         throw new RuntimeException('Unsafe current link was overwritten');
@@ -46,7 +46,7 @@ try {
             throw $expected;
         }
     }
-    assert(readlink($workspace . '/current') === '/etc');
+    if (!(readlink($workspace . '/current') === '/etc')) { throw new RuntimeException('Hosting release switch assertion failed'); }
     echo "Root-owned atomic release selection, upgrade, restore, malformed link rejection: PASS\n";
 } finally {
     if (is_link($workspace . '/current')) {
