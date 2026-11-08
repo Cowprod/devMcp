@@ -33,6 +33,7 @@ jobs:
           php -l src/Project/RemoteHostingGitTreeEvidence.php
           php -l src/Project/RemoteHostingReleaseFilesystemEvidence.php
           php -l src/Project/RemoteHostingReleaseStager.php
+          php -l src/Project/RemoteHostingReleaseSwitcher.php
           php -l src/Project/RemoteHostingActivationContract.php
           php -l src/Project/RemoteHostingActivationJournal.php
           php -l src/Project/RemoteHostingActivationRecoveryEvidence.php
@@ -85,4 +86,8 @@ jobs:
           ! php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" read ../passwd
           php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" find . js | grep -q 'entries'
           ! php "$GITHUB_WORKSPACE/bin/devmcp-workspace-inspect" find . arbitrary
+      - name: Smoke-test atomic release selection/rollback in isolated root-owned tmp
+        run: |
+          php -l tests/distributed/remote-hosting-release-switcher-smoke.php
+          sudo php tests/distributed/remote-hosting-release-switcher-smoke.php
       - run: composer test
