@@ -26,6 +26,7 @@ classes=(
   RemoteHostingReleaseFilesystemEvidence
   RemoteHostingReleasePlan
   RemoteHostingReleaseStager
+  RemoteHostingReleaseSwitcher
   RemoteHostingUnitDraft
   RemoteHostingUnitInstaller
   RemoteHostingWorkspaceEvidence
