@@ -86,7 +86,13 @@ final class RemoteHostingReleaseSwap
             $workspace = $plan['workspace'];
             $journal = $workspace . '/.activation-journal';
             $record = self::readJournal($journal);
-            if ($record['operation_id'] !== $operationId
+            // The established recovery classifier verifies the complete v1
+            // schema and the locally pinned deployment/previous revision.
+            $recovery = RemoteHostingActivationRecoveryEvidence::assess(
+                $record, self::current($workspace), $plan
+            );
+            if ($recovery['manual_recovery_required']
+                || $record['operation_id'] !== $operationId
                 || $record['deployment_id'] !== $plan['deployment_id']
                 || $record['target_revision'] !== $plan['revision']
                 || $record['state'] !== 'idle'
