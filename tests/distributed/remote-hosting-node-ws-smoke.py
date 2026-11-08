@@ -88,8 +88,12 @@ def websocket_test(host, port):
 
 def main():
     assert DEMO.is_dir() and not DEMO.is_symlink()
-    assert {path.name for path in DEMO.iterdir() if path.is_file()} == {"server.js"}
+    assert {path.name for path in DEMO.iterdir() if path.is_file()} == {"server.js", "package.json"}
     assert not (DEMO / "server.js").is_symlink()
+    assert not (DEMO / "package.json").is_symlink()
+    package = json.loads((DEMO / "package.json").read_text(encoding="utf-8"))
+    assert package["private"] is True and package["dependencies"] == {}
+    assert package["scripts"] == {"start": "node server.js"}
     port = available_port()
     env = {**os.environ, "HOST": "127.0.0.1", "PORT": str(port)}
 
