@@ -5,12 +5,14 @@ au processus local root, sans action MCP exposée :
 
 - `RemoteHostingReleaseSwap::switch(request, operationId)` publie, par lien
   symbolique **relatif** et `rename()` atomique, une release déjà vérifiée sous
-  `/srv/devmcp-hosting/<project>/releases/<sha>`. Il écrit et synchronise
-  `.activation-journal` **avant** la bascule puis après celle-ci.
+  `/srv/devmcp-hosting/<project>/releases/<sha>`. Il écrit et synchronise le journal **immuable v1**
+  `.activation-journal` **avant** la bascule. Le lecteur de reprise existant
+  déduit si le changement a eu lieu en observant `current`.
 - `RemoteHostingReleaseSwap::rollback(request, operationId)` restaure le lien
-  précédent, ou le retire pour un premier déploiement échoué. Le journal demeure
+  précédent, ou le retire pour un premier déploiement échoué. Le journal v1 demeure
   présent et bloque toute autre activation tant que l'orchestrateur n'a pas
-  constaté et clôturé la récupération.
+  constaté et clôturé la récupération. Le format est compatible avec
+  `RemoteHostingActivationRecoveryEvidence`.
 
 Les deux méthodes exigent l'identité machine et le grant root-only de
 `/etc/devmcp/hosting-policy.json`, un verrou `flock` unique partagé avec
@@ -61,8 +63,8 @@ explicitement ignorée.
 
 ## Bloquants avant trois déploiements réels
 
-1. Préparer matériellement les arbres de release immuables depuis le miroir
-   Git approuvé, avec contrôle de l'origine et du rafraîchissement de main.
+1. Connecter `RemoteHostingReleaseStager::prepare()` déjà présent aux
+   demandes autorisées, après rafraîchissement vérifié du miroir Git.
 2. Câbler un exécuteur local root-only à l'agent distant **après** bootstrap
    explicite, sans commande shell arbitraire.
 3. Intégrer `RemoteHostingSystemdControl` dans la même transaction et
