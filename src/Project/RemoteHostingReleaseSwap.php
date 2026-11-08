@@ -46,19 +46,19 @@ final class RemoteHostingReleaseSwap
                 'version' => 1,
                 'operation_id' => $operationId,
                 'deployment_id' => $plan['deployment_id'],
-                'machine_id' => $plan['machine_id'],
-                'project_id' => $plan['project_id'],
                 'target_revision' => $plan['revision'],
-                'previous_revision' => $previous,
-                'phase' => 'prepared',
+                'expected_previous_revision' => $previous,
+                'state' => 'idle',
+                'ready_to_apply' => false,
             ];
-            self::writeJournal($journal, $record, false);
+            self::writeJournal($journal, $record);
             self::swap($workspace, $plan['revision']);
             if (self::current($workspace) !== $plan['revision']) {
                 throw new RuntimeException('Release link switch cannot be verified');
             }
-            $record['phase'] = 'switched';
-            self::writeJournal($journal, $record, true);
+            // The existing recovery reader uses the immutable v1 intent
+            // plus the observed current link to classify interrupted switches.
+            // Do not replace it with an incompatible mutable journal.
             return [
                 'project_id' => $plan['project_id'],
                 'revision' => $plan['revision'],
@@ -88,13 +88,12 @@ final class RemoteHostingReleaseSwap
             $record = self::readJournal($journal);
             if ($record['operation_id'] !== $operationId
                 || $record['deployment_id'] !== $plan['deployment_id']
-                || $record['machine_id'] !== $plan['machine_id']
-                || $record['project_id'] !== $plan['project_id']
                 || $record['target_revision'] !== $plan['revision']
-                || !in_array($record['phase'], ['prepared', 'switched', 'rollback_required'], true)) {
+                || $record['state'] !== 'idle'
+                || $record['ready_to_apply'] !== false) {
                 throw new RuntimeException('Activation recovery identity/state mismatch');
             }
-            $previous = $record['previous_revision'];
+            $previous = $record['expected_previous_revision'];
             // Re-prove both trees before restoration; never follow an
             // untrusted link or restore an unverified release.
             RemoteHostingReleaseFilesystemEvidence::inspect($request);
@@ -107,16 +106,14 @@ final class RemoteHostingReleaseSwap
             if ($current !== $plan['revision'] && $current !== $previous) {
                 throw new RuntimeException('Current link differs from journal: manual recovery required');
             }
-            $record['phase'] = 'rollback_required';
-            self::writeJournal($journal, $record, true);
+            // Keep the existing immutable v1 journal for crash recovery.
+            // The observed pointer determines whether rollback is required.
             if ($current !== $previous) {
                 self::swap($workspace, $previous);
             }
             if (self::current($workspace) !== $previous) {
                 throw new RuntimeException('Restored release link failed verification');
             }
-            $record['phase'] = 'rolled_back';
-            self::writeJournal($journal, $record, true);
             // Retain the journal until service-state verification and
             // replay fencing have been implemented by the orchestrator.
             return [
@@ -237,16 +234,13 @@ final class RemoteHostingReleaseSwap
     }
 
     /** @param array<string,mixed> $record */
-    private static function writeJournal(string $path, array $record, bool $replace): void
+    private static function writeJournal(string $path, array $record): void
     {
         $bytes = json_encode($record, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
         if (strlen($bytes) > 2048) {
             throw new RuntimeException('Oversized activation journal');
         }
-        if ($replace) {
-            self::trustedFile($path, 0600);
-        }
-        $writePath = $replace ? dirname($path) . '/.journal-' . bin2hex(random_bytes(16)) : $path;
+        $writePath = $path;
         $mask = umask(0077);
         try {
             $handle = @fopen($writePath, 'xb');
@@ -271,9 +265,6 @@ final class RemoteHostingReleaseSwap
         } finally {
             fclose($handle);
         }
-        if ($replace && !@rename($writePath, $path)) {
-            throw new RuntimeException('Cannot publish activation journal transition');
-        }
         self::syncDirectory(dirname($path));
     }
 
@@ -286,19 +277,15 @@ final class RemoteHostingReleaseSwap
             throw new RuntimeException('Activation journal missing or oversized');
         }
         self::trustedFile($path, 0600);
-        $record = json_decode($bytes, true, 8, JSON_THROW_ON_ERROR);
-        $keys = is_array($record) ? array_keys($record) : [];
+        // Share the established v1 canonical parser and recovery schema.
+        $record = RemoteHostingActivationRecoveryEvidence::parseSnapshot($bytes);
+        $keys = array_keys($record);
         sort($keys);
-        if ($keys !== ['deployment_id', 'machine_id', 'operation_id', 'phase',
-            'previous_revision', 'project_id', 'target_revision', 'version']
+        if ($keys !== ['deployment_id', 'expected_previous_revision',
+            'operation_id', 'ready_to_apply', 'state', 'target_revision', 'version']
             || ($record['version'] ?? null) !== 1
-            || !in_array($record['phase'] ?? null, ['prepared', 'switched', 'rollback_required', 'rolled_back'], true)
-            || !self::validHex($record['operation_id'] ?? null, 32)
-            || !self::validHex($record['deployment_id'] ?? null, 32)
-            || !self::validHex($record['machine_id'] ?? null, 32)
-            || !self::validHex($record['target_revision'] ?? null, 40)
-            || ($record['previous_revision'] !== null && !self::validHex($record['previous_revision'], 40))
-            || !is_string($record['project_id'] ?? null)) {
+            || ($record['state'] ?? null) !== 'idle'
+            || ($record['ready_to_apply'] ?? null) !== false) {
             throw new RuntimeException('Invalid activation journal contents');
         }
         return $record;
