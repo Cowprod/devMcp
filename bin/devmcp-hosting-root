@@ -1,0 +1,102 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Local root-only entrypoint for the hosting lab.
+ *
+ * Not installed as sudoers, setuid, systemd, an agent action or MCP endpoint.
+ * A future installer must separately grant an exact argv and the local policy
+ * must explicitly approve the machine and deployment. This executable never
+ * touches routing, NAT, firewall, WAN/LAN interfaces or router services.
+ *
+ * Usage: php bin/devmcp-hosting-root prepare|switch|rollback < request.json
+ * Request: exact JSON object with deployment_id, machine_id, project_id,
+ * revision and (for switch/rollback only) operation_id.
+ */
+use Cowprod\DevMcp\Project\RemoteHostingReleaseStager;
+use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+function hostingRootRequest(string $json, string $operation): array
+{
+    if ($json === '' || strlen($json) > 4096) {
+        throw new InvalidArgumentException('Invalid hosting input size');
+    }
+    $data = json_decode($json, true, 8, JSON_THROW_ON_ERROR);
+    if (!is_array($data) || array_is_list($data)) {
+        throw new InvalidArgumentException('Hosting request must be an object');
+    }
+    $expected = ['deployment_id', 'machine_id', 'project_id', 'revision'];
+    if ($operation !== 'prepare') {
+        $expected[] = 'operation_id';
+    }
+    $keys = array_keys($data);
+    sort($keys);
+    sort($expected);
+    if ($keys !== $expected) {
+        throw new InvalidArgumentException('Unexpected hosting request fields');
+    }
+    foreach (['deployment_id' => 32, 'machine_id' => 32, 'revision' => 40] as $key => $length) {
+        if (!is_string($data[$key]) || preg_match('/^[a-f0-9]{' . $length . '}$/D', $data[$key]) !== 1) {
+            throw new InvalidArgumentException('Invalid hosting request identifier');
+        }
+    }
+    if (!is_string($data['project_id'])
+        || preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/D', $data['project_id']) !== 1) {
+        throw new InvalidArgumentException('Invalid hosting project');
+    }
+    if ($operation !== 'prepare'
+        && (!is_string($data['operation_id'])
+            || preg_match('/^[a-f0-9]{32}$/D', $data['operation_id']) !== 1
+            || $data['operation_id'] === str_repeat('0', 32))) {
+        throw new InvalidArgumentException('Invalid hosting operation nonce');
+    }
+    return $data;
+}
+
+function hostingRootMain(array $argv): int
+{
+    // The name and argument count are both fixed. No arbitrary commands,
+    // dynamic PHP functions, shell strings or caller-provided paths.
+    $operation = $argv[1] ?? '';
+    if (count($argv) !== 2 || !in_array($operation, ['prepare', 'switch', 'rollback'], true)) {
+        throw new InvalidArgumentException('Usage: devmcp-hosting-root prepare|switch|rollback');
+    }
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+        throw new RuntimeException('Hosting executor requires local root');
+    }
+    $input = stream_get_contents(STDIN, 4097);
+    if (!is_string($input) || strlen($input) > 4096) {
+        throw new InvalidArgumentException('Hosting request exceeds limit');
+    }
+    $request = hostingRootRequest($input, $operation);
+    $nonce = $request['operation_id'] ?? null;
+    unset($request['operation_id']);
+
+    // Each primitive independently checks the local root-owned policy,
+    // enrolled identity, workspace and Git/release evidence. Do not treat
+    // this dispatcher as a completed service activation transaction.
+    $result = match ($operation) {
+        'prepare' => RemoteHostingReleaseStager::prepare($request),
+        'switch' => RemoteHostingReleaseSwap::switch($request, $nonce),
+        'rollback' => RemoteHostingReleaseSwap::rollback($request, $nonce),
+    };
+    echo json_encode([
+        'operation' => $operation,
+        'result' => $result,
+        'service_verified' => false,
+        'peer_health_verified' => false,
+        'deployment_complete' => false,
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+    return 0;
+}
+
+try {
+    exit(hostingRootMain($argv));
+} catch (Throwable $error) {
+    // Fail closed without echoing paths, policy contents or request secrets.
+    fwrite(STDERR, 'Hosting operation rejected: ' . get_class($error) . "\n");
+    exit(1);
+}
