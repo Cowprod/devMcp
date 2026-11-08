@@ -44,7 +44,7 @@ le runtime approuvé par la politique locale :
 Le contenu du sous-arbre est lu dans le commit Git approuvé sous forme de chemins
 **relatifs** ; toutes les règles de noms, modes, taille, origine, ancêtres et
 inodes s'appliquent toujours. Les autres dépôts utilisent leur racine. Le
-démonstrateur Node n'a pas de dépendances npm : seul `server.js` est requis.
+démonstrateur Node n'a pas de dépendances npm : `package.json` et `server.js` sont requis.
 
 ## Validation
 
