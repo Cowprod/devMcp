@@ -214,7 +214,9 @@ final class RemoteHostingLabBootstrap
         // timer. No application service is started by this bootstrap.
         $installer = self::CHECKOUT . '/deploy/distributed/install-hosting-gateway.sh';
         self::file($installer, null, 65536);
-        self::command(['/usr/bin/timeout', '30s', '/bin/bash', $installer, $revision], 35);
+        // The local root bootstrap supplies the explicit installer approval; the
+        // unattended agent self-updater never has this argv.
+        self::command(['/usr/bin/timeout', '30s', '/bin/bash', $installer, $revision, '--root-approved'], 35);
         // systemctl is-active alone does not prove the agent can reach the
         // privileged IPC. Check the actual systemd-created Unix socket ACL
         // BEFORE publishing the final polling opt-in.
