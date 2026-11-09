@@ -30,6 +30,9 @@ final class RemoteHostingReleaseSwap
             if (@lstat($journal) !== false) {
                 throw new RuntimeException('Unresolved activation journal; manual recovery required');
             }
+            // A settled nonce is permanently fenced, even after the active
+            // journal has been archived. Replays cannot begin a new switch.
+            self::rejectSettledOperation($workspace, $operationId);
             $previous = self::current($workspace);
             if ($previous === $plan['revision']) {
                 throw new RuntimeException('Requested revision already active');
@@ -130,6 +133,121 @@ final class RemoteHostingReleaseSwap
                 'journal_retained' => true,
             ];
         });
+    }
+
+    /**
+     * Finish an aborted/rolled-back operation only once the old release link
+     * is restored (or absent on the first deployment) AND the hosting unit is
+     * inactive. This does not certify a running old service or a new release.
+     *
+     * The immutable intent is moved to a permanently retained per-nonce
+     * archive under the same exclusive lock as switch() and rollback().
+     * A subsequent switch rejects archived nonces, preventing replay after
+     * the active journal is removed. An interrupted archive fails closed.
+     *
+     * @param array<string,mixed> $request
+     * @return array<string,mixed>
+     */
+    public static function settleRollback(array $request, string $operationId): array
+    {
+        self::requireRootAndNonce($operationId);
+        $plan = RemoteHostingLocalPolicy::preview($request);
+        return self::locked($plan['workspace'], function () use ($request, $plan, $operationId): array {
+            RemoteHostingWorkspaceEvidence::inspect($request);
+            self::requireInactive($plan);
+            $workspace = $plan['workspace'];
+            $journal = $workspace . '/.activation-journal';
+            $record = self::readJournal($journal);
+            $observed = self::current($workspace);
+            $recovery = RemoteHostingActivationRecoveryEvidence::assess(
+                $record, $observed, $plan
+            );
+            if ($recovery['manual_recovery_required']
+                || $record['operation_id'] !== $operationId
+                || $record['target_revision'] !== $plan['revision']
+                || $record['deployment_id'] !== $plan['deployment_id']
+                || $observed !== $record['expected_previous_revision']) {
+                throw new RuntimeException('Rollback not safely resolved');
+            }
+            // Refuse to archive intent for trees that are no longer verified.
+            RemoteHostingReleaseFilesystemEvidence::inspect($request);
+            if ($observed !== null) {
+                $old = $request;
+                $old['revision'] = $observed;
+                RemoteHostingReleaseFilesystemEvidence::inspect($old);
+            }
+            $archive = self::historyDirectory($workspace, true);
+            $receipt = $archive . '/' . $operationId . '.json';
+            clearstatcache(true, $receipt);
+            if (@lstat($receipt) !== false) {
+                throw new RuntimeException('Activation nonce already archived');
+            }
+            // Same-filesystem rename of the original canonical journal.
+            // No new caller-supplied content can replace the old evidence.
+            if (!@rename($journal, $receipt)) {
+                throw new RuntimeException('Cannot archive aborted activation');
+            }
+            self::syncDirectory($archive);
+            self::syncDirectory($workspace);
+            return [
+                'project_id' => $plan['project_id'],
+                'operation_id' => $operationId,
+                'phase' => 'rollback_settled',
+                'restored_revision' => $observed,
+                'hosting_service_inactive' => true,
+                'nonce_replay_fenced' => true,
+                'deployment_complete' => false,
+            ];
+        });
+    }
+
+    private static function rejectSettledOperation(string $workspace, string $nonce): void
+    {
+        $history = self::historyDirectory($workspace, false);
+        if ($history === null) {
+            return;
+        }
+        clearstatcache(true, $history . '/' . $nonce . '.json');
+        if (@lstat($history . '/' . $nonce . '.json') !== false) {
+            throw new RuntimeException('Previously settled activation nonce rejected');
+        }
+    }
+
+    /**
+     * The history contains canonical, immutable journal files. Its root-owned
+     * directory cannot be substituted with a symlink or foreign mount.
+     */
+    private static function historyDirectory(string $workspace, bool $create): ?string
+    {
+        $path = $workspace . '/.activation-history';
+        clearstatcache(true, $path);
+        $meta = @lstat($path);
+        if ($meta === false && !$create) {
+            return null;
+        }
+        if ($meta === false) {
+            $mask = umask(0077);
+            try {
+                if (!@mkdir($path, 0700)) {
+                    throw new RuntimeException('Cannot create activation history');
+                }
+            } finally {
+                umask($mask);
+            }
+            self::syncDirectory($workspace);
+            clearstatcache(true, $path);
+            $meta = @lstat($path);
+        }
+        clearstatcache(true, $workspace);
+        $parent = @lstat($workspace);
+        if (!is_array($meta) || !is_array($parent)
+            || ($meta['mode'] & 0170000) !== 0040000
+            || ($meta['mode'] & 07777) !== 0700
+            || $meta['uid'] !== 0
+            || $meta['dev'] !== $parent['dev']) {
+            throw new RuntimeException('Untrusted activation history');
+        }
+        return $path;
     }
 
     private static function requireRootAndNonce(string $nonce): void
