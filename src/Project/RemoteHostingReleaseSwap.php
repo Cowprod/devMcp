@@ -204,6 +204,75 @@ final class RemoteHostingReleaseSwap
         });
     }
 
+    /**
+     * Commit a FIRST release only after locally verified signed peer health.
+     * This privileged primitive is deliberately NOT exposed through agent IPC.
+     * The journal is durably moved to the replay-fencing archive last.
+     *
+     * @param array<string,mixed> $request
+     * @param array<string,mixed> $proof
+     * @return array<string,mixed>
+     */
+    public static function commitInitial(array $request, string $operationId, array $proof): array
+    {
+        self::requireRootAndNonce($operationId);
+        $plan = RemoteHostingLocalPolicy::preview($request);
+        return self::locked($plan['workspace'], function () use ($request, $plan, $operationId, $proof): array {
+            RemoteHostingWorkspaceEvidence::inspect($request);
+            RemoteHostingReleaseFilesystemEvidence::inspect($request);
+            $workspace = $plan['workspace'];
+            $journal = $workspace . '/.activation-journal';
+            $record = self::readJournal($journal);
+            $current = self::current($workspace);
+            $recovery = RemoteHostingActivationRecoveryEvidence::assess($record, $current, $plan);
+            if ($recovery['manual_recovery_required']
+                || $recovery['classification'] !== 'target_selected_unverified'
+                || $record['expected_previous_revision'] !== null
+                || $record['operation_id'] !== $operationId
+                || $record['deployment_id'] !== $plan['deployment_id']
+                || $record['target_revision'] !== $plan['revision']
+                || $current !== $plan['revision']) {
+                throw new RuntimeException('Initial commit does not match pending release');
+            }
+            RemoteHostingPeerEvidence::verifyLocal($plan, $operationId, $proof);
+            $service = RemoteHostingUnitDraft::render($plan)['service_name'];
+            $process = @proc_open([
+                '/usr/bin/timeout', '4s', '/usr/bin/systemctl', '--no-pager',
+                'is-active', '--quiet', $service,
+            ], [
+                0 => ['file', '/dev/null', 'r'],
+                1 => ['file', '/dev/null', 'w'],
+                2 => ['file', '/dev/null', 'w'],
+            ], $pipes, '/', ['PATH' => '/usr/bin:/bin', 'LANG' => 'C']);
+            if (!is_resource($process) || proc_close($process) !== 0) {
+                throw new RuntimeException('Hosting service not confirmed active');
+            }
+            $history = self::historyDirectory($workspace, true);
+            $receipt = $history . '/' . $operationId . '.json';
+            if (@lstat($receipt) !== false) {
+                throw new RuntimeException('Hosting nonce replay refused');
+            }
+            // The original immutable journal is moved as the final commit
+            // point. A crash before rename leaves the unresolved journal and
+            // requires safe recovery, never an invented success receipt.
+            if (!@rename($journal, $receipt)) {
+                throw new RuntimeException('Cannot durably commit activation');
+            }
+            self::syncDirectory($history);
+            self::syncDirectory($workspace);
+            return [
+                'project_id' => $plan['project_id'],
+                'revision' => $plan['revision'],
+                'operation_id' => $operationId,
+                'phase' => 'initial_release_committed',
+                'peer_health_verified' => true,
+                'hosting_service_active' => true,
+                'nonce_replay_fenced' => true,
+                'deployment_complete' => true,
+            ];
+        });
+    }
+
     private static function rejectSettledOperation(string $workspace, string $nonce): void
     {
         $history = self::historyDirectory($workspace, false);
