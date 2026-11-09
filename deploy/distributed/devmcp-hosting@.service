@@ -1,0 +1,21 @@
+# Socket-activated bounded root executor; not part of remote read-only agent.
+[Unit]
+Description=devMcp hosting privileged request gateway
+RefuseManualStart=yes
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/php /opt/devmcp-agent/bin/hosting-active/devmcp-hosting-gateway
+TimeoutStartSec=60
+UMask=0077
+PrivateTmp=yes
+ProtectHome=yes
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETUID CAP_SETGID CAP_SYS_ADMIN
