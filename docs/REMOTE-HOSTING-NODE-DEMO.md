@@ -36,9 +36,13 @@ vérifie la santé HTTP, le refus d'un bind wildcard, la négociation
 WebSocket RFC 6455, un écho de trame masquée et Ping/Pong, puis arrête
 le processus.
 
-Pour publier plus tard, utiliser un **dépôt Git Cowprod autonome**
-dont la racine de release contient `server.js`. N'exposez jamais la
-racine du dépôt `devMcp`. L'exécuteur privilégié, le SHA Git sur
+Pour le laboratoire, les trois applications utilisent le **même SHA immuable**
+de `Cowprod/devMcp` : l'exécuteur Git sélectionne uniquement le sous-arbre
+`examples/remote-hosting-node`, puis publie son contenu à la racine de la
+release isolée `lab-node`. Le `server.js` vérifié et son `package.json` se
+retrouvent à la racine de cette release, sans exposer le reste du dépôt
+`devMcp` (en particulier son code d'administration). Une substitution du
+dépôt ou du sous-arbre par une requête distante est interdite. L'exécuteur privilégié, le SHA Git sur
 `main`, le confinement systemd, l'attestation ZeroTier, le verrou
 anti-rejeu, le rollback et le test WebSocket depuis un **second pair**
 demeurent obligatoires. Aucune de ces garanties n'est fournie par le
