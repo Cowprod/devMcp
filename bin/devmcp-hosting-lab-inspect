@@ -1,0 +1,56 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Local ROOT-ONLY, READ-ONLY central inspection for the caseRouter lab.
+ *
+ * Usage: sudo php bin/devmcp-hosting-lab-inspect case
+ * The machine name must match dm_machine.name exactly. No opt-in, migration,
+ * enrollment, queue action, agent permission or router access is performed.
+ */
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+use Cowprod\DevMcp\Distributed\Admin\HostingLabCentralInspection;
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+
+try {
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0 || $argc !== 2) {
+        throw new RuntimeException('Central root inspection required');
+    }
+    $path = '/etc/devmcp-admin/distributed.php';
+    foreach (['/etc', '/etc/devmcp-admin'] as $directory) {
+        clearstatcache(true, $directory);
+        $meta = @lstat($directory);
+        if (!is_array($meta) || ($meta['mode'] & 0170000) !== 0040000
+            || $meta['uid'] !== 0 || ($meta['mode'] & 0022) !== 0) {
+            throw new RuntimeException('Untrusted central config directory');
+        }
+    }
+    clearstatcache(true, $path);
+    $meta = @lstat($path);
+    if (!is_array($meta) || ($meta['mode'] & 0170000) !== 0100000
+        || $meta['uid'] !== 0 || ($meta['mode'] & 0022) !== 0
+        || $meta['nlink'] !== 1 || $meta['size'] < 1 || $meta['size'] > 65536) {
+        throw new RuntimeException('Untrusted central config');
+    }
+    $config = require $path;
+    if (!is_array($config)) {
+        throw new RuntimeException('Invalid central config');
+    }
+    $db = DatabaseConnection::connect(
+        (string) ($config['dsn'] ?? ''),
+        (string) ($config['writer_username'] ?? ''),
+        (string) ($config['writer_password'] ?? '')
+    );
+    $result = HostingLabCentralInspection::inspect(
+        $db, $argv[1], ($config['remote_hosting_queue_enabled'] ?? false) === true
+    );
+    echo json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+    exit($result['central_queue_prerequisites_met'] ? 0 : 2);
+} catch (Throwable $error) {
+    // Never print configuration values, DB credentials or exception details.
+    fwrite(STDERR, 'Central lab inspection rejected: ' . get_class($error) . "\n");
+    exit(1);
+}

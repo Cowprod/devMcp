@@ -95,3 +95,35 @@ et un rollback SQL total. L'opération est idempotente et auditée dans
 à elle seule, un service à écouter ou une application à être considérée
 comme déployée. Ne pas demander la commande root sur caseRouter avant
 validation de l'ensemble des prérequis.
+
+## Préflight central en lecture seule (sans modification)
+
+Avant l'enrôlement ou une demande d'intervention sur caseRouter, un
+administrateur **root du central TouchDeck** peut consulter l'état réel du
+registre avec :
+
+```bash
+sudo php bin/devmcp-hosting-lab-inspect case
+```
+
+`case` est un **nom exact** de `dm_machine.name` : s'il diffère dans la base,
+la commande refuse de deviner l'identité et renvoie `machine_not_found`.
+La sortie JSON donne le vrai `machine_id`, l'état de l'identité agent,
+l'état SQL `missing` / `006_only` / `ready`, le drapeau opt-in,
+les trois identifiants et ports s'ils sont effectivement présents, ainsi
+que les éventuelles tâches SQL les plus récentes. Elle retourne le code 2
+lorsqu'un prérequis central manque, 1 pour une erreur, 0 seulement si tous
+les prérequis **centraux** sont réunis.
+
+L'inspection exige le fichier central root-owned de configuration et des
+identifiants de connexion DB existants, mais **n'exige pas d'avoir déjà
+activé le drapeau**. Elle ne lit pas les secrets HMAC et ne les expose pas.
+Aucune DDL, transaction d'écriture, création d'affectation, mise en file,
+élévation de privilège ni connexion à caseRouter n'est déclenchée.
+
+Un résultat `central_queue_prerequisites_met=true` ne certifie **ni**
+les droits root locaux, **ni** une écoute HTTP/WS, **ni** le déploiement :
+`deployment_complete=false` et `peer_health_verified=false` sont
+systématiquement retournés. Utiliser les vrais IDs avant d'appliquer
+l'approbation root `--bootstrap` ou `--apply` ; aucun opt-in n'est activé
+par cette commande. Le suivi reste dans l'issue #138.
