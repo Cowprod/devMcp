@@ -170,6 +170,15 @@ hosting opt-in, avec une attestation HMAC provenant d'un pair ZeroTier
 indépendant. Le watchdog root local annule un premier déploiement
 non attesté après 15 minutes.
 
+**Récupération d'une release corrompue :** l'arrêt de l'unité applicative
+exactement dérivée de la politique root-only ne dépend pas de l'intégrité
+persistante des blobs de la release. Cette intégrité reste impérative pour
+un démarrage ou un rechargement ; elle ne doit pas empêcher le watchdog
+de stopper une première activation expirée puis de retirer son lien
+`current`. La politique locale, l'identité de la machine, les répertoires
+root et les octets de l'unité systemd sont toujours contrôlés avant le stop.
+Aucun relancement n'est accordé par cette exception de récupération.
+
 En cas de journal corrompu, d'absence de droits effectifs ou de stop systemd
 échoué sur une application, le watchdog **continue** à traiter les deux
 autres applications indépendantes. Il retourne `failed_deployments > 0`,
