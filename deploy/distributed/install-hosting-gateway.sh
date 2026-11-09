@@ -3,8 +3,11 @@
 # agent self-update. No WAN/LAN, routes, NAT, firewall or router app changes.
 set -euo pipefail
 umask 077
-[[ "$(id -u)" == 0 && "$#" == 1 && "$1" =~ ^[a-f0-9]{40}$ ]] || {
-  echo 'Usage (root): install-hosting-gateway.sh IMMUTABLE_AGENT_SHA' >&2; exit 2;
+# Require deliberate operator approval even when a LEGACY updater calls
+# this script after checking out a newer revision. The updater passes only
+# the SHA and must never be able to promote privileged code implicitly.
+[[ "$(id -u)" == 0 && "$#" == 2 && "$1" =~ ^[a-f0-9]{40}$ && "$2" == "--root-approved" ]] || {
+  echo 'Usage (local root only): install-hosting-gateway.sh IMMUTABLE_AGENT_SHA --root-approved' >&2; exit 2;
 }
 revision="$1"
 root=/opt/devmcp-agent/bin
