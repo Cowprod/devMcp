@@ -6,6 +6,7 @@ namespace Cowprod\DevMcp\Tests\Distributed;
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchEnqueue;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabEnrollment;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabMachineResolver;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabCommitEnqueue;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use PDO;
@@ -61,6 +62,26 @@ final class HostingLabBatchEnqueueMySqlTest extends TestCase
             ->execute([$this->machineId]);
         $this->db->prepare('DELETE FROM dm_machine WHERE id = ?')
             ->execute([$this->machineId]);
+    }
+
+    public function testExactMachineNameResolutionEnqueuesAllOrNothing(): void
+    {
+        $name = 'hosting-batch-' . $this->machineId;
+        self::assertSame($this->machineId, HostingLabMachineResolver::resolve($this->db, $name));
+        try {
+            HostingLabMachineResolver::resolve($this->db, strtoupper($name));
+            self::fail('Case-folded machine alias was accepted');
+        } catch (RuntimeException $expected) {
+            self::assertStringContainsString('uniquely', $expected->getMessage());
+        }
+        self::assertSame(0, $this->countJobs());
+        $batch = HostingLabBatchEnqueue::enqueue(
+            $this->db, HostingLabMachineResolver::resolve($this->db, $name),
+            $this->revision, 'prepare'
+        );
+        self::assertSame(3, $batch['jobs_queued']);
+        self::assertSame($this->machineId, $batch['machine_id']);
+        self::assertSame(3, $this->countJobs());
     }
 
     public function testThreePhaseBatchRequiresThreeConfirmedPreparations(): void

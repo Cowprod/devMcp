@@ -9,6 +9,8 @@ declare(strict_types=1);
  * --prepare queues the three immutable demo revisions atomically.
  * --activate refuses unless the latest preparation of EACH revision has
  * succeeded. It returns one unique activation nonce per runtime.
+ * --prepare-name/--activate-name use a separately approved exact machine name.
+ * They never grant agent permissions or relax the three-demo transaction.
  *
  * Example stdin:
  * {"machine_id":"<32 hex>","revision":"<40 hex>","approval":"PREPARE_CASE_HOSTING_LAB"}
@@ -16,32 +18,19 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchEnqueue;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchConsent;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabMachineResolver;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 
 try {
-    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0
-        || $argc !== 2 || !in_array($argv[1], ['--prepare', '--activate'], true)) {
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0 || $argc !== 2) {
         throw new RuntimeException('Central root lab batch command required');
     }
-    $phase = $argv[1] === '--prepare' ? 'prepare' : 'activate';
     $raw = stream_get_contents(STDIN, 513);
-    if (!is_string($raw) || $raw === '' || strlen($raw) > 512) {
-        throw new InvalidArgumentException('Invalid lab batch consent size');
+    if (!is_string($raw)) {
+        throw new InvalidArgumentException('Invalid central hosting lab batch consent');
     }
-    $consent = json_decode($raw, true, 5, JSON_THROW_ON_ERROR);
-    $keys = is_array($consent) ? array_keys($consent) : [];
-    sort($keys);
-    if (!is_array($consent) || array_is_list($consent)
-        || $keys !== ['approval', 'machine_id', 'revision']
-        || ($consent['approval'] ?? null) !== ($phase === 'prepare'
-            ? 'PREPARE_CASE_HOSTING_LAB'
-            : 'ACTIVATE_CASE_HOSTING_LAB')
-        || !is_string($consent['machine_id'] ?? null)
-        || preg_match('/^[a-f0-9]{32}$/D', $consent['machine_id']) !== 1
-        || !is_string($consent['revision'] ?? null)
-        || preg_match('/^[a-f0-9]{40}$/D', $consent['revision']) !== 1) {
-        throw new InvalidArgumentException('Explicit root lab batch consent missing');
-    }
+    $consent = HostingLabBatchConsent::parse($argv[1], $raw);
 
     $path = '/etc/devmcp-admin/distributed.php';
     foreach (['/etc', '/etc/devmcp-admin'] as $directory) {
@@ -69,8 +58,13 @@ try {
         (string) ($config['writer_username'] ?? ''),
         (string) ($config['writer_password'] ?? '')
     );
+    // Resolve exact name before any queue write. BatchEnqueue still locks
+    // the machine and checks active enrollment/grants inside its SQL transaction.
+    $machineId = $consent['machine_name'] !== null
+        ? HostingLabMachineResolver::resolve($db, $consent['machine_name'])
+        : $consent['machine_id'];
     $result = HostingLabBatchEnqueue::enqueue(
-        $db, $consent['machine_id'], $consent['revision'], $phase
+        $db, $machineId, $consent['revision'], $consent['phase']
     );
     echo json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
     exit(0);
