@@ -101,6 +101,16 @@ Le serveur central envoie **uniquement** `prepare-all`, puis
 `activate-initial` et `commit-initial` au travers de la file
 hosting opt-in, avec une attestation HMAC provenant d'un pair ZeroTier
 indépendant. Le watchdog root local annule un premier déploiement
-non attesté après 15 minutes. Les résultats SQL / ACK d'agent ne
+non attesté après 15 minutes.
+
+En cas de journal corrompu, d'absence de droits effectifs ou de stop systemd
+échoué sur une application, le watchdog **continue** à traiter les deux
+autres applications indépendantes. Il retourne `failed_deployments > 0`,
+`scan_complete=false` et un code de sortie non nul pour signaler le défaut
+au gestionnaire systemd. Une défaillance n'est jamais considérée comme un
+rollback réussi, ni masquée comme un scan entièrement sain. Le timer peut
+réessayer au passage suivant ; la panne restante nécessite une inspection
+root locale avant tout déploiement supplémentaire.
+Les résultats SQL / ACK d'agent ne
 constituent pas une preuve terrain. Le déploiement reste 0/3 tant que
 les trois vérifications depuis un second pair ne sont pas produites.

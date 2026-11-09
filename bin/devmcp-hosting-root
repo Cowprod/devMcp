@@ -126,9 +126,17 @@ function hostingRootMain(array $argv): int
     if ($operation === 'expire-pending') {
         // This fixed, local root-only maintenance verb takes NO request
         // and is intentionally unavailable over the agent IPC gateway.
+        $result = RemoteHostingPendingWatchdog::scan();
         echo json_encode(['operation' => $operation,
-            'result' => RemoteHostingPendingWatchdog::scan(),
+            'result' => $result,
             'deployment_complete' => false], JSON_THROW_ON_ERROR) . "\n";
+        if (($result['scan_complete'] ?? null) !== true) {
+            // systemd must record a failed watchdog run if any independent
+            // lab could not be inspected/rolled back. Other labs were still
+            // processed; the next timer run can retry the failed one.
+            fwrite(STDERR, "Hosting watchdog incomplete; see failure count in result\n");
+            return 1;
+        }
         return 0;
     }
     $input = stream_get_contents(STDIN, 4097);
