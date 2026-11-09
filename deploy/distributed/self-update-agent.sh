@@ -112,7 +112,12 @@ cleanup() {
   trap - EXIT
   if [[ "$replacing" -eq 1 && "$finished" -eq 0 ]]; then
     echo 'Update failed; restoring previous binaries' >&2
+    # Restore the previous entrypoint first, before removing new helpers.
+    if [[ -f "$stage/backup/distributed-agent.php" ]]; then
+      install -m 0755 -o root -g root "$stage/backup/distributed-agent.php" "$bin/distributed-agent.php" || true
+    fi
     for name in $files; do
+      [[ "$name" == "distributed-agent.php" ]] && continue
       if [[ -f "$stage/backup/$name" ]]; then
         install -m 0755 -o root -g root "$stage/backup/$name" "$bin/$name" || true
       else
@@ -153,7 +158,14 @@ systemctl stop devmcp-agent.timer
 timer_stopped=1
 systemctl stop devmcp-agent.service
 replacing=1
-for name in $files; do install -m 0755 -o root -g root "$stage/$name" "$bin/$name"; done
+# Install dependencies before the executable entrypoint. The old agent timer may
+# have left an in-flight activation: never expose a new entrypoint while its
+# required helpers are absent. A restart failure rolls back the whole set.
+for name in $files; do
+  [[ "$name" == "distributed-agent.php" ]] && continue
+  install -m 0755 -o root -g root "$stage/$name" "$bin/$name"
+done
+install -m 0755 -o root -g root "$stage/distributed-agent.php" "$bin/distributed-agent.php"
 systemctl start devmcp-agent.service
 systemctl start devmcp-agent.timer
 # Install the future updater atomically *after* the active agent is healthy,
