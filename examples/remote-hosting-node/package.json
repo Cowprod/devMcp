@@ -1,0 +1,13 @@
+{
+  "name": "devmcp-remote-hosting-node-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone ZeroTier-only Node.js/WebSocket hosting demonstration",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

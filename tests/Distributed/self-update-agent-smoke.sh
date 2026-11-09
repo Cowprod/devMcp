@@ -27,10 +27,12 @@ mkdir -p "$tmp/state/repository/src/Project"
 hosting_classes=(
   RemoteHostingActivationContract RemoteHostingActivationJournal
   RemoteHostingActivationRecoveryEvidence RemoteHostingBindEvidence
-  RemoteHostingGitEvidence RemoteHostingGitProof
-  RemoteHostingGitTreeEvidence RemoteHostingLocalPolicy
-  RemoteHostingPortEvidence RemoteHostingReleaseFilesystemEvidence
-  RemoteHostingReleasePlan RemoteHostingReleaseStager RemoteHostingUnitDraft
+  RemoteHostingGitEvidence RemoteHostingGitProof RemoteHostingGitRefresh
+  RemoteHostingInitialActivation
+  RemoteHostingGitTreeEvidence RemoteHostingLocalPolicy RemoteHostingLocalPreparation
+  RemoteHostingPortEvidence RemoteHostingPeerEvidence RemoteHostingReleaseFilesystemEvidence
+  RemoteHostingReleasePlan RemoteHostingReleaseStager RemoteHostingReleaseSwap
+  RemoteHostingSystemdControl RemoteHostingUnitDraft
   RemoteHostingUnitInstaller RemoteHostingWorkspaceEvidence
   RemoteHostingZeroTierMembership RemoteHostingZeroTierNetworkPin
 )
@@ -38,8 +40,11 @@ for name in "${hosting_classes[@]}"; do
   printf '%s\n' '<?php declare(strict_types=1);' > "$tmp/state/repository/src/Project/$name.php"
 done
 
+cp bin/devmcp-hosting-root "$tmp/state/repository/bin/devmcp-hosting-root"
+cp bin/devmcp-hosting-gateway "$tmp/state/repository/bin/devmcp-hosting-gateway"
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
-  remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
+  remote-readonly-actions.php remote-job-policy.php remote-local-policy.php \
+  hosting-queue-policy.php remote-hosting-queue.php; do
   printf '%s\n' '<?php return true;' > "$tmp/state/repository/bin/$name"
   cp "$tmp/state/repository/bin/$name" "$tmp/agent-bin/$name"
 done
@@ -94,7 +99,11 @@ grep -Fq "Agent already current: $target" "$tmp/out1"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
 bundle="$tmp/agent-bin/hosting-bundles/$target"
 [[ -f "$bundle/Project/RemoteHostingUnitInstaller.php" ]]
-[[ "$(find "$bundle" -type f | wc -l)" -eq "${#hosting_classes[@]}" ]]
+[[ -f "$bundle/devmcp-hosting-root" ]]
+[[ -f "$bundle/devmcp-hosting-gateway" ]]
+cmp -s bin/devmcp-hosting-root "$bundle/devmcp-hosting-root"
+cmp -s bin/devmcp-hosting-gateway "$bundle/devmcp-hosting-gateway"
+[[ "$(find "$bundle" -type f | wc -l)" -eq "$((${#hosting_classes[@]} + 2))" ]]
 
 # 2) Same SHA, one newly required helper missing: complete it unattended.
 rm "$tmp/agent-bin/remote-job-policy.php"
@@ -115,7 +124,18 @@ if bash "$tmp/updater.sh" > "$tmp/out3" 2>&1; then
 fi
 grep -Fq 'Installed helper drift detected' "$tmp/out3"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
-# 4) An altered, already staged source bundle fails closed without stopping
+# 4) A modified privileged executor is never silently repaired by the updater.
+printf "\n# tampered\n" >> "$bundle/devmcp-hosting-root"
+: > "$SYSTEMCTL_LOG"
+if bash "$tmp/updater.sh" > "$tmp/out4cli" 2>&1; then
+  echo "FAIL: modified hosting executor accepted" >&2
+  exit 1
+fi
+grep -Fq "Hosting executor drift" "$tmp/out4cli"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+cp bin/devmcp-hosting-root "$bundle/devmcp-hosting-root"
+
+# 5) An altered, already staged source bundle fails closed without stopping
 # the live agent. A new release is never silently used to repair drift.
 cp "$tmp/state/repository/bin/remote-job-policy.php" "$tmp/agent-bin/remote-job-policy.php"
 printf '%s\n' '<?php return false;' > "$bundle/Project/RemoteHostingReleasePlan.php"

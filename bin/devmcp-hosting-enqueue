@@ -1,0 +1,109 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Central operator-only enqueue. Never exposed over HTTP or MCP.
+ *
+ * Reads one exact request JSON from stdin; the operator supplies only a
+ * fixed verb, not SQL, a shell command, a path or an arbitrary deployment.
+ * An opt-in central config and an enabled deployment on an active machine
+ * are both mandatory. The local root hosting policy is checked again by
+ * the caseRouter gateway at execution time.
+ */
+require dirname(__DIR__) . '/vendor/autoload.php';
+require __DIR__ . '/hosting-queue-policy.php';
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+
+function hostingEnqueueMain(array $argv): int
+{
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+        throw new RuntimeException('Central hosting enqueue requires root');
+    }
+    $action = $argv[1] ?? '';
+    if (count($argv) !== 2
+        || !in_array($action, ['prepare-all', 'activate-initial', 'abort-initial'], true)) {
+        throw new InvalidArgumentException('Invalid hosting action');
+    }
+    $input = stream_get_contents(STDIN, 4097);
+    if (!is_string($input) || strlen($input) > 4096) {
+        throw new InvalidArgumentException('Invalid hosting request length');
+    }
+    $request = json_decode($input, true, 8, JSON_THROW_ON_ERROR);
+    if (!is_array($request) || !hostingQueueRequest($action, $request)) {
+        throw new InvalidArgumentException('Hosting request rejected');
+    }
+
+    // The config path is an immutable local constant, never supplied by MCP.
+    $path = '/etc/devmcp-admin/distributed.php';
+    $stat = @lstat($path);
+    if (!is_array($stat) || ($stat['mode'] & 0170000) !== 0100000
+        || $stat['uid'] !== 0 || ($stat['mode'] & 0022) !== 0
+        || $stat['nlink'] !== 1 || $stat['size'] > 65536) {
+        throw new RuntimeException('Untrusted central hosting configuration');
+    }
+    $config = require $path;
+    if (!is_array($config) || ($config['remote_hosting_queue_enabled'] ?? false) !== true) {
+        throw new RuntimeException('Central hosting queue not enabled');
+    }
+    $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
+        (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
+
+    $db->beginTransaction();
+    try {
+        $check = $db->prepare(
+            "SELECT d.id FROM dm_deployment d
+             INNER JOIN dm_machine m ON m.id = d.machine_id
+             WHERE d.id = ? AND d.machine_id = ? AND d.project_id = ?
+               AND d.enabled = 1 AND m.status = 'active' FOR UPDATE"
+        );
+        $check->execute([$request['deployment_id'], $request['machine_id'], $request['project_id']]);
+        if ($check->fetchColumn() === false) {
+            throw new RuntimeException('Hosting deployment not centrally authorized');
+        }
+
+        // Prevent concurrent pending operations against one approved
+        // deployment. Explicit operator reconciliation is required after
+        // a crashed claim; never silently retry an activation.
+        $pending = $db->prepare(
+            "SELECT id FROM dm_remote_hosting_job
+             WHERE deployment_id = ? AND (state = 'claimed'
+               OR (state = 'queued' AND expires_at > UTC_TIMESTAMP(6)))
+             LIMIT 1 FOR UPDATE"
+        );
+        $pending->execute([$request['deployment_id']]);
+        if ($pending->fetchColumn() !== false) {
+            throw new RuntimeException('Hosting job already outstanding');
+        }
+
+        $id = bin2hex(random_bytes(16));
+        $insert = $db->prepare(
+            "INSERT INTO dm_remote_hosting_job
+             (id, deployment_id, machine_id, action_name, request_json, expires_at)
+             VALUES (?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 10 MINUTE))"
+        );
+        $insert->execute([
+            $id, $request['deployment_id'], $request['machine_id'], $action,
+            json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+        ]);
+        $db->commit();
+        echo json_encode([
+            'job_id' => $id, 'deployment_id' => $request['deployment_id'],
+            'action' => $action, 'state' => 'queued',
+            'deployment_verified' => false,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+        return 0;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $error;
+    }
+}
+
+try {
+    exit(hostingEnqueueMain($argv));
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Hosting enqueue rejected: ' . get_class($error) . "\n");
+    exit(1);
+}

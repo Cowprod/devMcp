@@ -1,0 +1,132 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Root side of a separately opted-in, systemd socket-activated hosting IPC.
+ * NOT an MCP endpoint and NOT installed by the agent updater.
+ *
+ * The socket unit must be root-owned, group devmcp-agent and mode 0660.
+ * systemd passes the accepted connection as stdin/stdout. All privileges
+ * and hosting grants are rechecked by the local root-only executor.
+ */
+function hostingGatewayDecode(string $raw): array
+{
+    if ($raw === '' || strlen($raw) > 4096 || !str_ends_with($raw, "\n")) {
+        throw new InvalidArgumentException('Invalid gateway message size');
+    }
+    $input = json_decode(trim($raw), true, 8, JSON_THROW_ON_ERROR);
+    if (!is_array($input) || array_is_list($input)) {
+        throw new InvalidArgumentException('Gateway message must be an object');
+    }
+    $keys = array_keys($input);
+    sort($keys);
+    if ($keys !== ['action', 'request', 'version'] || $input['version'] !== 1
+        || !is_string($input['action'])
+        || !in_array($input['action'], ['prepare-all', 'activate-initial', 'abort-initial'], true)
+        || !is_array($input['request']) || array_is_list($input['request'])) {
+        throw new InvalidArgumentException('Gateway action rejected');
+    }
+    $request = $input['request'];
+    $keys = array_keys($request);
+    sort($keys);
+    $expected = ['deployment_id', 'machine_id', 'project_id', 'revision'];
+    if ($input['action'] !== 'prepare-all') {
+        $expected[] = 'operation_id';
+    }
+    sort($expected);
+    if ($keys !== $expected) {
+        throw new InvalidArgumentException('Gateway request fields rejected');
+    }
+    foreach (['deployment_id' => 32, 'machine_id' => 32, 'revision' => 40] as $field => $length) {
+        if (!is_string($request[$field])
+            || preg_match('/^[a-f0-9]{' . $length . '}$/D', $request[$field]) !== 1) {
+            throw new InvalidArgumentException('Invalid gateway identifier');
+        }
+    }
+    if (!is_string($request['project_id'])
+        || preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/D', $request['project_id']) !== 1) {
+        throw new InvalidArgumentException('Invalid gateway project');
+    }
+    if (isset($request['operation_id'])
+        && (!is_string($request['operation_id'])
+            || preg_match('/^[a-f0-9]{32}$/D', $request['operation_id']) !== 1
+            || $request['operation_id'] === str_repeat('0', 32))) {
+        throw new InvalidArgumentException('Invalid gateway operation');
+    }
+    return $input;
+}
+
+function hostingGatewayMain(): int
+{
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+        throw new RuntimeException('Root-only hosting IPC');
+    }
+    // Standalone immutable release paths, no caller-supplied executable.
+    $executor = __DIR__ . '/devmcp-hosting-root';
+    $file = @lstat($executor);
+    if (!is_array($file) || ($file['mode'] & 0170000) !== 0100000
+        || $file['uid'] !== 0 || ($file['mode'] & 0022) !== 0
+        || $file['nlink'] !== 1) {
+        throw new RuntimeException('Untrusted hosting executor');
+    }
+    $raw = stream_get_contents(STDIN, 4097);
+    if (!is_string($raw) || strlen($raw) > 4096) {
+        throw new InvalidArgumentException('Gateway payload too large');
+    }
+    $job = hostingGatewayDecode($raw);
+    $child = @proc_open(
+        ['/usr/bin/timeout', '--kill-after=2s', '55s', '/usr/bin/php',
+            $executor, $job['action']],
+        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']],
+        $pipes, '/', ['PATH' => '/usr/bin:/bin', 'LANG' => 'C']
+    );
+    if (!is_resource($child)) {
+        throw new RuntimeException('Hosting executor unavailable');
+    }
+    try {
+        $request = json_encode($job['request'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+        $length = strlen($request);
+        for ($sent = 0; $sent < $length; $sent += $written) {
+            $written = fwrite($pipes[0], substr($request, $sent));
+            if (!is_int($written) || $written < 1) {
+                throw new RuntimeException('Hosting IPC input failure');
+            }
+        }
+        fclose($pipes[0]);
+        $output = stream_get_contents($pipes[1], 8193);
+        fclose($pipes[1]);
+        $status = proc_close($child);
+        $child = null;
+        if ($status !== 0 || !is_string($output) || strlen($output) > 8192) {
+            throw new RuntimeException('Hosting operation denied or failed');
+        }
+        $result = json_decode($output, true, 12, JSON_THROW_ON_ERROR);
+        if (!is_array($result) || ($result['operation'] ?? null) !== $job['action']
+            || ($result['deployment_complete'] ?? null) !== false) {
+            throw new RuntimeException('Untrusted hosting executor receipt');
+        }
+        echo json_encode(['version' => 1, 'ok' => true, 'receipt' => $result],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+        return 0;
+    } finally {
+        if (is_resource($child)) {
+            foreach ($pipes as $pipe) {
+                if (is_resource($pipe)) {
+                    fclose($pipe);
+                }
+            }
+            proc_terminate($child);
+            proc_close($child);
+        }
+    }
+}
+
+if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
+    try {
+        exit(hostingGatewayMain());
+    } catch (Throwable $error) {
+        echo '{"version":1,"ok":false,"error":"hosting_operation_rejected"}' . "\n";
+        exit(1);
+    }
+}

@@ -42,7 +42,8 @@ final class RemoteHostingGitTreeEvidence
             throw new InvalidArgumentException('Untrusted Git tree context');
         }
         $mirror = RemoteHostingGitEvidence::MIRROR_ROOT . '/' . $plan['deployment_id'] . '.git';
-        $entries = self::parseListing(self::readGitTree($mirror, $plan['revision']));
+        $source = self::approvedSourceDirectory($plan);
+        $entries = self::parseListing(self::readGitTree($mirror, $plan['revision'], $source));
         return ['plan' => $plan, 'entries' => $entries, 'evidence' => self::check($plan, $entries)];
     }
 
@@ -150,7 +151,7 @@ final class RemoteHostingGitTreeEvidence
         // Keep the manifest contract aligned with the fixed, non-shell
         // ExecStart and document roots in RemoteHostingUnitDraft. A root-level
         // index would pass the old check but remain invisible to the service.
-        // A package.json alone cannot start the fixed Node server.js.
+        // The fixed Node server.js is mandatory; package.json documents its dependency policy.
         $entrypoints = match ($runtime) {
             'static' => ['public/index.html'],
             'php' => ['public/index.php'],
@@ -208,7 +209,26 @@ final class RemoteHostingGitTreeEvidence
         return $entries;
     }
 
-    private static function readGitTree(string $mirror, string $revision): string
+    /**
+     * For this repository's three lab demos, the source is an exact,
+     * code-pinned subtree. The remote request cannot choose a path.
+     * All other approved repositories publish from their repository root.
+     *
+     * @param array<string,mixed> $plan
+     */
+    private static function approvedSourceDirectory(array $plan): ?string
+    {
+        if (($plan['repository'] ?? null) !== 'Cowprod/devMcp') {
+            return null;
+        }
+        return match ($plan['runtime']) {
+            'static' => 'examples/remote-hosting-static',
+            'php' => 'examples/remote-hosting-php',
+            'node' => 'examples/remote-hosting-node',
+        };
+    }
+
+    private static function readGitTree(string $mirror, string $revision, ?string $source): string
     {
         if (preg_match('/^[a-f0-9]{40}$/D', $revision) !== 1) {
             throw new InvalidArgumentException('Invalid Git tree revision');
@@ -216,7 +236,8 @@ final class RemoteHostingGitTreeEvidence
         // Fixed argv without shell, no network, bounded output and deadline.
         $process = @proc_open([
             '/usr/bin/timeout', '4s', '/usr/bin/git', '--git-dir=' . $mirror,
-            'ls-tree', '-r', '-l', '-z', '--full-tree', $revision,
+            'ls-tree', '-r', '-l', '-z', '--full-tree',
+            $source === null ? $revision : $revision . ':' . $source,
         ], [
             0 => ['file', '/dev/null', 'r'],
             1 => ['pipe', 'w'],

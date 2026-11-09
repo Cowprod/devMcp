@@ -18,24 +18,37 @@ jobs:
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
+          php -l bin/devmcp-hosting-enqueue
+          php -l bin/devmcp-hosting-root
+          php -l bin/devmcp-hosting-gateway
+          php -l bin/hosting-queue-policy.php
+          php -l bin/remote-hosting-queue.php
+          php -l public/agent-hosting-poll.php
+          php -l public/agent-hosting-result.php
           php -l bin/devmcp-worker
           php -l bin/devmcp-doctor
           php -l bin/import-global-projects-to-sql.php
           php -l src/Project/SqlProjectConfiguration.php
           php -l src/Project/RemoteHostingUnitDraft.php
           php -l src/Project/RemoteHostingLocalPolicy.php
+          php -l src/Project/RemoteHostingPeerEvidence.php
           php -l src/Project/RemoteHostingBindEvidence.php
           php -l src/Project/RemoteHostingZeroTierMembership.php
           php -l src/Project/RemoteHostingZeroTierNetworkPin.php
           php -l src/Project/RemoteHostingPortEvidence.php
           php -l src/Project/RemoteHostingWorkspaceEvidence.php
           php -l src/Project/RemoteHostingGitEvidence.php
+          php -l src/Project/RemoteHostingGitRefresh.php
+          php -l src/Project/RemoteHostingInitialActivation.php
+          php -l src/Project/RemoteHostingLocalPreparation.php
           php -l src/Project/RemoteHostingGitTreeEvidence.php
           php -l src/Project/RemoteHostingReleaseFilesystemEvidence.php
           php -l src/Project/RemoteHostingReleaseStager.php
           php -l src/Project/RemoteHostingActivationContract.php
           php -l src/Project/RemoteHostingActivationJournal.php
           php -l src/Project/RemoteHostingActivationRecoveryEvidence.php
+          php -l src/Project/RemoteHostingReleaseSwap.php
+          php -l src/Project/RemoteHostingSystemdControl.php
           php -l src/Project/RemoteHostingUnitInstaller.php
           php -l src/Project/ProvisioningStore.php
           php -l bin/devmcp-workspace-sync
@@ -50,6 +63,34 @@ jobs:
           php -l bin/devmcp-admin-projects-export
           php -l bin/devmcp-admin-android
           python3 -m py_compile bin/devmcp-serial-capture
+      - name: Verify cryptographically bound remote peer receipt
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-peer-evidence.php
+      - name: Verify local hosting release swap contract
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
+      - name: Reject unprivileged central hosting enqueue
+        run: |
+          ! php bin/devmcp-hosting-enqueue prepare-all </dev/null
+          ! php bin/devmcp-hosting-enqueue shell </dev/null
+      - name: Enforce bounded privileged queue expiry
+        run: |
+          grep -Fq 'expires_at DATETIME(6) NOT NULL' database/migrations/006_remote_hosting_jobs.sql
+          grep -Fq 'INTERVAL 10 MINUTE' bin/devmcp-hosting-enqueue
+          grep -Fq "expires_at > UTC_TIMESTAMP(6)" public/agent-hosting-poll.php
+          grep -Fq "state = 'claimed'" bin/devmcp-hosting-enqueue
+      - name: Enforce separate hosting queue contract
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-queue-policy.php
+      - name: Enforce isolated privileged IPC request contract
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-gateway-policy.php
+      - name: Reject unprivileged hosting executor invocation
+        run: |
+          ! php bin/devmcp-hosting-root prepare </dev/null
+          ! php bin/devmcp-hosting-root arbitrary </dev/null
+      - name: Validate peer probe fails closed without a distinct ZeroTier peer
+        run: |
+          python3 -m py_compile deploy/distributed/hosting-peer-probe.py
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime static --target-ip 127.0.0.1 --peer-ip 127.0.0.2 --port 17600
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime php --target-ip 192.168.194.189 --peer-ip 192.168.194.189 --port 17600
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime node --target-ip 192.168.194.189 --peer-ip 192.168.194.188 --port 80
       - name: Lint deployment scripts
         run: |
           sh -n deploy/self-update.sh
