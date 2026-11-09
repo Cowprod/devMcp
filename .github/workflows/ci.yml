@@ -32,6 +32,7 @@ jobs:
           php -l src/Project/RemoteHostingWorkspaceEvidence.php
           php -l src/Project/RemoteHostingGitEvidence.php
           php -l src/Project/RemoteHostingGitRefresh.php
+          php -l src/Project/RemoteHostingInitialActivation.php
           php -l src/Project/RemoteHostingLocalPreparation.php
           php -l src/Project/RemoteHostingGitTreeEvidence.php
           php -l src/Project/RemoteHostingReleaseFilesystemEvidence.php
@@ -40,6 +41,7 @@ jobs:
           php -l src/Project/RemoteHostingActivationJournal.php
           php -l src/Project/RemoteHostingActivationRecoveryEvidence.php
           php -l src/Project/RemoteHostingReleaseSwap.php
+          php -l src/Project/RemoteHostingSystemdControl.php
           php -l src/Project/RemoteHostingUnitInstaller.php
           php -l src/Project/ProvisioningStore.php
           php -l bin/devmcp-workspace-sync
