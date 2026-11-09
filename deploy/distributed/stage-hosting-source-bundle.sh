@@ -37,6 +37,7 @@ classes=(
   RemoteHostingZeroTierMembership
   RemoteHostingZeroTierNetworkPin
 )
+entrypoint="$checkout/bin/devmcp-hosting-root"
 bundle_root="$bin/hosting-bundles"
 destination="$bundle_root/$revision"
 
@@ -54,6 +55,11 @@ trusted_directory "$bundle_root" || { echo 'Untrusted hosting bundle parent' >&2
    && -d "$checkout/src/Project" && ! -L "$checkout/src/Project" ]] || {
   echo 'Untrusted hosting source directories' >&2; exit 1;
 }
+# The standalone CLI ships with the classes: remote agent bundles do not have Composer.
+[[ -f "$entrypoint" && ! -L "$entrypoint" ]] || {
+  echo 'Missing or linked hosting executor' >&2; exit 1;
+}
+php -l "$entrypoint" >/dev/null
 # Fully validate all immutable Git source files before any write.
 for name in "${classes[@]}"; do
   source_path="$checkout/src/Project/$name.php"
@@ -70,8 +76,17 @@ verify_bundle() {
   # Exact inventory only: no unreviewed extra PHP files, links or subtrees.
   local count
   count="$(find "$destination" -mindepth 1 -print | wc -l)"
-  [[ "$count" -eq $(("${#classes[@]}" + 1)) ]] || {
+  [[ "$count" -eq $(("${#classes[@]}" + 2)) ]] || {
     echo 'Unexpected hosting bundle inventory' >&2; return 1;
+  }
+  [[ -f "$destination/devmcp-hosting-root" && ! -L "$destination/devmcp-hosting-root"
+    && "$(stat -c %u "$destination/devmcp-hosting-root")" == 0
+    && "$(stat -c %a "$destination/devmcp-hosting-root")" == 755
+    && "$(stat -c %h "$destination/devmcp-hosting-root")" == 1 ]] || {
+    echo 'Untrusted hosting executor' >&2; return 1;
+  }
+  cmp -s -- "$entrypoint" "$destination/devmcp-hosting-root" || {
+    echo 'Hosting executor drift' >&2; return 1;
   }
   for name in "${classes[@]}"; do
     local file="$destination/Project/$name.php"
@@ -99,6 +114,7 @@ cleanup() {
 trap cleanup EXIT
 chmod 0755 "$stage"
 mkdir -m 0755 "$stage/Project"
+install -m 0755 -o root -g root "$entrypoint" "$stage/devmcp-hosting-root"
 for name in "${classes[@]}"; do
   install -m 0644 -o root -g root "$checkout/src/Project/$name.php" "$stage/Project/$name.php"
 done
