@@ -78,8 +78,8 @@ function hostingEnqueueMain(array $argv): int
         $id = bin2hex(random_bytes(16));
         $insert = $db->prepare(
             "INSERT INTO dm_remote_hosting_job
-             (id, deployment_id, machine_id, action_name, request_json)
-             VALUES (?, ?, ?, ?, ?)"
+             (id, deployment_id, machine_id, action_name, request_json, expires_at)
+             VALUES (?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 10 MINUTE))"
         );
         $insert->execute([
             $id, $request['deployment_id'], $request['machine_id'], $action,
