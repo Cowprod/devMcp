@@ -144,7 +144,8 @@ final class RemoteHostingLabBootstrap
         }
         $parsed = self::build($json, $config['machine_id'], $revision);
         if (self::git(['-C', self::CHECKOUT, 'rev-parse', 'HEAD']) !== $revision
-            || self::git(['-C', self::CHECKOUT, 'config', '--get', 'remote.origin.url']) !== self::ORIGIN) {
+            || self::git(['-C', self::CHECKOUT, 'config', '--get', 'remote.origin.url']) !== self::ORIGIN
+            || self::git(['-C', self::CHECKOUT, 'status', '--porcelain', '--untracked-files=no']) !== '') {
             throw new RuntimeException('Agent auto-update source mismatch');
         }
         $bundle = '/opt/devmcp-agent/bin/hosting-bundles/' . $revision;
