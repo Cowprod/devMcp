@@ -125,7 +125,7 @@ final class HostingLabEnrollmentMySqlTest extends TestCase
         $name = 'hosting-lab-' . $this->machineId;
         self::assertSame($this->machineId, HostingLabMachineResolver::resolve($this->db, $name));
 
-        foreach ([$name . '-typo', '../' . $name, 'case;DROP TABLE dm_machine'] as $invalid) {
+        foreach ([$name . '-typo', strtoupper($name), '../' . $name, 'case;DROP TABLE dm_machine'] as $invalid) {
             try {
                 HostingLabMachineResolver::resolve($this->db, $invalid);
                 self::fail('Unapproved machine name resolved');
