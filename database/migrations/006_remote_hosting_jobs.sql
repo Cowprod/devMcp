@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS dm_remote_hosting_job (
  request_json TEXT NOT NULL,
  state ENUM('queued','claimed','succeeded','failed','expired') NOT NULL DEFAULT 'queued',
  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ expires_at DATETIME(6) NOT NULL,
  claimed_at DATETIME(6) NULL,
  finished_at DATETIME(6) NULL,
  result_json TEXT NULL,
