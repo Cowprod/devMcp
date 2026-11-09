@@ -18,6 +18,7 @@ jobs:
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
+          php -l bin/devmcp-hosting-enqueue
           php -l bin/devmcp-hosting-root
           php -l bin/devmcp-hosting-gateway
           php -l bin/hosting-queue-policy.php
@@ -63,6 +64,10 @@ jobs:
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Verify local hosting release swap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
+      - name: Reject unprivileged central hosting enqueue
+        run: |
+          ! php bin/devmcp-hosting-enqueue prepare-all </dev/null
+          ! php bin/devmcp-hosting-enqueue shell </dev/null
       - name: Enforce separate hosting queue contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-queue-policy.php
       - name: Enforce isolated privileged IPC request contract
