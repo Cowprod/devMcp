@@ -93,6 +93,27 @@ final class HostingLabCentralInspectionMySqlTest extends TestCase
         self::assertNull($disabled['deployments']['node']['deployment_id']);
     }
 
+    public function testCaseFoldedMachineAliasDoesNotPassCentralPreflight(): void
+    {
+        HostingLabEnrollment::enroll($this->db, $this->machineId);
+        $alias = strtoupper($this->machineName);
+        self::assertNotSame($this->machineName, $alias);
+
+        // A case-insensitive MySQL collation may return the machine row
+        // for the alias. Inspection must enforce the resolver's byte-exact
+        // consent contract instead of emitting a false "ready".
+        $wrong = HostingLabCentralInspection::inspect($this->db, $alias, true);
+        self::assertFalse($wrong['machine_found']);
+        self::assertSame(['machine_not_found'], $wrong['blockers']);
+        self::assertFalse($wrong['central_queue_prerequisites_met']);
+        self::assertFalse($wrong['deployment_complete']);
+
+        $exact = HostingLabCentralInspection::inspect($this->db, $this->machineName, true);
+        self::assertTrue($exact['machine_found']);
+        self::assertTrue($exact['central_queue_prerequisites_met']);
+        self::assertSame($this->machineId, $exact['machine_id']);
+    }
+
     public function testMissingMachineOrRevokedIdentityNeverReportsReady(): void
     {
         $missing = HostingLabCentralInspection::inspect($this->db, 'unknown-case', true);

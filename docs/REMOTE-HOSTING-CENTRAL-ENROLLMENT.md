@@ -133,8 +133,12 @@ registre avec :
 sudo php bin/devmcp-hosting-lab-inspect case
 ```
 
-`case` est un **nom exact** de `dm_machine.name` : s'il diffère dans la base,
-la commande refuse de deviner l'identité et renvoie `machine_not_found`.
+`case` est un **nom exact** de `dm_machine.name` : la lecture impose
+l'unicité et une comparaison octet pour octet, même lorsque la collation
+MySQL est insensible à la casse. Un alias retourne `machine_not_found`, des
+correspondances ambiguës `machine_name_ambiguous` ; dans les deux cas,
+`central_queue_prerequisites_met=false`. Cela aligne le préflight sur les
+contrôles root de `--bootstrap-name` et `--prepare-name`.
 La sortie JSON donne le vrai `machine_id`, l'état de l'identité agent,
 l'état SQL `missing` / `006_only` / `ready`, le drapeau opt-in,
 les trois identifiants et ports s'ils sont effectivement présents, ainsi

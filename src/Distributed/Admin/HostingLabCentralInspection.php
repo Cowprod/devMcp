@@ -30,18 +30,25 @@ final class HostingLabCentralInspection
             throw new InvalidArgumentException('Invalid exact machine name');
         }
 
-        $select = $db->prepare('SELECT id, name, status FROM dm_machine WHERE name = ?');
+        // MySQL name equality can be case-insensitive. The enrollment CLI
+        // requires a byte-exact unique match: inspection must not report
+        // "ready" for an alias that enrollment would refuse.
+        $select = $db->prepare('SELECT id, name, status FROM dm_machine WHERE name = ? LIMIT 2');
         $select->execute([$machineName]);
-        $machine = $select->fetch(PDO::FETCH_ASSOC);
-        if (!is_array($machine)) {
+        $matches = $select->fetchAll(PDO::FETCH_ASSOC);
+        $exact = count($matches) === 1
+            && is_string($matches[0]['name'] ?? null)
+            && hash_equals($machineName, $matches[0]['name']);
+        if (!$exact) {
             return [
                 'machine_name' => $machineName,
                 'machine_found' => false,
-                'blockers' => ['machine_not_found'],
+                'blockers' => [count($matches) > 1 ? 'machine_name_ambiguous' : 'machine_not_found'],
                 'central_queue_prerequisites_met' => false,
                 'deployment_complete' => false,
             ];
         }
+        $machine = $matches[0];
         $machineId = (string) $machine['id'];
         $blockers = [];
         if ($machine['status'] !== 'active') {
