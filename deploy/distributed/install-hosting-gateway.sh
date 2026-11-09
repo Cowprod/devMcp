@@ -45,7 +45,7 @@ trusted_file "$policy" 600 || {
 [[ "$(git -C "$checkout" rev-parse HEAD)" == "$revision" ]] || {
   echo 'Installed bundle does not match the selected checkout SHA' >&2; exit 1;
 }
-for filename in devmcp-hosting.socket devmcp-hosting@.service; do
+for filename in devmcp-hosting.socket devmcp-hosting@.service devmcp-hosting-watchdog.service devmcp-hosting-watchdog.timer; do
   source_path="$checkout/deploy/distributed/$filename"
   [[ -f "$source_path" && ! -L "$source_path" ]] || {
     echo "Missing immutable unit: $filename" >&2; exit 1;
@@ -83,7 +83,7 @@ if [[ ! -L "$root/hosting-active" ]]; then
   ln -s "hosting-bundles/$revision" "$root/.hosting-active-$revision"
   mv -T -- "$root/.hosting-active-$revision" "$root/hosting-active"
 fi
-for filename in devmcp-hosting.socket devmcp-hosting@.service; do
+for filename in devmcp-hosting.socket devmcp-hosting@.service devmcp-hosting-watchdog.service devmcp-hosting-watchdog.timer; do
   destination="/etc/systemd/system/$filename"
   if [[ ! -e "$destination" ]]; then
     install -m 0644 -o root -g root "$checkout/deploy/distributed/$filename" "$destination"
@@ -93,4 +93,8 @@ done
 systemctl daemon-reload
 systemctl enable --now devmcp-hosting.socket
 systemctl is-active --quiet devmcp-hosting.socket
-echo "PASS: hosting IPC socket opted in at $revision; zero applications activated"
+# Enabling a timer does not start an application. It only stops an
+# abandoned first-release lab service after a durable 15-minute timeout.
+systemctl enable --now devmcp-hosting-watchdog.timer
+systemctl is-enabled --quiet devmcp-hosting-watchdog.timer
+echo "PASS: hosting IPC and pending-release watchdog opted in at $revision; zero applications activated"
