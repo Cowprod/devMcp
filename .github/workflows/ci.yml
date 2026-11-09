@@ -32,6 +32,7 @@ jobs:
           php -l src/Project/RemoteHostingUnitDraft.php
           php -l src/Project/RemoteHostingLocalPolicy.php
           php -l src/Project/RemoteHostingPeerEvidence.php
+          php -l src/Project/RemoteHostingPendingWatchdog.php
           php -l src/Project/RemoteHostingBindEvidence.php
           php -l src/Project/RemoteHostingZeroTierMembership.php
           php -l src/Project/RemoteHostingZeroTierNetworkPin.php
@@ -67,6 +68,8 @@ jobs:
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-peer-evidence.php
       - name: Verify signed remote commit transport end-to-end
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-remote-commit-contract.php
+      - name: Verify expiration of uncommitted initial hosting releases
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-pending-expiry.php
       - name: Verify local hosting release swap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
       - name: Reject unprivileged central hosting enqueue
@@ -102,6 +105,7 @@ jobs:
           bash -n deploy/distributed/install-local-admin-bridge.sh
           bash -n deploy/distributed/apply-local-admin-bridge.sh
           bash -n deploy/distributed/install-admin.sh
+          bash -n deploy/distributed/install-hosting-gateway.sh
           bash tests/distributed/nginx-zerotier-startup-smoke.sh
       - name: Smoke-test inert static hosting example (loopback only)
         run: python3 tests/distributed/remote-hosting-static-smoke.py
