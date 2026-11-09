@@ -57,6 +57,10 @@ jobs:
           php -l bin/devmcp-hosting-lab-enroll
           php -l src/Distributed/Admin/HostingLabEnrollment.php
           vendor/bin/phpunit tests/Distributed/HostingLabEnrollmentMySqlTest.php
+          php -l bin/devmcp-hosting-lab-inspect
+          php -l src/Distributed/Admin/HostingLabCentralInspection.php
+          php -l tests/Distributed/HostingLabCentralInspectionMySqlTest.php
+          vendor/bin/phpunit tests/Distributed/HostingLabCentralInspectionMySqlTest.php
       - name: Hosting lab three-demo batch enqueue and prepare gate
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
