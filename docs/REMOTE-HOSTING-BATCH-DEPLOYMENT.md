@@ -44,6 +44,30 @@ l'ensemble des trois créations. L'absence de préparation, une préparation
 échouée, un SHA différent, un projet désactivé ou des permissions centrale
 manquantes **refusent sans insertion partielle**.
 
+## Protection contre une seconde activation initiale
+
+Après qu'**une seule** des trois tâches `activate-initial` a été
+confirmée `succeeded`, une nouvelle demande `--prepare` ou `--activate`
+pour le lot entier est refusée, même si la file n'a plus de job en attente
+et même si la preuve HMAC / le commit durable manquent encore. Une tâche
+`activate-initial` réussie peut toujours correspondre à un service actif,
+à une attente de preuve ou à un rollback du watchdog non remonté au central :
+la file **ne prouve pas** que l'état root local est redevenu vierge.
+
+Une erreur explicite `root recovery required` interdit de recycler
+une ancienne préparation ou d'émettre un nouveau nonce sur un serveur
+potentiellement encore actif. Aucune action de récupération automatique,
+nouvelle permission d'agent ou modification de service n'est créée.
+Une tentative dont **toutes** les activations ont réellement échoué reste
+éligible à une nouvelle préparation. Pour réinitialiser un succès initial
+après rollback du watchdog, il faut d'abord concevoir et vérifier une
+attestation de récupération émise par l'exécuteur root ; une simple
+réinitialisation SQL n'est pas un mécanisme sûr.
+
+Cette protection concerne uniquement le flux de **premier déploiement**.
+Elle n'empêche pas les opérations d'upgrade/rollback root déjà définies
+dans leur contrat distinct, et n'atteste aucun déploiement sur caseRouter.
+
 ## Variante root par nom exact de machine
 
 Après un enrôlement `--bootstrap-name`, l'administrateur TouchDeck peut
