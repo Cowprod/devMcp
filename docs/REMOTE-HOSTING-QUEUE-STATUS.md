@@ -13,7 +13,8 @@
   IPC Unix contrôlé, un job maximum par interrogation. **Aucun shell
   arbitraire** et aucune réutilisation des actions `workspace.*`.
 - `devmcp-hosting-gateway` : exécution locale root avec uniquement les
-  verbes `prepare-all`, `activate-initial` et `abort-initial`.
+  verbes `prepare-all`, `activate-initial`, `abort-initial` et `commit-initial`
+  (ce dernier exige une preuve HMAC vérifiée localement par root).
 
 ## Conditions d'activation — NON satisfaites
 
@@ -29,10 +30,10 @@
    doit être créée par root (0600) avec trois déploiements préapprouvés.
 5. Installer séparément et valider le socket systemd root-only et ses
    ressources root-owned. L'auto-update installe seulement du code inerte.
-6. Un mécanisme **authentifié d'enqueue** et une confirmation finale par
-   contrôle de santé depuis un second pair ZeroTier restent à développer.
-   Ne pas ajouter d'entrée à la table par API publique ou par mécanisme
-   read-only existant.
+6. L'enqueue root-only existe désormais, mais n'est pas activé sur la machine
+   centrale. La sonde signée externe et le nouveau transport `commit-initial`
+   restent à valider dans des conditions réseau réelles. Ne jamais ajouter
+   d'entrée via une API publique ou une action read-only.
 
 ## Protocole et limites
 
@@ -72,9 +73,12 @@ fichier de la sonde. **Ne jamais transmettre la clé à l'agent, au central,
 Une fois l'activation dans l'état pending, l'administrateur root peut
 utiliser `php /opt/devmcp-agent/bin/hosting-active/devmcp-hosting-root
 commit-initial` avec un unique JSON sur stdin regroupant les
-identifiants, `operation_id` et `proof`. Cette commande n'est **pas**
-exposée par `devmcp-hosting-gateway`, volontairement : une tâche
-centrale ne peut pas fabriquer elle-même sa confirmation.
+identifiants, `operation_id` et `proof`. La commande peut désormais être
+transportée via la file hosting **distincte** après opt-in explicite et
+présentation de la preuve HMAC signée. La file, l'agent et le central ne
+possèdent pas la clé : seul le processus root sur caseRouter vérifie la
+signature, l'identité, le SHA et la fraîcheur. Une tâche centrale ne peut
+pas fabriquer une preuve cryptographique de succès.
 
 Le commit root vérifie à nouveau la politique locale, le journal
 d'activation, le pointeur `current`, la provenance de la release, la
@@ -89,3 +93,24 @@ le pair (hors agent), ordonnanceur de délai/rollback des activations
 pending et exécution réelle du bootstrap, de la migration SQL et des
 trois prises de service. Pas d'intervention distante demandée avant
 validation de ce chemin complet.
+
+## Itération suivante — transport distant de `commit-initial`
+
+Le schéma strict `hostingQueueRequest()` et `hostingGatewayDecode()`
+autorisent `commit-initial` avec une preuve de pair complète et liée au
+même nonce, projet, machine, déploiement et SHA. Le processus root
+`RemoteHostingPeerEvidence::verifyLocal()` reste l'unique point
+d'authentification HMAC et doit refuser tout reçu non valide ou expiré.
+L'agent ne connaît jamais la clé. `agent-hosting-result.php` accepte
+désormais un reçu d'exécution positif uniquement pour `commit-initial`
+et vérifie sa liaison au job d'origine avant archivage SQL, sans
+le considérer comme une observation réseau indépendante : un ACK d'agent
+peut être mensonger. La **preuve de déploiement terrain** doit toujours
+être obtenue depuis le pair ZeroTier indépendant.
+
+Ce changement ne crée **aucune autorisation**, ne modifie pas les
+actions `caserouter` en lecture seule, et n'installe ni socket, ni
+service, ni clé sur caseRouter. Conditions opérationnelles toujours non
+satisfaites : politique locale root, installation opt-in du socket,
+configuration serveur + migration SQL, pair indépendant et signatures,
+et rollback automatique d'une activation en attente.
