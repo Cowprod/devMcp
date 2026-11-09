@@ -69,6 +69,8 @@ jobs:
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-peer-evidence.php
       - name: Verify signed remote commit transport end-to-end
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-remote-commit-contract.php
+      - name: Verify ZeroTier daemon check without Composer vendor dependencies
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-zerotier-standalone.php
       - name: Verify one-shot root lab bootstrap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-lab-bootstrap.php
       - name: Verify expiration of uncommitted initial hosting releases
