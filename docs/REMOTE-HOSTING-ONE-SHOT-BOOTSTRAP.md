@@ -53,12 +53,12 @@ le bundle immutable ; il ne l'exécute pas. Le **seul** appel privilégié
 local à préparer (pas encore demandé) est :
 
 ```bash
-sudo /usr/bin/php /opt/devmcp-agent/bin/hosting-bundles/$(sudo cat /var/lib/devmcp-agent-update/installed-revision)/devmcp-hosting-root bootstrap-lab < /root/devmcp-hosting-bootstrap.json
+sudo /bin/bash -c 'set -euo pipefail; sha=$(cat /var/lib/devmcp-agent-update/installed-revision); [[ "$sha" =~ ^[a-f0-9]{40}$ ]]; exec /usr/bin/php "/opt/devmcp-agent/bin/hosting-bundles/$sha/devmcp-hosting-root" bootstrap-lab < /root/devmcp-hosting-bootstrap.json'
 ```
 
-La redirection d'entrée doit être exécutée par un shell root si le
-fichier est `0600` dans `/root`; une session root explicite évite que
-le shell non privilégié ne puisse pas ouvrir la redirection.
+La redirection d'entrée est exécutée par le shell root, après validation
+syntaxique du SHA de l'agent. Le fichier secret n'est jamais placé sur
+la ligne de commande.
 
 ## Effets bornés
 
