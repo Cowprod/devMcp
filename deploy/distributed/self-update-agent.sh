@@ -53,18 +53,9 @@ hosting_bundle="$checkout/deploy/distributed/stage-hosting-source-bundle.sh"
 bash -n "$hosting_bundle"
 bash "$hosting_bundle" "$checkout" "$bin" "$target"
 
-# A one-time administrator hosting opt-in persists across agent revisions.
-# Reconcile its immutable gateway automatically on each successful update.
-reconcile_hosting() {
-  local policy=/etc/devmcp/hosting-policy.json
-  [[ -f "$policy" && ! -L "$policy" ]] || return 0
-  if ! php -r '$p=json_decode(@file_get_contents($argv[1]),true);exit(is_array($p)&&($p["enabled"]??false)===true?0:1);' "$policy"; then
-    return 0
-  fi
-  local installer="$checkout/deploy/distributed/install-hosting-gateway.sh"
-  [[ -f "$installer" && ! -L "$installer" ]] || { echo 'Missing hosting gateway installer' >&2; return 1; }
-  bash "$installer" "$target"
-}
+# The updater may stage immutable hosting bundles only. A locally approved
+# privileged gateway pin is NEVER reconciled, installed or rotated by this
+# timer, including on an already-current SHA. Root must opt in separately.
 
 if [[ "$current" == "$target" ]]; then
   # Missing helpers may be added by a self-update: complete them on the
@@ -92,12 +83,7 @@ if [[ "$current" == "$target" ]]; then
   }
   if [[ "$missing_helpers" -eq 0 ]]; then
     echo "Agent already current: $target"
-    if reconcile_hosting; then
-      echo "PASS: opted-in hosting gateway reconciliation completed"
-    else
-      echo "ERROR: hosting gateway reconciliation failed; retry on next timer tick" >&2
-      exit 1
-    fi
+    echo "PASS: hosting bundle staged; privileged gateway pin unchanged"
     exit 0
   fi
   echo "Completing missing release helpers at $target"
@@ -207,11 +193,6 @@ fi
 finished=1
 timer_stopped=0
 echo "PASS: agent updated to $target; existing local authorizations preserved"
-# The version is committed and the agent is healthy; hosting reconciliation
-# is a separate, retryable step and must not roll back an installed agent.
-if reconcile_hosting; then
-  echo "PASS: opted-in hosting gateway reconciliation completed"
-else
-  echo "ERROR: hosting gateway reconciliation failed; retry on next timer tick" >&2
-  exit 1
-fi
+# Privileged gateway upgrades require a separate local-root approval.
+# Staging a new bundle MUST NOT update the hosting-active pin.
+echo "PASS: hosting bundle staged; privileged gateway pin unchanged"
