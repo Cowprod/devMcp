@@ -66,10 +66,11 @@ function remoteHostingSocketCall(array $job): array
         }
         $response = json_decode($line, true, 12, JSON_THROW_ON_ERROR);
         $receipt = $response['receipt'] ?? null;
+        $committed = $job['action'] === 'commit-initial';
         if (!is_array($response) || ($response['version'] ?? null) !== 1
             || ($response['ok'] ?? null) !== true || !is_array($receipt)
-            || ($receipt['deployment_complete'] ?? null) !== false
-            || ($receipt['peer_health_verified'] ?? null) !== false
+            || ($receipt['deployment_complete'] ?? null) !== $committed
+            || ($receipt['peer_health_verified'] ?? null) !== $committed
             || ($receipt['operation'] ?? null) !== $job['action']) {
             throw new RuntimeException('Hosting IPC refused operation');
         }
