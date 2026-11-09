@@ -23,6 +23,13 @@ MARKERS = {
     "php": "devMcp — hébergement PHP",
     "node": "devMcp — démonstrateur Node.js/WebSocket",
 }
+# The signing credential is dedicated to these three bounded lab grants.
+# Never sign a peer observation for a different project/port binding.
+LAB_BINDINGS = {
+    "static": ("lab-static", 17601),
+    "php": ("lab-php", 17602),
+    "node": ("lab-node", 17603),
+}
 
 
 def exact(sock, count):
@@ -132,6 +139,30 @@ def probe(runtime, target, port, peer):
     }
 
 
+def read_signing_key(path):
+    """Read the exact owner-only 32-byte key from the opened regular inode.
+
+    O_NOFOLLOW rejects a symlink even if the path changes between lookup and
+    open; O_NONBLOCK prevents a malicious FIFO from blocking before fstat.
+    Never trust pre-open lstat evidence for signing material.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    try:
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.geteuid()
+                or metadata.st_nlink != 1
+                or metadata.st_size != 32):
+            raise ValueError("Untrusted peer signing key")
+        key = os.read(fd, 33)
+        if len(key) != 32:
+            raise ValueError("Invalid peer signing key size")
+        return key
+    finally:
+        os.close(fd)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", choices=tuple(MARKERS), required=True)
@@ -145,8 +176,9 @@ def main():
     parser.add_argument("--revision", required=True)
     parser.add_argument("--key-file", required=True)
     args = parser.parse_args()
-    if args.port < 12000 or args.port > 19999:
-        parser.error("port must be 12000..19999")
+    expected_project, expected_port = LAB_BINDINGS[args.runtime]
+    if args.port != expected_port or args.project_id != expected_project:
+        parser.error("runtime/project/port must match the fixed caseRouter lab grant")
     for name, length in (("operation_id", 32), ("deployment_id", 32),
                          ("machine_id", 32), ("revision", 40)):
         if not re.fullmatch("[a-f0-9]{" + str(length) + "}",
@@ -155,15 +187,7 @@ def main():
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", args.project_id):
         parser.error("invalid project_id")
     try:
-        metadata = os.lstat(args.key_file)
-        if (not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600
-                or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1
-                or metadata.st_size != 32):
-            raise ValueError("Untrusted peer signing key")
-        with open(args.key_file, "rb") as key_stream:
-            key = key_stream.read(33)
-        if len(key) != 32:
-            raise ValueError("Invalid peer signing key size")
+        key = read_signing_key(args.key_file)
         probe(args.runtime, args.target_ip, args.port, args.peer_ip)
         result = {
             "version": 1,
