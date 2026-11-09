@@ -62,6 +62,30 @@ deny(fn() => $build([...$base, 'ports' => ['static' => 17601, 'php' => 17602]]))
 deny(fn() => RemoteHostingLabBootstrap::build(
     json_encode($base, JSON_THROW_ON_ERROR), $machineId, 'not-a-sha'
 ));
+// A successful systemctl start alone is NOT enough to grant agent polling:
+// verify the real Unix socket is root-owned, socket-typed, 0660 and in the
+// devmcp-agent group. This predicate is pure and requires no root CI runner.
+$socketEvidence = new ReflectionMethod(RemoteHostingLabBootstrap::class, 'socketMatches');
+$goodSocket = ['mode' => 0140000 | 0660, 'uid' => 0, 'gid' => 4567, 'nlink' => 1];
+assert($socketEvidence->invoke(null, $goodSocket, 4567) === true);
+foreach ([
+    ['mode' => 0100000 | 0660], // regular file replacing socket
+    ['mode' => 0120000 | 0660], // symbolic link
+    ['mode' => 0140000 | 0666], // world-writable socket
+    ['mode' => 0140000 | 0600], // agent cannot connect
+    ['uid' => 1000],
+    ['gid' => 4568],
+    ['nlink' => 2],
+] as $change) {
+    assert($socketEvidence->invoke(null, array_replace($goodSocket, $change), 4567) === false);
+}
+assert($socketEvidence->invoke(null, ['mode' => 'socket'], 4567) === false);
+$bootstrapSource = file_get_contents(dirname(__DIR__, 2) . '/src/Project/RemoteHostingLabBootstrap.php');
+assert(is_string($bootstrapSource));
+$socketGate = strpos($bootstrapSource, 'self::requireHostingIpcReady();');
+$pollGrant = strpos($bootstrapSource, "self::publish('/etc/devmcp/hosting-agent-policy.php'");
+assert($socketGate !== false && $pollGrant !== false && $socketGate < $pollGrant);
+
 // Authorization boundary: the new operation is never a gateway/queue verb.
 $gateway = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-gateway');
 $queue = file_get_contents(dirname(__DIR__, 2) . '/bin/hosting-queue-policy.php');
@@ -69,4 +93,4 @@ $cli = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-root');
 assert(is_string($gateway) && !str_contains($gateway, "'bootstrap-lab'"));
 assert(is_string($queue) && !str_contains($queue, "'bootstrap-lab'"));
 assert(is_string($cli) && str_contains($cli, "RemoteHostingLabBootstrap::run"));
-echo "PASS: exactly three pinned root bootstrap grants; invalid inputs and remote transport refused\n";
+echo "PASS: three pinned grants, privileged socket ACL gate, invalid inputs and remote transport refused\n";

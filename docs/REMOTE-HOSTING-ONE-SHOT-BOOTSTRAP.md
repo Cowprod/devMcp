@@ -94,6 +94,13 @@ trois miroirs Git bare, écrit `/etc/devmcp/hosting-policy.json` (0600),
 `/etc/devmcp/hosting-peer-proof.json` (0600), puis prépare les releases
 et les unités systemd applicatives vérifiées. Elle installe uniquement
 le socket root `devmcp-hosting.socket` et le timer d'expiration local ;
+avant de publier l'autorisation de polling de l'agent, elle vérifie
+l'**inode Unix réel** `/run/devmcp-hosting/agent.sock` : propriétaire root,
+groupe `devmcp-agent`, permissions `0660`, type socket (ni lien ni
+fichier ordinaire), un seul lien et répertoire parent root `0755`.
+Un `systemctl is-active` réussi mais un socket inaccessible à l'agent
+fait échouer le bootstrap **avant** son opt-in. Aucune permission n'est
+corrigée implicitement et aucun service routeur n'est touché ;
 `/etc/devmcp/hosting-agent-policy.php` (0644) est publié **en dernier**,
 pour n'autoriser l'interrogation de la file qu'une fois l'IPC prêt.
 
