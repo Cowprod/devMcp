@@ -49,8 +49,8 @@ final class RemoteHostingInitialActivation
         // rendered from the approved policy, never to caseRouter services.
         RemoteHostingSystemdControl::run($request, 'daemon-reload');
         RemoteHostingSystemdControl::run($request, 'stop');
-        $swap = RemoteHostingReleaseSwap::switch($request, $nonce);
-        if (($swap['previous_revision'] ?? 'INVALID') !== null) {
+        $swap = RemoteHostingReleaseSwap::switch($request, $nonce, true);
+        if (!array_key_exists('previous_revision', $swap) || $swap['previous_revision'] !== null) {
             throw new RuntimeException('Unexpected previous hosting release');
         }
         try {
