@@ -138,6 +138,16 @@ droits divergents, puis n'effectue la bascule du lien `hosting-active`
 **par renommage atomique qu'après** validation du socket et du timer
 hosting. L'ancienne cible reste sélectionnée si une vérification échoue.
 
+Avant de toucher aux unités systemd ou au lien `hosting-active`,
+`install-hosting-gateway.sh` vérifie désormais la politique de polling
+existante (propriétaire root, mode 0644, identité machine exacte) et
+prépare/valide le fichier PHP de remplacement dans un fichier temporaire.
+Si une politique différente est présente, l'installation est refusée
+**sans promouvoir le code privilégié**. Le contrôle d'ACL du socket reste
+obligatoire avant la promotion et le fichier de consentement n'est publié
+qu'après cette vérification. Les tests CI vérifient cet ordre ; ils ne
+remplacent pas une validation root sur le routeur.
+
 Une installation répétée au même SHA est idempotente. Cette possibilité
 de mise à niveau locale ne constitue **pas** une délégation de mise à
 jour automatique du code privilégié : une telle délégation demanderait
