@@ -1,0 +1,26 @@
+# Opt-in, independent maintenance of ONLY devMcp hosting lab releases.
+# It never starts a service or modifies caseRouter network functionality.
+[Unit]
+Description=Rollback stale unverified devMcp hosting first activations
+After=local-fs.target
+ConditionPathExists=/etc/devmcp/hosting-policy.json
+ConditionPathExists=/opt/devmcp-agent/bin/hosting-active/devmcp-hosting-root
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/php /opt/devmcp-agent/bin/hosting-active/devmcp-hosting-root expire-pending
+TimeoutStartSec=120
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/etc/devmcp /etc/systemd/system
+ReadWritePaths=/srv/devmcp-hosting
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER
+StandardOutput=journal
+StandardError=journal

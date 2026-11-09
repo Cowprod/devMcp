@@ -17,6 +17,7 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Project\RemoteHostingGitRefresh;
 use Cowprod\DevMcp\Project\RemoteHostingLocalPreparation;
 use Cowprod\DevMcp\Project\RemoteHostingInitialActivation;
+use Cowprod\DevMcp\Project\RemoteHostingPendingWatchdog;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseStager;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
 use Cowprod\DevMcp\Project\RemoteHostingUnitInstaller;
@@ -103,11 +104,19 @@ function hostingRootMain(array $argv): int
     // The name and argument count are both fixed. No arbitrary commands,
     // dynamic PHP functions, shell strings or caller-provided paths.
     $operation = $argv[1] ?? '';
-    if (count($argv) !== 2 || !in_array($operation, ['prepare-all', 'refresh', 'prepare', 'install-unit', 'activate-initial', 'abort-initial', 'switch', 'rollback', 'settle-rollback', 'commit-initial'], true)) {
+    if (count($argv) !== 2 || !in_array($operation, ['prepare-all', 'refresh', 'prepare', 'install-unit', 'activate-initial', 'abort-initial', 'switch', 'rollback', 'settle-rollback', 'commit-initial', 'expire-pending'], true)) {
         throw new InvalidArgumentException('Usage: devmcp-hosting-root prepare|install-unit|switch|rollback|settle-rollback');
     }
     if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
         throw new RuntimeException('Hosting executor requires local root');
+    }
+    if ($operation === 'expire-pending') {
+        // This fixed, local root-only maintenance verb takes NO request
+        // and is intentionally unavailable over the agent IPC gateway.
+        echo json_encode(['operation' => $operation,
+            'result' => RemoteHostingPendingWatchdog::scan(),
+            'deployment_complete' => false], JSON_THROW_ON_ERROR) . "\n";
+        return 0;
     }
     $input = stream_get_contents(STDIN, 4097);
     if (!is_string($input) || strlen($input) > 4096) {

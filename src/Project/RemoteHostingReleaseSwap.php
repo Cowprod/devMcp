@@ -309,6 +309,103 @@ final class RemoteHostingReleaseSwap
         });
     }
 
+    /**
+     * Root-only watchdog rollback for an unverified FIRST activation.
+     * Expires 15 minutes after the durable journal creation (not job TTL).
+     * All checks, service stop, link removal and journal archival happen under
+     * the SAME per-project lock used by commitInitial(), fencing commit races.
+     * No remote operation may choose the clock or the TTL.
+     *
+     * @param array<string,mixed> $request
+     * @return array<string,mixed>
+     */
+    public static function expireInitial(array $request): array
+    {
+        if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+            throw new RuntimeException('Hosting expiry requires local root');
+        }
+        $plan = RemoteHostingLocalPolicy::preview($request);
+        return self::locked($plan['workspace'], function () use ($plan, $request): array {
+            RemoteHostingWorkspaceEvidence::inspect($request);
+            $workspace = $plan['workspace'];
+            $journal = $workspace . '/.activation-journal';
+            clearstatcache(true, $journal);
+            $meta = @lstat($journal);
+            if ($meta === false) {
+                return ['project_id' => $plan['project_id'], 'phase' => 'no_pending_activation',
+                    'deployment_complete' => false];
+            }
+            self::trustedFile($journal, 0600);
+            $record = self::readJournal($journal);
+            $observed = self::current($workspace);
+            $recovery = RemoteHostingActivationRecoveryEvidence::assess($record, $observed, $plan);
+            if ($recovery['manual_recovery_required']
+                || $record['expected_previous_revision'] !== null
+                || $record['deployment_id'] !== $plan['deployment_id']
+                || $record['target_revision'] !== $plan['revision']
+                || !is_string($record['operation_id'])) {
+                throw new RuntimeException('Watchdog refuses non-initial or ambiguous activation');
+            }
+            clearstatcache(true, $journal);
+            $after = @lstat($journal);
+            if (!is_array($after) || $meta['dev'] !== $after['dev']
+                || $meta['ino'] !== $after['ino']
+                || $meta['mtime'] !== $after['mtime']) {
+                throw new RuntimeException('Activation journal changed during expiry assessment');
+            }
+            if (!self::pendingExpired(time(), $after['mtime'])) {
+                return ['project_id' => $plan['project_id'], 'phase' => 'pending_peer_health',
+                    'deployment_complete' => false];
+            }
+            // A receipt written immediately before a crashed commit cannot
+            // be silently treated as either a successful commit or a failed
+            // activation. Require explicit reconciliation for this rare case.
+            $archive = self::historyDirectory($workspace, false);
+            if ($archive !== null
+                && @lstat($archive . '/' . $record['operation_id'] . '.peer.json') !== false) {
+                throw new RuntimeException('Unresolved peer receipt requires manual reconciliation');
+            }
+            RemoteHostingReleaseFilesystemEvidence::inspect($request);
+            // Only a lab application unit derived from the pinned root policy
+            // is affected. There is no router/WAN/LAN/NAT/firewall operation.
+            RemoteHostingSystemdControl::run($request, 'stop');
+            self::requireInactive($plan);
+            if ($observed === $plan['revision']) {
+                self::swap($workspace, null);
+            }
+            if (self::current($workspace) !== null) {
+                throw new RuntimeException('Watchdog cannot restore absent initial release');
+            }
+            $history = self::historyDirectory($workspace, true);
+            $receipt = $history . '/' . $record['operation_id'] . '.json';
+            if (@lstat($receipt) !== false) {
+                throw new RuntimeException('Watchdog refuses an already archived operation');
+            }
+            if (!@rename($journal, $receipt)) {
+                throw new RuntimeException('Cannot archive expired hosting activation');
+            }
+            self::syncDirectory($history);
+            self::syncDirectory($workspace);
+            return [
+                'project_id' => $plan['project_id'],
+                'operation_id' => $record['operation_id'],
+                'phase' => 'expired_first_release_rolled_back',
+                'hosting_service_inactive' => true,
+                'nonce_replay_fenced' => true,
+                'deployment_complete' => false,
+            ];
+        });
+    }
+
+    /** Pure boundary test. Reject future clock skew instead of silently extending a lease. */
+    public static function pendingExpired(int $now, int $journalMtime): bool
+    {
+        if ($now <= 0 || $journalMtime <= 0 || $journalMtime > $now) {
+            throw new RuntimeException('Invalid local activation clock');
+        }
+        return $now - $journalMtime >= 900;
+    }
+
     private static function rejectSettledOperation(string $workspace, string $nonce): void
     {
         $history = self::historyDirectory($workspace, false);

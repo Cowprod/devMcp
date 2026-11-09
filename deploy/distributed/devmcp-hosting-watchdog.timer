@@ -1,0 +1,13 @@
+# Not enabled by agent self-update. Explicit root-only opt-in only.
+[Unit]
+Description=Periodic rollback of uncommitted devMcp hosting lab releases
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+Persistent=true
+AccuracySec=10s
+Unit=devmcp-hosting-watchdog.service
+
+[Install]
+WantedBy=timers.target
