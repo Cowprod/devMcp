@@ -57,11 +57,20 @@ try {
 
     $db->beginTransaction();
     try {
+        // An offline agent must never claim a stale privileged request.
+        $expire = $db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'expired',
+             finished_at = UTC_TIMESTAMP(6), result_json = ?
+             WHERE machine_id = ? AND state = 'queued'
+               AND expires_at <= UTC_TIMESTAMP(6)"
+        );
+        $expire->execute(['{"ok":false,"error":"hosting_job_expired"}', $machineId]);
         $query = $db->prepare(
             "SELECT j.id, j.deployment_id, j.action_name, j.request_json
              FROM dm_remote_hosting_job j
              INNER JOIN dm_deployment d ON d.id = j.deployment_id
              WHERE j.machine_id = ? AND j.state = 'queued'
+               AND j.expires_at > UTC_TIMESTAMP(6)
                AND d.machine_id = ? AND d.enabled = 1
              ORDER BY j.created_at, j.id LIMIT 1 FOR UPDATE"
         );
