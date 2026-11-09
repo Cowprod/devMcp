@@ -215,6 +215,10 @@ final class RemoteHostingLabBootstrap
         $installer = self::CHECKOUT . '/deploy/distributed/install-hosting-gateway.sh';
         self::file($installer, null, 65536);
         self::command(['/usr/bin/timeout', '30s', '/bin/bash', $installer, $revision], 35);
+        // systemctl is-active alone does not prove the agent can reach the
+        // privileged IPC. Check the actual systemd-created Unix socket ACL
+        // BEFORE publishing the final polling opt-in.
+        self::requireHostingIpcReady();
         // Last step: allow the pre-enrolled agent to poll the *separate*
         // hosting queue. A failure before here leaves polling disabled.
         self::publish('/etc/devmcp/hosting-agent-policy.php', $agentBytes, 0644);
@@ -228,6 +232,43 @@ final class RemoteHostingLabBootstrap
             'applications_started' => 0,
             'deployment_complete' => false,
         ];
+    }
+
+    /**
+     * Check the actual socket created by systemd, not merely its unit file
+     * or the success of systemctl. A missing/wrong-group socket must never
+     * be followed by agent queue opt-in.
+     */
+    private static function requireHostingIpcReady(): void
+    {
+        $group = posix_getgrnam('devmcp-agent');
+        if (!is_array($group) || !is_int($group['gid'])) {
+            throw new RuntimeException('Hosting agent socket group unavailable');
+        }
+        self::directory('/run');
+        self::directory('/run/devmcp-hosting');
+        $parent = @lstat('/run/devmcp-hosting');
+        if (!is_array($parent) || ($parent['mode'] & 07777) !== 0755) {
+            throw new RuntimeException('Untrusted hosting socket directory permissions');
+        }
+        $path = '/run/devmcp-hosting/agent.sock';
+        clearstatcache(true, $path);
+        $socket = @lstat($path);
+        if (!is_array($socket) || !self::socketMatches($socket, $group['gid'])) {
+            throw new RuntimeException('Privileged hosting socket ACL not verified');
+        }
+    }
+
+    /** Pure socket inode evidence; no connection or service side effect. */
+    private static function socketMatches(array $meta, int $groupId): bool
+    {
+        return ($meta['mode'] ?? 0) & 0170000 ? (
+            ($meta['mode'] & 0170000) === 0140000
+            && ($meta['mode'] & 07777) === 0660
+            && ($meta['uid'] ?? null) === 0
+            && ($meta['gid'] ?? null) === $groupId
+            && ($meta['nlink'] ?? null) === 1
+        ) : false;
     }
 
     /**
