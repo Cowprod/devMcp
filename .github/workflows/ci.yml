@@ -68,6 +68,12 @@ jobs:
         run: |
           ! php bin/devmcp-hosting-enqueue prepare-all </dev/null
           ! php bin/devmcp-hosting-enqueue shell </dev/null
+      - name: Enforce bounded privileged queue expiry
+        run: |
+          grep -Fq 'expires_at DATETIME(6) NOT NULL' database/migrations/006_remote_hosting_jobs.sql
+          grep -Fq 'INTERVAL 10 MINUTE' bin/devmcp-hosting-enqueue
+          grep -Fq "expires_at > UTC_TIMESTAMP(6)" public/agent-hosting-poll.php
+          grep -Fq "state = 'claimed'" bin/devmcp-hosting-enqueue
       - name: Enforce separate hosting queue contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-queue-policy.php
       - name: Enforce isolated privileged IPC request contract
