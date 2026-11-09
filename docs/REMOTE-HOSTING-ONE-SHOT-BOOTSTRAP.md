@@ -111,6 +111,6 @@ au gestionnaire systemd. Une défaillance n'est jamais considérée comme un
 rollback réussi, ni masquée comme un scan entièrement sain. Le timer peut
 réessayer au passage suivant ; la panne restante nécessite une inspection
 root locale avant tout déploiement supplémentaire.
- Les résultats SQL / ACK d'agent ne
+Les résultats SQL / ACK d'agent ne
 constituent pas une preuve terrain. Le déploiement reste 0/3 tant que
 les trois vérifications depuis un second pair ne sont pas produites.
