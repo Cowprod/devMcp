@@ -24,6 +24,14 @@ trusted_dir() {
   [[ -d "$1" && ! -L "$1" && "$(stat -c %u "$1")" == 0
      && "$(stat -c %a "$1")" == "$2" ]]
 }
+# Render the exact approved opt-in as executable PHP (not escaped text).
+hosting_agent_policy_payload() {
+  printf "<?php\nreturn ['enabled' => true, 'machine_id' => '%s'];\n" "$1"
+}
+# Recognize ONLY the exact malformed file created by the previous installer.
+hosting_agent_policy_legacy_payload() {
+  printf '<?php\\nreturn [\\x27enabled\\x27 => true, \\x27machine_id\\x27 => \\x27%s\\x27];\\n' "$1"
+}
 trusted_dir "$root" 755 && trusted_dir "$root/hosting-bundles" 755 &&
 trusted_dir "$bundle" 755 && trusted_dir "$bundle/Project" 755 || {
   echo 'Missing or untrusted immutable hosting bundle' >&2; exit 1;
@@ -113,12 +121,29 @@ fi
 machine_id="$(php -r '$c=require $argv[1]; echo $c["machine_id"] ?? "";' "$identity")"
 [[ "$machine_id" =~ ^[a-f0-9]{32}$ ]] || { echo 'Invalid enrolled machine ID' >&2; exit 1; }
 agent_tmp="$(mktemp /etc/devmcp/.hosting-agent-policy.XXXXXXXX)"
-printf '<?php\\nreturn [\\x27enabled\\x27 => true, \\x27machine_id\\x27 => \\x27%s\\x27];\\n' "$machine_id" > "$agent_tmp"
+legacy_tmp="$(mktemp /etc/devmcp/.hosting-agent-legacy.XXXXXXXX)"
+trap 'rm -f -- "$agent_tmp" "$legacy_tmp"' EXIT
+hosting_agent_policy_payload "$machine_id" > "$agent_tmp"
+hosting_agent_policy_legacy_payload "$machine_id" > "$legacy_tmp"
 chmod 0644 "$agent_tmp"
+# php -l cannot detect a malformed opening tag that PHP treats as plain text.
+# Require that the included policy returns EXACT authorized values, silently.
+php -r '
+ob_start();
+$p = require $argv[1];
+$output = ob_get_clean();
+exit($output === "" && is_array($p)
+    && array_keys($p) === ["enabled", "machine_id"]
+    && $p["enabled"] === true && $p["machine_id"] === $argv[2] ? 0 : 1);
+' "$agent_tmp" "$machine_id" || {
+  echo 'Generated hosting agent policy is invalid' >&2; exit 1;
+}
 if [[ -e "$agent_policy" ]] && ! cmp -s "$agent_tmp" "$agent_policy"; then
-  rm -f "$agent_tmp"
-  echo 'Existing agent hosting policy differs; refusing overwrite' >&2
-  exit 1
+  if ! cmp -s "$legacy_tmp" "$agent_policy"; then
+    echo 'Existing agent hosting policy differs; refusing overwrite' >&2
+    exit 1
+  fi
+  echo 'PASS: repairing exact legacy malformed hosting agent opt-in'
 fi
 mv -f "$agent_tmp" "$agent_policy"
 echo "PASS: hosting IPC, watchdog and remote hosting queue polling opted in at $revision; zero applications activated"
