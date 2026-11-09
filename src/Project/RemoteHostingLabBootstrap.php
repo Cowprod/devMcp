@@ -26,6 +26,13 @@ final class RemoteHostingLabBootstrap
         'php' => 'lab-php',
         'node' => 'lab-node',
     ];
+    // Must agree with the central root-only HostingLabEnrollment contract.
+    // Arbitrary ports would leave an apparently prepared but unreachable lab.
+    private const PORTS = [
+        'static' => 17601,
+        'php' => 17602,
+        'node' => 17603,
+    ];
     private const ORIGIN = 'https://github.com/Cowprod/devMcp.git';
     private const MARKER = '/var/lib/devmcp-agent-update/installed-revision';
     private const CHECKOUT = '/var/lib/devmcp-agent-update/repository';
@@ -70,7 +77,7 @@ final class RemoteHostingLabBootstrap
             $id = $ids[$runtime];
             $port = $ports[$runtime];
             if (!self::hex($id, 32) || $id === str_repeat('0', 32)
-                || !is_int($port) || $port < 12000 || $port > 19999
+                || !is_int($port) || $port !== self::PORTS[$runtime]
                 || isset($deployments[$id])) {
                 throw new InvalidArgumentException('Untrusted local demo grant');
             }
@@ -159,6 +166,11 @@ final class RemoteHostingLabBootstrap
         if (realpath(dirname(__DIR__)) !== $bundle) {
             throw new RuntimeException('Bootstrap executor is not the installed immutable bundle');
         }
+        // Fail BEFORE publishing any grant, staging a release or fetching
+        // Git when one of the three lab runtimes cannot actually start.
+        // No apt, systemctl start, network or shell commands are attempted.
+        self::requireRuntimePreflight();
+
         $policyBytes = json_encode($parsed['policy'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
         $peerBytes = json_encode($parsed['peer'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
         $agentBytes = "<?php\nreturn " . var_export($parsed['agent'], true) . ";\n";
@@ -211,6 +223,34 @@ final class RemoteHostingLabBootstrap
             'applications_started' => 0,
             'deployment_complete' => false,
         ];
+    }
+
+    /**
+     * Read-only prerequisites for an all-or-nothing three-runtime bootstrap.
+     * Check the exact fixed interpreter and systemd binaries used downstream.
+     * This avoids leaving a partial opt-in because Node/PHP was absent.
+     */
+    private static function requireRuntimePreflight(): void
+    {
+        if (!is_dir('/run/systemd/system')) {
+            throw new RuntimeException('Hosting bootstrap requires systemd');
+        }
+        if (!function_exists('proc_open') || !function_exists('fsync')
+            || !function_exists('posix_getgrnam')
+            || posix_getgrnam('devmcp-agent') === false) {
+            throw new RuntimeException('Hosting bootstrap runtime/group unavailable');
+        }
+        foreach ([
+            '/usr/bin/php', '/usr/bin/python3', '/usr/bin/node',
+            '/usr/bin/git', '/usr/bin/systemctl', '/usr/bin/timeout',
+        ] as $executable) {
+            // Distribution interpreter links (e.g. /usr/bin/python3) are
+            // allowed. Existence and executable access are checked, while
+            // systemd sandboxing and release provenance are verified later.
+            if (!is_file($executable) || !is_executable($executable)) {
+                throw new RuntimeException('Hosting bootstrap dependency missing');
+            }
+        }
     }
 
     /** @return array<string,mixed> */
