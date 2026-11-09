@@ -21,7 +21,38 @@ use Cowprod\DevMcp\Project\RemoteHostingReleaseStager;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
 use Cowprod\DevMcp\Project\RemoteHostingUnitInstaller;
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+// The source checkout uses Composer. On a remote host the immutable,
+// root-owned bundle is intentionally self-contained and has no vendor/.
+// A fixed-namespace autoloader loads ONLY the approved bundled classes.
+$composerAutoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (is_file($composerAutoload) && !is_link($composerAutoload)) {
+    require $composerAutoload;
+} else {
+    $projectDir = __DIR__ . '/Project';
+    $directory = @lstat($projectDir);
+    if (!is_array($directory) || ($directory['mode'] & 0170000) !== 0040000
+        || $directory['uid'] !== 0 || ($directory['mode'] & 0022) !== 0) {
+        throw new RuntimeException('Untrusted hosting bundle directory');
+    }
+    spl_autoload_register(static function (string $name) use ($projectDir): void {
+        $prefix = 'Cowprod\\DevMcp\\Project\\';
+        if (!str_starts_with($name, $prefix)) {
+            return;
+        }
+        $class = substr($name, strlen($prefix));
+        if (preg_match('/^RemoteHosting[A-Za-z0-9]+$/D', $class) !== 1) {
+            throw new RuntimeException('Unapproved hosting bundle class');
+        }
+        $path = $projectDir . '/' . $class . '.php';
+        $meta = @lstat($path);
+        if (!is_array($meta) || ($meta['mode'] & 0170000) !== 0100000
+            || ($meta['mode'] & 07777) !== 0644
+            || $meta['uid'] !== 0 || $meta['nlink'] !== 1) {
+            throw new RuntimeException('Untrusted hosting bundle source');
+        }
+        require_once $path;
+    });
+}
 
 function hostingRootRequest(string $json, string $operation): array
 {
