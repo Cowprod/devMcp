@@ -109,6 +109,41 @@ active_helper="$checkout/deploy/distributed/promote-hosting-active.sh"
 }
 bash -n "$active_helper"
 /bin/bash "$active_helper" check "$revision"
+# Preflight the exact operator-owned agent policy and render the replacement
+# BEFORE unit installation, socket changes or privileged gateway promotion.
+# A conflicting policy must never leave a newly promoted gateway behind.
+agent_policy=/etc/devmcp/hosting-agent-policy.php
+if [[ -e "$agent_policy" || -L "$agent_policy" ]]; then
+  trusted_file "$agent_policy" 644 || { echo 'Conflicting agent hosting policy' >&2; exit 1; }
+fi
+machine_id="$(php -r '$c=require $argv[1]; echo $c["machine_id"] ?? "";' "$identity")"
+[[ "$machine_id" =~ ^[a-f0-9]{32}$ ]] || { echo 'Invalid enrolled machine ID' >&2; exit 1; }
+agent_tmp="$(mktemp /etc/devmcp/.hosting-agent-policy.XXXXXXXX)"
+legacy_tmp="$(mktemp /etc/devmcp/.hosting-agent-legacy.XXXXXXXX)"
+trap 'rm -f -- "$agent_tmp" "$legacy_tmp"' EXIT
+hosting_agent_policy_payload "$machine_id" > "$agent_tmp"
+hosting_agent_policy_legacy_payload "$machine_id" > "$legacy_tmp"
+chmod 0644 "$agent_tmp"
+# php -l cannot detect a malformed opening tag that PHP treats as plain text.
+# Require that the included policy returns EXACT authorized values, silently.
+php -r '
+ob_start();
+$p = require $argv[1];
+$output = ob_get_clean();
+exit($output === "" && is_array($p)
+    && array_keys($p) === ["enabled", "machine_id"]
+    && $p["enabled"] === true && $p["machine_id"] === $argv[2] ? 0 : 1);
+' "$agent_tmp" "$machine_id" || {
+  echo 'Generated hosting agent policy is invalid' >&2; exit 1;
+}
+if [[ -e "$agent_policy" ]] && ! cmp -s "$agent_tmp" "$agent_policy"; then
+  if ! cmp -s "$legacy_tmp" "$agent_policy"; then
+    echo 'Existing agent hosting policy differs; refusing overwrite' >&2
+    exit 1
+  fi
+  echo 'PASS: repairing exact legacy malformed hosting agent opt-in'
+fi
+
 for filename in devmcp-hosting.socket devmcp-hosting@.service devmcp-hosting-watchdog.service devmcp-hosting-watchdog.timer; do
   destination="/etc/systemd/system/$filename"
   if [[ ! -e "$destination" ]]; then
@@ -141,36 +176,5 @@ hosting_group_gid="$(printf '%s' "$hosting_group_record" | cut -d: -f3)"
 # The administrator has explicitly enabled hosting and installed its IPC.
 # Complete the workflow by opting the enrolled agent into the hosting queue;
 # otherwise the socket is live but no remote deployment can ever reach it.
-agent_policy=/etc/devmcp/hosting-agent-policy.php
-if [[ -e "$agent_policy" || -L "$agent_policy" ]]; then
-  trusted_file "$agent_policy" 644 || { echo 'Conflicting agent hosting policy' >&2; exit 1; }
-fi
-machine_id="$(php -r '$c=require $argv[1]; echo $c["machine_id"] ?? "";' "$identity")"
-[[ "$machine_id" =~ ^[a-f0-9]{32}$ ]] || { echo 'Invalid enrolled machine ID' >&2; exit 1; }
-agent_tmp="$(mktemp /etc/devmcp/.hosting-agent-policy.XXXXXXXX)"
-legacy_tmp="$(mktemp /etc/devmcp/.hosting-agent-legacy.XXXXXXXX)"
-trap 'rm -f -- "$agent_tmp" "$legacy_tmp"' EXIT
-hosting_agent_policy_payload "$machine_id" > "$agent_tmp"
-hosting_agent_policy_legacy_payload "$machine_id" > "$legacy_tmp"
-chmod 0644 "$agent_tmp"
-# php -l cannot detect a malformed opening tag that PHP treats as plain text.
-# Require that the included policy returns EXACT authorized values, silently.
-php -r '
-ob_start();
-$p = require $argv[1];
-$output = ob_get_clean();
-exit($output === "" && is_array($p)
-    && array_keys($p) === ["enabled", "machine_id"]
-    && $p["enabled"] === true && $p["machine_id"] === $argv[2] ? 0 : 1);
-' "$agent_tmp" "$machine_id" || {
-  echo 'Generated hosting agent policy is invalid' >&2; exit 1;
-}
-if [[ -e "$agent_policy" ]] && ! cmp -s "$agent_tmp" "$agent_policy"; then
-  if ! cmp -s "$legacy_tmp" "$agent_policy"; then
-    echo 'Existing agent hosting policy differs; refusing overwrite' >&2
-    exit 1
-  fi
-  echo 'PASS: repairing exact legacy malformed hosting agent opt-in'
-fi
 mv -f "$agent_tmp" "$agent_policy"
 echo "PASS: hosting IPC, watchdog and remote hosting queue polling opted in at $revision; zero applications activated"
