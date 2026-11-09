@@ -59,6 +59,16 @@ une **observation instantanée**, pas une réservation : la vérification
 ZeroTier/port de chaque unité reste obligatoire immédiatement avant son
 installation, et l'activation attend toujours la preuve externe.
 
+La vérification d'appartenance ZeroTier du bundle privilégié fonctionne
+**sans Composer ni répertoire vendor** : elle invoque le chemin fixe
+`zerotier-cli -j listnetworks` via `proc_open` (argv sans shell), sous
+`/usr/bin/timeout` avec échéance de cinq secondes et sortie limitée à
+64 Kio. La présence d'un exécutable ZeroTier local non lié symboliquement
+(`/usr/sbin/zerotier-cli` ou `/usr/bin/zerotier-cli`) est contrôlée
+**avant** toute écriture de grant ou création de workspace. Les tests CI
+exécutent une sonde isolée sans `vendor/autoload.php` ; cela ne prouve
+ni la configuration effective du démon, ni un déploiement caseRouter.
+
 Le bootstrap vérifie également avant toute création la présence des
 exécutables `/usr/bin/php`, `/usr/bin/python3`, `/usr/bin/node`,
 `/usr/bin/git`, `/usr/bin/systemctl`, `/usr/bin/timeout`, l'accès à

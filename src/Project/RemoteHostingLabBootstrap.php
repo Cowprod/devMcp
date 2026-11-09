@@ -296,6 +296,19 @@ final class RemoteHostingLabBootstrap
                 throw new RuntimeException('Hosting bootstrap dependency missing');
             }
         }
+        // The first preparation interrogates the ZeroTier daemon before
+        // staging releases. Catch a missing CLI before writing even the
+        // initial workspace or root-only hosting grant.
+        $zeroTierCliFound = false;
+        foreach (['/usr/sbin/zerotier-cli', '/usr/bin/zerotier-cli'] as $cli) {
+            if (is_file($cli) && !is_link($cli) && is_executable($cli)) {
+                $zeroTierCliFound = true;
+                break;
+            }
+        }
+        if (!$zeroTierCliFound) {
+            throw new RuntimeException('Hosting bootstrap ZeroTier CLI missing');
+        }
     }
 
     /** @return array<string,mixed> */
