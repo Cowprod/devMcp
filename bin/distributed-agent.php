@@ -218,14 +218,9 @@ foreach ($deployments as $deployment) {
     }
 }
 $policyPath = '/etc/devmcp/remote-readonly-policy.php';
-if (!is_file($policyPath) || is_link($policyPath)) {
-    fwrite(STDOUT, "devMcp: remote actions disabled by local policy\n");
-    exit(0);
-}
-$policy = require $policyPath;
-if (!is_array($policy) || ($policy['enabled'] ?? false) !== true) {
-    exit(0);
-}
+$policy = (!is_link($policyPath) && is_file($policyPath))
+    ? require $policyPath : [];
+$readonlyEnabled = is_array($policy) && ($policy['enabled'] ?? false) === true;
 require __DIR__ . '/remote-readonly-actions.php';
 require __DIR__ . '/remote-job-policy.php';
 require __DIR__ . '/remote-local-policy.php';
@@ -270,6 +265,18 @@ $post = static function (string $endpoint, string $body) use ($server, $headers,
     }
     return $decoded;
 };
+// The hosting queue is an independently opted-in surface. It never
+// inherits permissions from the read-only deployment policy.
+require_once __DIR__ . '/remote-hosting-queue.php';
+try {
+    remoteHostingPollOnce($post, $config['machine_id']);
+} catch (Throwable $error) {
+    fwrite(STDERR, "devMcp: optional hosting queue rejected request\\n");
+}
+if (!$readonlyEnabled) {
+    fwrite(STDOUT, "devMcp: remote read-only actions disabled by local policy\\n");
+    exit(0);
+}
 $poll = $post('/v1/agent/job-poll', '{"protocol_version":1}');
 if ($poll === null) {
     // Transport/HTTP/JSON failure was already diagnosed above.
