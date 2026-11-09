@@ -53,4 +53,21 @@ assert(hostingQueuePollReply($reply, str_repeat('f', 32)) === null);
 assert(hostingQueuePollReply([...$reply, 'jobs' => [$reply['jobs'][0], $reply['jobs'][0]]], $machine) === null);
 assert(hostingQueuePollReply([...$reply, 'jobs' => [[...$reply['jobs'][0], 'workspace_path' => '/opt/caserouter']]], $machine) === null);
 assert(hostingQueuePollReply([...$reply, 'jobs' => [[...$reply['jobs'][0], 'action' => 'workspace.read']]], $machine) === null);
+
+require_once dirname(__DIR__, 2) . '/bin/remote-hosting-queue.php';
+// A malicious unprivileged process must not impersonate the privileged
+// socket and forge a successful 'commit-initial' execution receipt.
+$trustedDir = ['mode' => 0040755, 'uid' => 0];
+$trustedSocket = ['mode' => 0140660, 'uid' => 0, 'gid' => 140];
+$trustedGroup = ['gid' => 140];
+assert(remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, $trustedSocket, $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, $trustedSocket, false));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'gid' => 141], $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'uid' => 999], $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'mode' => 0140666], $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'mode' => 0100660], $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, ['mode' => 0040777, 'uid' => 0], $trustedSocket, $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata(['mode' => 0120777, 'uid' => 0], $trustedDir, $trustedSocket, $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, ['mode' => 0040755, 'uid' => 999], $trustedSocket, $trustedGroup));
+
 echo "PASS: hosting queue isolation and exact protocol constraints\n";
