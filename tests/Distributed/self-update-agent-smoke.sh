@@ -43,7 +43,8 @@ done
 cp bin/devmcp-hosting-root "$tmp/state/repository/bin/devmcp-hosting-root"
 cp bin/devmcp-hosting-gateway "$tmp/state/repository/bin/devmcp-hosting-gateway"
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
-  remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
+  remote-readonly-actions.php remote-job-policy.php remote-local-policy.php \
+  hosting-queue-policy.php remote-hosting-queue.php; do
   printf '%s\n' '<?php return true;' > "$tmp/state/repository/bin/$name"
   cp "$tmp/state/repository/bin/$name" "$tmp/agent-bin/$name"
 done
