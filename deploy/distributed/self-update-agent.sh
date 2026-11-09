@@ -53,6 +53,19 @@ hosting_bundle="$checkout/deploy/distributed/stage-hosting-source-bundle.sh"
 bash -n "$hosting_bundle"
 bash "$hosting_bundle" "$checkout" "$bin" "$target"
 
+# A one-time administrator hosting opt-in persists across agent revisions.
+# Reconcile its immutable gateway automatically on each successful update.
+reconcile_hosting() {
+  local policy=/etc/devmcp/hosting-policy.json
+  [[ -f "$policy" && ! -L "$policy" ]] || return 0
+  if ! php -r '$p=json_decode(@file_get_contents($argv[1]),true);exit(is_array($p)&&($p["enabled"]??false)===true?0:1);' "$policy"; then
+    return 0
+  fi
+  local installer="$checkout/deploy/distributed/install-hosting-gateway.sh"
+  [[ -f "$installer" && ! -L "$installer" ]] || { echo 'Missing hosting gateway installer' >&2; return 1; }
+  bash "$installer" "$target"
+}
+
 if [[ "$current" == "$target" ]]; then
   # Missing helpers may be added by a self-update: complete them on the
   # next run. Altered existing binaries fail closed instead of being
@@ -79,6 +92,7 @@ if [[ "$current" == "$target" ]]; then
   }
   if [[ "$missing_helpers" -eq 0 ]]; then
     echo "Agent already current: $target"
+    reconcile_hosting
     exit 0
   fi
   echo "Completing missing release helpers at $target"
@@ -188,3 +202,6 @@ fi
 finished=1
 timer_stopped=0
 echo "PASS: agent updated to $target; local authorizations unchanged"
+# The version is committed and the agent is healthy; hosting reconciliation
+# is a separate, retryable step and must not roll back an installed agent.
+reconcile_hosting
