@@ -22,6 +22,37 @@ final class RemoteHostingPortEvidence
     private const MAX_LINES = 20000;
 
     /**
+     * Bootstrap-wide read-only collision check BEFORE any grant, Git clone,
+     * release directory or unit is written. Checking each port only during
+     * unit installation could leave a half-prepared three-app lab if the
+     * second or third port is already occupied.
+     *
+     * This is not a port reservation. Each unit installer still performs its
+     * own policy-bound network/port check immediately before installation.
+     */
+    public static function inspectLabPorts(): void
+    {
+        self::checkLabPorts(
+            self::readTable('/proc/net/tcp'),
+            self::readTable('/proc/net/tcp6')
+        );
+    }
+
+    /**
+     * Deterministic three-port fixture for CI. Cannot grant hosting rights.
+     * Both IPv4 and IPv6 listeners (including wildcard) must be absent.
+     */
+    public static function checkLabPorts(string $tcp, string $tcp6): void
+    {
+        foreach ([17601, 17602, 17603] as $port) {
+            if (self::listenersOnPort($tcp, $port, 8) !== 0
+                || self::listenersOnPort($tcp6, $port, 32) !== 0) {
+                throw new InvalidArgumentException('Hosting lab port occupied before bootstrap');
+            }
+        }
+    }
+
+    /**
      * Read only locally sourced policy, ZeroTier evidence and kernel tables.
      * No /proc content, policy, port or address can come from the remote call.
      *
