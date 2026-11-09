@@ -20,6 +20,7 @@ jobs:
           php -l bin/devmcp
           php -l bin/devmcp-hosting-root
           php -l bin/devmcp-hosting-gateway
+          php -l bin/hosting-queue-policy.php
           php -l bin/devmcp-worker
           php -l bin/devmcp-doctor
           php -l bin/import-global-projects-to-sql.php
@@ -59,6 +60,8 @@ jobs:
           python3 -m py_compile bin/devmcp-serial-capture
       - name: Verify local hosting release swap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
+      - name: Enforce separate hosting queue contract
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-queue-policy.php
       - name: Enforce isolated privileged IPC request contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-gateway-policy.php
       - name: Reject unprivileged hosting executor invocation
