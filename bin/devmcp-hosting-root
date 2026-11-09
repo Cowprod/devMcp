@@ -10,12 +10,13 @@ declare(strict_types=1);
  * must explicitly approve the machine and deployment. This executable never
  * touches routing, NAT, firewall, WAN/LAN interfaces or router services.
  *
- * Usage: php bin/devmcp-hosting-root prepare-all|refresh|prepare|install-unit|switch|rollback|settle-rollback < request.json
+ * Usage: php bin/devmcp-hosting-root prepare-all|refresh|prepare|install-unit|activate-initial|abort-initial|switch|rollback|settle-rollback < request.json
  * Request: exact JSON object with deployment_id, machine_id, project_id,
  * revision and (for switch/rollback/settle-rollback only) operation_id.
  */
 use Cowprod\DevMcp\Project\RemoteHostingGitRefresh;
 use Cowprod\DevMcp\Project\RemoteHostingLocalPreparation;
+use Cowprod\DevMcp\Project\RemoteHostingInitialActivation;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseStager;
 use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
 use Cowprod\DevMcp\Project\RemoteHostingUnitInstaller;
@@ -64,7 +65,7 @@ function hostingRootMain(array $argv): int
     // The name and argument count are both fixed. No arbitrary commands,
     // dynamic PHP functions, shell strings or caller-provided paths.
     $operation = $argv[1] ?? '';
-    if (count($argv) !== 2 || !in_array($operation, ['prepare-all', 'refresh', 'prepare', 'install-unit', 'switch', 'rollback', 'settle-rollback'], true)) {
+    if (count($argv) !== 2 || !in_array($operation, ['prepare-all', 'refresh', 'prepare', 'install-unit', 'activate-initial', 'abort-initial', 'switch', 'rollback', 'settle-rollback'], true)) {
         throw new InvalidArgumentException('Usage: devmcp-hosting-root prepare|install-unit|switch|rollback|settle-rollback');
     }
     if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
@@ -86,6 +87,8 @@ function hostingRootMain(array $argv): int
         'refresh' => RemoteHostingGitRefresh::refresh($request),
         'prepare' => RemoteHostingReleaseStager::prepare($request),
         'install-unit' => RemoteHostingUnitInstaller::install($request),
+        'activate-initial' => RemoteHostingInitialActivation::startPending($request, $nonce),
+        'abort-initial' => RemoteHostingInitialActivation::abortPending($request, $nonce),
         'switch' => RemoteHostingReleaseSwap::switch($request, $nonce),
         'rollback' => RemoteHostingReleaseSwap::rollback($request, $nonce),
         'settle-rollback' => RemoteHostingReleaseSwap::settleRollback($request, $nonce),
