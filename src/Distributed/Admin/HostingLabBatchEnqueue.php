@@ -72,6 +72,16 @@ final class HostingLabBatchEnqueue
                 . "AND (state = 'claimed' OR (state = 'queued' "
                 . 'AND expires_at > UTC_TIMESTAMP(6))) LIMIT 1 FOR UPDATE'
             );
+            // A successful first activation is not proof of a durable commit,
+            // but it may still be serving or awaiting peer attestation on the
+            // router. Never issue a second initial prepare/activation while the
+            // root-owned release state cannot be proven reset centrally.
+            // This is a fail-closed fence: root-local recovery is separate.
+            $completedInitial = $db->prepare(
+                "SELECT id FROM dm_remote_hosting_job WHERE deployment_id = ? "
+                . "AND action_name IN ('activate-initial', 'commit-initial') "
+                . "AND state = 'succeeded' LIMIT 1 FOR UPDATE"
+            );
             $lastPrepare = $db->prepare(
                 "SELECT state, request_json FROM dm_remote_hosting_job "
                 . "WHERE deployment_id = ? AND action_name = 'prepare-all' "
@@ -96,6 +106,12 @@ final class HostingLabBatchEnqueue
                     || $row['workspace_path'] !== '/srv/devmcp-hosting/' . $spec['project']
                     || $row['repository_url'] !== self::REPOSITORY) {
                     throw new RuntimeException('Hosting lab deployment grant mismatch');
+                }
+                $completedInitial->execute([$row['id']]);
+                if ($completedInitial->fetchColumn() !== false) {
+                    throw new RuntimeException(
+                        'Hosting lab initial activation already succeeded; root recovery required'
+                    );
                 }
                 $pending->execute([$row['id']]);
                 if ($pending->fetchColumn() !== false) {
