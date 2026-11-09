@@ -27,12 +27,15 @@ final class RemoteHostingSystemdControl
         if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
             throw new RuntimeException('Hosting systemd control requires local root');
         }
-        if (!in_array($operation, ['daemon-reload', 'start', 'stop'], true)) {
-            throw new RuntimeException('Unsupported hosting service operation');
-        }
+        $needsRelease = self::requiresReleaseEvidence($operation);
         $plan = RemoteHostingLocalPolicy::preview($request);
         RemoteHostingWorkspaceEvidence::inspect($request);
-        RemoteHostingReleaseFilesystemEvidence::inspect($request);
+        // Stopping a compromised or damaged pending release is a recovery
+        // operation: do not require its Git blobs to remain intact. We still
+        // check the root-only local policy and the exact root-owned unit.
+        if ($needsRelease) {
+            RemoteHostingReleaseFilesystemEvidence::inspect($request);
+        }
         $service = self::approvedUnitName($plan);
 
         if ($operation === 'start') {
@@ -78,6 +81,19 @@ final class RemoteHostingSystemdControl
             'expected_service_state_observed' => true,
             'independent_peer_health_verified' => false,
         ];
+    }
+
+    /**
+     * A verified release is mandatory for starting/reloading, but not for
+     * stopping the exact policy-pinned unit during emergency recovery.
+     */
+    private static function requiresReleaseEvidence(string $operation): bool
+    {
+        return match ($operation) {
+            'start', 'daemon-reload' => true,
+            'stop' => false,
+            default => throw new RuntimeException('Unsupported hosting service operation'),
+        };
     }
 
     /** @param array<string,mixed> $plan */

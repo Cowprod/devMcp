@@ -365,9 +365,10 @@ final class RemoteHostingReleaseSwap
                 && @lstat($archive . '/' . $record['operation_id'] . '.peer.json') !== false) {
                 throw new RuntimeException('Unresolved peer receipt requires manual reconciliation');
             }
-            RemoteHostingReleaseFilesystemEvidence::inspect($request);
-            // Only a lab application unit derived from the pinned root policy
-            // is affected. There is no router/WAN/LAN/NAT/firewall operation.
+            // An expired pending release may have lost or corrupted blobs.
+            // Do not let release-integrity failure prevent stopping its
+            // exact root-policy-pinned unit and clearing the first pointer.
+            // No routing, WAN/LAN, NAT, firewall or router unit is touched.
             RemoteHostingSystemdControl::run($request, 'stop');
             self::requireInactive($plan);
             if ($observed === $plan['revision']) {
