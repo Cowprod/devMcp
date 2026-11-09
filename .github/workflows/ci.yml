@@ -21,6 +21,7 @@ jobs:
           php -l bin/devmcp-hosting-root
           php -l bin/devmcp-hosting-gateway
           php -l bin/hosting-queue-policy.php
+          php -l bin/remote-hosting-queue.php
           php -l public/agent-hosting-poll.php
           php -l public/agent-hosting-result.php
           php -l bin/devmcp-worker
