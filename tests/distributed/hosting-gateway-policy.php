@@ -34,4 +34,22 @@ assert(accepts($initial));
 assert(accepts([...$initial, 'action' => 'abort-initial']));
 assert(!accepts([...$initial, 'request' => [...$initial['request'], 'operation_id' => str_repeat('0', 32)]]));
 assert(!accepts([...$initial, 'request' => [...$initial['request'], 'shell' => 'id']]));
+$operation = str_repeat('d', 32);
+$proof = [
+    'version' => 1, 'operation_id' => $operation,
+    'deployment_id' => str_repeat('a', 32),
+    'machine_id' => str_repeat('b', 32),
+    'project_id' => 'static-demo', 'revision' => str_repeat('c', 40),
+    'runtime' => 'static', 'target_ip' => '192.168.194.189',
+    'source_peer_ip' => '192.168.194.188', 'port' => 17650,
+    'observed_at' => 1790000000, 'http_verified' => true,
+    'websocket_verified' => false, 'signature' => str_repeat('f', 64),
+];
+$signed = [...$initial, 'action' => 'commit-initial',
+    'request' => [...$initial['request'], 'proof' => $proof]];
+assert(accepts($signed)); // Transport syntax only, not HMAC validity.
+assert(!accepts([...$signed, 'request' => [...$signed['request'], 'proof' => [...$proof, 'signature' => 'bad']]]));
+assert(!accepts([...$signed, 'request' => [...$signed['request'], 'proof' => [...$proof, 'target_ip' => '/etc/passwd']]]));
+assert(!accepts([...$signed, 'request' => [...$signed['request'], 'proof' => [...$proof, 'operation_id' => str_repeat('f',32)]]]));
+assert(!accepts([...$signed, 'request' => [...$signed['request'], 'proof' => [...$proof, 'shell' => 'id']]]));
 echo "PASS: hosting IPC allowlist, exact fields, nonce, no arbitrary root verbs\n";

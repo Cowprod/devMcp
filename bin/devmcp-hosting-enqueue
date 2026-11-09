@@ -22,7 +22,7 @@ function hostingEnqueueMain(array $argv): int
     }
     $action = $argv[1] ?? '';
     if (count($argv) !== 2
-        || !in_array($action, ['prepare-all', 'activate-initial', 'abort-initial'], true)) {
+        || !in_array($action, ['prepare-all', 'activate-initial', 'abort-initial', 'commit-initial'], true)) {
         throw new InvalidArgumentException('Invalid hosting action');
     }
     $input = stream_get_contents(STDIN, 4097);

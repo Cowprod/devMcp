@@ -136,7 +136,7 @@ function hostingRootMain(array $argv): int
     echo json_encode([
         'operation' => $operation,
         'result' => $result,
-        'service_verified' => false,
+        'service_verified' => $operation === 'commit-initial' && ($result['hosting_service_active'] ?? false) === true,
         'peer_health_verified' => $operation === 'commit-initial' && ($result['peer_health_verified'] ?? false) === true,
         'deployment_complete' => $operation === 'commit-initial' && ($result['deployment_complete'] ?? false) === true,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
