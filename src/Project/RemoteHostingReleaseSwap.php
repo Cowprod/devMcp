@@ -252,6 +252,42 @@ final class RemoteHostingReleaseSwap
             if (@lstat($receipt) !== false) {
                 throw new RuntimeException('Hosting nonce replay refused');
             }
+            // Persist the exact signed observation BEFORE committing. The
+            // root-owned receipt distinguishes a verified commit from an
+            // archived rollback and permits forensic replay verification.
+            $proofPath = $history . '/' . $operationId . '.peer.json';
+            if (@lstat($proofPath) !== false) {
+                throw new RuntimeException('Existing health receipt requires recovery');
+            }
+            $proofBytes = json_encode($proof, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+            if (strlen($proofBytes) > 2048) {
+                throw new RuntimeException('Oversized hosting health receipt');
+            }
+            $mask = umask(0077);
+            try {
+                $handle = @fopen($proofPath, 'xb');
+            } finally {
+                umask($mask);
+            }
+            if (!is_resource($handle)) {
+                throw new RuntimeException('Cannot create hosting health receipt');
+            }
+            try {
+                $length = strlen($proofBytes);
+                for ($written = 0; $written < $length;) {
+                    $n = fwrite($handle, substr($proofBytes, $written));
+                    if (!is_int($n) || $n < 1) {
+                        throw new RuntimeException('Cannot write hosting health receipt');
+                    }
+                    $written += $n;
+                }
+                if (!fflush($handle) || !fsync($handle)) {
+                    throw new RuntimeException('Hosting health receipt durability failure');
+                }
+            } finally {
+                fclose($handle);
+            }
+            self::syncDirectory($history);
             // The original immutable journal is moved as the final commit
             // point. A crash before rename leaves the unresolved journal and
             // requires safe recovery, never an invented success receipt.
