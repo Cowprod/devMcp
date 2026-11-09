@@ -12,7 +12,6 @@ import ipaddress
 import json
 import os
 import socket
-from urllib.request import Request, urlopen
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MARKERS = {
@@ -58,7 +57,7 @@ def websocket_echo(sock, host, port):
     ).decode("ascii")
     if (fields.get("sec-websocket-accept") != expected
             or fields.get("upgrade", "").lower() != "websocket"
-            or "upgrade" not in fields.get("connection", "").lower().split(",")):
+            or "upgrade" not in [v.strip() for v in fields.get("connection", "").lower().split(",")]):
         raise RuntimeError("Untrusted WebSocket handshake")
     payload = b"devmcp-remote-probe-" + os.urandom(8).hex().encode("ascii")
     mask = os.urandom(4)
