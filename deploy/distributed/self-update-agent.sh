@@ -7,7 +7,7 @@ checkout=/var/lib/devmcp-agent-update/repository
 root=/var/lib/devmcp-agent-update
 bin=/opt/devmcp-agent/bin
 marker=/var/lib/devmcp-agent-update/installed-revision
-files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php"
+files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php hosting-queue-policy.php remote-hosting-queue.php"
 updater_src="$checkout/deploy/distributed/self-update-agent.sh"
 updater_dst="$bin/self-update-agent.sh"
 [[ "$(id -u)" -eq 0 && "$#" -eq 0 ]] || { echo 'Requires root; no arguments' >&2; exit 2; }
