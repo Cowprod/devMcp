@@ -6,7 +6,6 @@ namespace Cowprod\DevMcp\Project;
 
 use InvalidArgumentException;
 use JsonException;
-use Symfony\Component\Process\Process;
 
 /**
  * Independent read-only ZeroTier daemon evidence for an inert hosting plan.
@@ -38,17 +37,7 @@ final class RemoteHostingZeroTierMembership
         if ($cli === null) {
             throw new InvalidArgumentException('Local ZeroTier CLI unavailable');
         }
-        $process = new Process(
-            [$cli, '-j', 'listnetworks'],
-            null,
-            ['LC_ALL' => 'C', 'LD_PRELOAD' => false, 'LD_LIBRARY_PATH' => false]
-        );
-        $process->setTimeout(5);
-        $process->run();
-        $output = $process->getOutput();
-        if (!$process->isSuccessful() || strlen($output) > 65536) {
-            throw new InvalidArgumentException('Local ZeroTier daemon evidence unavailable');
-        }
+        $output = self::readDaemonInventory($cli);
         try {
             $networks = json_decode($output, true, 16, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
@@ -58,6 +47,60 @@ final class RemoteHostingZeroTierMembership
             throw new InvalidArgumentException('Invalid local ZeroTier daemon inventory');
         }
         return self::check($plan, $kernel, $networks);
+    }
+
+
+    /**
+     * Execute the fixed local ZeroTier inventory argv without Composer/vendor.
+     * The privileged hosting bundle intentionally ships only Project classes.
+     * timeout enforces the five-second deadline even when the daemon hangs;
+     * stdout is capped before any JSON parser sees it. No shell is involved.
+     *
+     * Production chooses $cli only from the two absolute, non-symlink paths
+     * above. This private seam is used with a temporary fake executable by
+     * the unprivileged, vendor-free regression test.
+     */
+    private static function readDaemonInventory(string $cli): string
+    {
+        $process = @proc_open(
+            ['/usr/bin/timeout', '--kill-after=2s', '5s', $cli, '-j', 'listnetworks'],
+            [
+                0 => ['file', '/dev/null', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['file', '/dev/null', 'w'],
+            ],
+            $pipes,
+            '/',
+            [
+                'PATH' => '/usr/bin:/bin',
+                'HOME' => '/nonexistent',
+                'LC_ALL' => 'C',
+                'LD_PRELOAD' => '',
+                'LD_LIBRARY_PATH' => '',
+            ]
+        );
+        if (!is_resource($process)) {
+            throw new InvalidArgumentException('Local ZeroTier daemon evidence unavailable');
+        }
+        try {
+            $output = stream_get_contents($pipes[1], 65537);
+            fclose($pipes[1]);
+            $exit = proc_close($process);
+            $process = null;
+            if ($exit !== 0 || !is_string($output)
+                || $output === '' || strlen($output) > 65536) {
+                throw new InvalidArgumentException('Local ZeroTier daemon evidence unavailable');
+            }
+            return $output;
+        } finally {
+            if (isset($pipes[1]) && is_resource($pipes[1])) {
+                fclose($pipes[1]);
+            }
+            if (is_resource($process)) {
+                proc_terminate($process);
+                proc_close($process);
+            }
+        }
     }
 
     /**
