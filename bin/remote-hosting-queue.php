@@ -54,7 +54,11 @@ function remoteHostingSocketCall(array $job): array
                 throw new RuntimeException('Hosting IPC request incomplete');
             }
         }
-        // A socket activated service reads newline-delimited requests.
+        // The root gateway reads stdin until EOF. Half-close our write
+        // direction before awaiting its response to avoid an IPC deadlock.
+        if (!stream_socket_shutdown($socket, STREAM_SHUT_WR)) {
+            throw new RuntimeException('Hosting IPC request shutdown failed');
+        }
         $line = fgets($socket, 8193);
         if (!is_string($line) || strlen($line) > 8192
             || !str_ends_with($line, "\n")) {
