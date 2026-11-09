@@ -74,6 +74,18 @@ marqueur HTTP, la source IP réellement liée et, pour Node, le handshake
 et l'écho WebSocket. Elle produit un objet JSON signé avec le
 `operation_id` exact de l'activation correspondante.
 
+La sonde refuse désormais de signer une observation dont le triplet
+`runtime / project_id / port` diverge des trois affectations fixes du
+laboratoire (`static / lab-static / 17601`, `php / lab-php / 17602`,
+`node / lab-node / 17603`). La clé locale est ouverte avec `O_NOFOLLOW`
+(et `O_NONBLOCK` contre un fichier FIFO), puis validée par `fstat` sur
+le descripteur réellement ouvert : fichier régulier, propriétaire effectif,
+mode `0600`, lien unique et 32 octets. Aucun secret n'est transmis au central.
+Le test `tests/distributed/hosting-peer-probe-contract.py` vérifie que les
+reçus HMAC signés par le code Python sont acceptés par le vérificateur PHP,
+ainsi que les refus de mauvaise affectation / clé suspecte. **Ce test CI
+simule la connexion réseau : il ne prouve aucun déploiement sur caseRouter.**
+
 La nouvelle commande centrale root-only est
 `bin/devmcp-hosting-lab-commit` (sans argument, approbation JSON
 sur stdin, une preuve par invocation) :
