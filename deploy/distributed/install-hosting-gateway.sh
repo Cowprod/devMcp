@@ -32,6 +32,22 @@ hosting_agent_policy_payload() {
 hosting_agent_policy_legacy_payload() {
   printf '<?php\\nreturn [\\x27enabled\\x27 => true, \\x27machine_id\\x27 => \\x27%s\\x27];\\n' "$1"
 }
+
+# The agent's polling grant must never be published just because systemd
+# reports an active unit. The socket must actually be a trustworthy Unix
+# inode inside the root-controlled RuntimeDirectory. Parameters are fixed
+# by the installer; allowing a different directory here is only for
+# isolated, unprivileged regression testing of this predicate.
+hosting_socket_acl_ready() {
+  local parent="$1" socket="$2" expected_uid="$3" expected_gid="$4"
+  local parent_stat socket_stat
+  [[ -d "$parent" && ! -L "$parent" && -S "$socket" && ! -L "$socket" ]] || return 1
+  parent_stat="$(stat -c '%u:%a' -- "$parent")" || return 1
+  socket_stat="$(stat -c '%u:%g:%a:%h' -- "$socket")" || return 1
+  [[ "$parent_stat" == "$expected_uid:755"
+     && "$socket_stat" == "$expected_uid:$expected_gid:660:1" ]]
+}
+
 trusted_dir "$root" 755 && trusted_dir "$root/hosting-bundles" 755 &&
 trusted_dir "$bundle" 755 && trusted_dir "$bundle/Project" 755 || {
   echo 'Missing or untrusted immutable hosting bundle' >&2; exit 1;
@@ -107,6 +123,17 @@ systemctl is-active --quiet devmcp-hosting.socket
 # abandoned first-release lab service after a durable 15-minute timeout.
 systemctl enable --now devmcp-hosting-watchdog.timer
 systemctl is-enabled --quiet devmcp-hosting-watchdog.timer
+# Fail closed BEFORE either promoting the gateway or publishing a new
+# agent polling grant. An active socket unit is not Unix ACL evidence.
+trusted_dir /run 755 || { echo 'Untrusted hosting runtime parent' >&2; exit 1; }
+hosting_group_record="$(getent group devmcp-agent)" || {
+  echo 'Hosting agent group missing' >&2; exit 1;
+}
+hosting_group_gid="$(printf '%s' "$hosting_group_record" | cut -d: -f3)"
+[[ "$hosting_group_gid" =~ ^[0-9]+$ ]] &&
+  hosting_socket_acl_ready /run/devmcp-hosting /run/devmcp-hosting/agent.sock 0 "$hosting_group_gid" || {
+  echo 'Privileged hosting IPC socket ownership or ACL rejected' >&2; exit 1;
+}
 # Atomic upgrade occurs LAST, only on explicit local-root opt-in.
 # Subsequent socket activations resolve the new immutable gateway.
 # Existing active requests retain their already-open executable inode.
