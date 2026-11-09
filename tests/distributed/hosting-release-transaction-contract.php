@@ -86,8 +86,24 @@ try {
     } catch (RuntimeException $e) {
         assert(str_contains($e->getMessage(), 'escapes approved directory'));
     }
-    echo "Hosting source routing, atomic link and journal durability: PASS\n";
+    // Archive a canonical completed rollback intent and reject the nonce
+    // from any later activation. No real systemd or caseRouter state touched.
+    $history = privateMethod(RemoteHostingReleaseSwap::class, 'historyDirectory', $workspace, true);
+    assert(is_dir($history));
+    assert(privateMethod(RemoteHostingReleaseSwap::class, 'rejectSettledOperation', $workspace, str_repeat('c', 32)) === null);
+    $receipt = $history . '/' . str_repeat('c', 32) . '.json';
+    assert(rename($journal, $receipt));
+    try {
+        privateMethod(RemoteHostingReleaseSwap::class, 'rejectSettledOperation', $workspace, str_repeat('c', 32));
+        throw new LogicException('Settled activation nonce was replayed');
+    } catch (RuntimeException $e) {
+        assert(str_contains($e->getMessage(), 'nonce'));
+    }
+    assert(!file_exists($journal));
+    echo "Hosting source routing, atomic link, durable journal and nonce fencing: PASS\n";
 } finally {
+    @unlink($workspace . '/.activation-history/' . str_repeat('c', 32) . '.json');
+    @rmdir($workspace . '/.activation-history');
     @unlink($workspace . '/current');
     @unlink($workspace . '/.activation-journal');
     @unlink($workspace . '/.activation.lock');
