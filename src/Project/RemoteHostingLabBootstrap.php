@@ -118,6 +118,12 @@ final class RemoteHostingLabBootstrap
         if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
             throw new RuntimeException('Local hosting bootstrap requires root');
         }
+        return self::withUpdaterLock(static fn(): array => self::runLocked($json));
+    }
+
+    /** @return array<string,mixed> */
+    private static function runLocked(string $json): array
+    {
         // No state changes until the enrolled identity, approved updater
         // revision and the operator's exact three deployments are validated.
         foreach (['/etc', '/etc/devmcp', '/var', '/var/lib', '/srv',
@@ -206,6 +212,49 @@ final class RemoteHostingLabBootstrap
         ];
     }
 
+    /** @return array<string,mixed> */
+    private static function withUpdaterLock(callable $callback): array
+    {
+        // Coordinate with self-update's existing fixed lock, so that its
+        // checkout, marker and immutable bundle cannot rotate mid-bootstrap.
+        $path = '/run/lock/devmcp-agent-update.lock';
+        clearstatcache(true, $path);
+        $before = @lstat($path);
+        if ($before !== false
+            && (($before['mode'] & 0170000) !== 0100000
+                || $before['uid'] !== 0 || $before['nlink'] !== 1
+                || ($before['mode'] & 0077) !== 0)) {
+            throw new RuntimeException('Untrusted agent updater lock');
+        }
+        $mask = umask(0077);
+        try {
+            $lock = @fopen($path, 'c+b');
+        } finally {
+            umask($mask);
+        }
+        if (!is_resource($lock)) {
+            throw new RuntimeException('Cannot lock local agent updater');
+        }
+        try {
+            clearstatcache(true, $path);
+            $onDisk = @lstat($path);
+            $opened = fstat($lock);
+            if (!is_array($onDisk) || !is_array($opened)
+                || ($onDisk['mode'] & 0170000) !== 0100000
+                || $onDisk['uid'] !== 0 || $onDisk['nlink'] !== 1
+                || ($onDisk['mode'] & 0077) !== 0
+                || $onDisk['dev'] !== $opened['dev']
+                || $onDisk['ino'] !== $opened['ino']
+                || !flock($lock, LOCK_EX | LOCK_NB)) {
+                throw new RuntimeException('Concurrent or untrusted agent self-update');
+            }
+            return $callback();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
     /** @param array<string,mixed> $value @param list<string> $keys */
     private static function exact(array $value, array $keys): void
     {
@@ -244,8 +293,15 @@ final class RemoteHostingLabBootstrap
 
     private static function ensureDirectory(string $path, int $mode): void
     {
-        if (@lstat($path) === false && !@mkdir($path, $mode)) {
-            throw new RuntimeException('Cannot create hosting bootstrap directory');
+        if (@lstat($path) === false) {
+            $prior = umask(0000);
+            try {
+                if (!@mkdir($path, $mode)) {
+                    throw new RuntimeException('Cannot create hosting bootstrap directory');
+                }
+            } finally {
+                umask($prior);
+            }
         }
         self::directory($path);
         $m = @lstat($path);
