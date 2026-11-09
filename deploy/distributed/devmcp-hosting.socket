@@ -1,0 +1,16 @@
+# Explicit administrator opt-in ONLY. Never enabled by agent self-update.
+[Unit]
+Description=devMcp hosting lab privileged IPC (opt-in)
+
+[Socket]
+ListenStream=/run/devmcp-hosting/agent.sock
+SocketUser=root
+SocketGroup=devmcp-agent
+SocketMode=0660
+DirectoryMode=0750
+Accept=yes
+RemoveOnStop=yes
+MaxConnections=2
+
+[Install]
+WantedBy=sockets.target
