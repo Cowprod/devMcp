@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Tests\Distributed;
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabEnrollment;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabMachineResolver;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -117,6 +118,39 @@ final class HostingLabEnrollmentMySqlTest extends TestCase
                 . "WHERE id = 'lab-node'"
             )->execute();
         }
+    }
+
+    public function testExactNameBootstrapResolverRejectsWrongNameAndRevokedIdentity(): void
+    {
+        $name = 'hosting-lab-' . $this->machineId;
+        self::assertSame($this->machineId, HostingLabMachineResolver::resolve($this->db, $name));
+
+        foreach ([$name . '-typo', '../' . $name, 'case;DROP TABLE dm_machine'] as $invalid) {
+            try {
+                HostingLabMachineResolver::resolve($this->db, $invalid);
+                self::fail('Unapproved machine name resolved');
+            } catch (\\InvalidArgumentException|RuntimeException $expected) {
+                // A nonexistent or invalid name is never interpreted as an ID.
+            }
+        }
+
+        $count = $this->db->prepare('SELECT COUNT(*) FROM dm_deployment WHERE machine_id = ?');
+        $count->execute([$this->machineId]);
+        self::assertSame(0, (int) $count->fetchColumn());
+
+        $this->db->prepare(
+            'UPDATE dm_agent_identity SET revoked_at = UTC_TIMESTAMP(6) WHERE machine_id = ?'
+        )->execute([$this->machineId]);
+        $this->expectException(RuntimeException::class);
+        HostingLabMachineResolver::resolve($this->db, $name);
+    }
+
+    public function testNameBootstrapResolverRejectsInactiveMachine(): void
+    {
+        $this->db->prepare('UPDATE dm_machine SET status = ? WHERE id = ?')
+            ->execute(['disabled', $this->machineId]);
+        $this->expectException(RuntimeException::class);
+        HostingLabMachineResolver::resolve($this->db, 'hosting-lab-' . $this->machineId);
     }
 
     public function testInactiveOrExpiredIdentityCannotEnrollAnyGrant(): void
