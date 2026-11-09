@@ -62,6 +62,12 @@ jobs:
         run: |
           ! php bin/devmcp-hosting-root prepare </dev/null
           ! php bin/devmcp-hosting-root arbitrary </dev/null
+      - name: Validate peer probe fails closed without a distinct ZeroTier peer
+        run: |
+          python3 -m py_compile deploy/distributed/hosting-peer-probe.py
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime static --target-ip 127.0.0.1 --peer-ip 127.0.0.2 --port 17600
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime php --target-ip 192.168.194.189 --peer-ip 192.168.194.189 --port 17600
+          ! python3 deploy/distributed/hosting-peer-probe.py --runtime node --target-ip 192.168.194.189 --peer-ip 192.168.194.188 --port 80
       - name: Lint deployment scripts
         run: |
           sh -n deploy/self-update.sh
