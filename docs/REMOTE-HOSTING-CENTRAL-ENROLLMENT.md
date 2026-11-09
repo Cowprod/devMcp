@@ -27,6 +27,37 @@ CLI `bin/devmcp-hosting-lab-enroll --apply`. Il reçoit sur stdin un JSON
 {"machine_id":"<ID de dm_machine actif, 32 hex>","approval":"ENROLL_CASE_HOSTING_LAB"}
 ```
 
+### Initialisation centrale en une seule invocation root (nouvelle option)
+
+Pour une instance où les migrations 006/007 ne sont **pas** encore appliquées,
+la commande `bin/devmcp-hosting-lab-enroll --bootstrap` réalise les deux
+migrations **puis** les trois affectations dans un même parcours root approuvé.
+Le consentement JSON exact est :
+
+```json
+{"machine_id":"<32 hex de la machine active>","approval":"MIGRATE_AND_ENROLL_CASE_HOSTING_LAB","backup_confirmed":true}
+```
+
+Cette option exige un backup MySQL préalablement effectué et **attesté
+explicitement**, les credentials DBA dédiés `migration_username` et
+`migration_password` dans la configuration root du central, ainsi que
+le drapeau root `remote_hosting_queue_enabled=true` déjà présent.
+Elle ne modifie pas le drapeau. L'identité machine active et un enrôlement
+non expiré sont revérifiés **avant** toute DDL.
+
+Le migrateur prend un verrou MySQL fixe et accepte uniquement trois états
+de schéma : absent (crée 006 puis applique 007), 006 exact (applique
+uniquement 007), 007 exact (aucune DDL). Un schéma étranger est refusé.
+Les DDL MySQL ne sont pas transactionnelles : une coupure entre 006 et 007
+laisse un état 006 connu, que le prochain appel peut achever sans fabriquer
+d'affectation. Après migration vérifiée, l'enrôlement garde sa transaction
+SQL séparée et conserve ses règles idempotentes existantes.
+
+L'ancienne option `--apply` reste strictement inchangée : **elle n'exécute
+aucune DDL** et exige les migrations déjà appliquées. Cette nouvelle option
+réduit les prérequis centraux à une invocation, mais ne dispense jamais de
+l'opt-in root central et du bootstrap root local sur caseRouter.
+
 Le binaire exige une configuration root-owned, une base active et une
 autorisation explicite. Il crée dans **une seule transaction SQL** les
 projets et déploiements suivants, sans en accepter d'autres :
