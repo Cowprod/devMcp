@@ -93,6 +93,8 @@ jobs:
         run: |
           ! php bin/devmcp-hosting-root prepare </dev/null
           ! php bin/devmcp-hosting-root arbitrary </dev/null
+      - name: Verify peer signing key protections and PHP proof interoperability (network mocked)
+        run: python3 tests/distributed/hosting-peer-probe-contract.py
       - name: Validate peer probe fails closed without a distinct ZeroTier peer
         run: |
           python3 -m py_compile deploy/distributed/hosting-peer-probe.py
