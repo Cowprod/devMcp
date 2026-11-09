@@ -262,13 +262,12 @@ final class RemoteHostingLabBootstrap
     /** Pure socket inode evidence; no connection or service side effect. */
     private static function socketMatches(array $meta, int $groupId): bool
     {
-        return ($meta['mode'] ?? 0) & 0170000 ? (
-            ($meta['mode'] & 0170000) === 0140000
+        return is_int($meta['mode'] ?? null)
+            && ($meta['mode'] & 0170000) === 0140000
             && ($meta['mode'] & 07777) === 0660
             && ($meta['uid'] ?? null) === 0
             && ($meta['gid'] ?? null) === $groupId
-            && ($meta['nlink'] ?? null) === 1
-        ) : false;
+            && ($meta['nlink'] ?? null) === 1;
     }
 
     /**
