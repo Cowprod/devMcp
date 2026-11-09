@@ -48,6 +48,18 @@ uniquement après approbation explicite. Fichier root-only `0600`.
 Le script ne connaît aucun secret distant et ne télécharge aucun
 credential depuis le central.
 
+Les ports sont désormais **strictement** 17601 (statique), 17602 (PHP),
+17603 (Node.js) : un autre port est rejeté *avant* tout consentement local.
+Le bootstrap vérifie également avant toute création la présence des
+exécutables `/usr/bin/php`, `/usr/bin/python3`, `/usr/bin/node`,
+`/usr/bin/git`, `/usr/bin/systemctl`, `/usr/bin/timeout`, l'accès à
+systemd et le groupe `devmcp-agent`. L'absence d'une dépendance bloque
+l'intégralité du lot de trois, plutôt que de créer un grant partiel.
+Le socket IPC doit appartenir à root:devmcp-agent (0660), dans des
+répertoires root non modifiables par le groupe ou les autres ; l'agent
+refuse toute substitution de socket. Aucune de ces protections n'accorde
+un droit de déploiement supplémentaire.
+
 Une fois le code fusionné, l'auto-update de l'agent peut apporter
 le bundle immutable ; il ne l'exécute pas. Le **seul** appel privilégié
 local à préparer (pas encore demandé) est :
