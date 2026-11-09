@@ -50,6 +50,15 @@ credential depuis le central.
 
 Les ports sont désormais **strictement** 17601 (statique), 17602 (PHP),
 17603 (Node.js) : un autre port est rejeté *avant* tout consentement local.
+Avant toute création de workspace, clone Git ou consentement root local,
+le bootstrap vérifie **ensemble** l'absence de sockets TCP en écoute sur
+les trois ports 17601/17602/17603, à partir de `/proc/net/tcp` **et**
+`/proc/net/tcp6`. Un service tiers déjà présent sur le troisième port
+refuse donc tout le lot avant une préparation partielle. Ce contrôle est
+une **observation instantanée**, pas une réservation : la vérification
+ZeroTier/port de chaque unité reste obligatoire immédiatement avant son
+installation, et l'activation attend toujours la preuve externe.
+
 Le bootstrap vérifie également avant toute création la présence des
 exécutables `/usr/bin/php`, `/usr/bin/python3`, `/usr/bin/node`,
 `/usr/bin/git`, `/usr/bin/systemctl`, `/usr/bin/timeout`, l'accès à
