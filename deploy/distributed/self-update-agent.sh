@@ -92,7 +92,12 @@ if [[ "$current" == "$target" ]]; then
   }
   if [[ "$missing_helpers" -eq 0 ]]; then
     echo "Agent already current: $target"
-    reconcile_hosting
+    if reconcile_hosting; then
+      echo "PASS: opted-in hosting gateway reconciliation completed"
+    else
+      echo "ERROR: hosting gateway reconciliation failed; retry on next timer tick" >&2
+      exit 1
+    fi
     exit 0
   fi
   echo "Completing missing release helpers at $target"
@@ -201,7 +206,12 @@ if ! mv -f -- "$marker_tmp" "$marker"; then
 fi
 finished=1
 timer_stopped=0
-echo "PASS: agent updated to $target; local authorizations unchanged"
+echo "PASS: agent updated to $target; existing local authorizations preserved"
 # The version is committed and the agent is healthy; hosting reconciliation
 # is a separate, retryable step and must not roll back an installed agent.
-reconcile_hosting
+if reconcile_hosting; then
+  echo "PASS: opted-in hosting gateway reconciliation completed"
+else
+  echo "ERROR: hosting gateway reconciliation failed; retry on next timer tick" >&2
+  exit 1
+fi
