@@ -41,6 +41,7 @@ for name in "${hosting_classes[@]}"; do
 done
 
 cp bin/devmcp-hosting-root "$tmp/state/repository/bin/devmcp-hosting-root"
+cp bin/devmcp-hosting-gateway "$tmp/state/repository/bin/devmcp-hosting-gateway"
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
   remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
   printf '%s\n' '<?php return true;' > "$tmp/state/repository/bin/$name"
@@ -98,8 +99,10 @@ grep -Fq "Agent already current: $target" "$tmp/out1"
 bundle="$tmp/agent-bin/hosting-bundles/$target"
 [[ -f "$bundle/Project/RemoteHostingUnitInstaller.php" ]]
 [[ -f "$bundle/devmcp-hosting-root" ]]
+[[ -f "$bundle/devmcp-hosting-gateway" ]]
 cmp -s bin/devmcp-hosting-root "$bundle/devmcp-hosting-root"
-[[ "$(find "$bundle" -type f | wc -l)" -eq "$((${#hosting_classes[@]} + 1))" ]]
+cmp -s bin/devmcp-hosting-gateway "$bundle/devmcp-hosting-gateway"
+[[ "$(find "$bundle" -type f | wc -l)" -eq "$((${#hosting_classes[@]} + 2))" ]]
 
 # 2) Same SHA, one newly required helper missing: complete it unattended.
 rm "$tmp/agent-bin/remote-job-policy.php"
