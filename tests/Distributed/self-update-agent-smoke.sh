@@ -27,10 +27,10 @@ mkdir -p "$tmp/state/repository/src/Project"
 hosting_classes=(
   RemoteHostingActivationContract RemoteHostingActivationJournal
   RemoteHostingActivationRecoveryEvidence RemoteHostingBindEvidence
-  RemoteHostingGitEvidence RemoteHostingGitProof
-  RemoteHostingGitTreeEvidence RemoteHostingLocalPolicy
+  RemoteHostingGitEvidence RemoteHostingGitProof RemoteHostingGitRefresh
+  RemoteHostingGitTreeEvidence RemoteHostingLocalPolicy RemoteHostingLocalPreparation
   RemoteHostingPortEvidence RemoteHostingReleaseFilesystemEvidence
-  RemoteHostingReleasePlan RemoteHostingReleaseStager RemoteHostingUnitDraft
+  RemoteHostingReleasePlan RemoteHostingReleaseStager RemoteHostingReleaseSwap RemoteHostingUnitDraft
   RemoteHostingUnitInstaller RemoteHostingWorkspaceEvidence
   RemoteHostingZeroTierMembership RemoteHostingZeroTierNetworkPin
 )
