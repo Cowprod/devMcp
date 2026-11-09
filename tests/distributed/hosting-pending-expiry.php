@@ -5,6 +5,7 @@ require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 use Cowprod\DevMcp\Project\RemoteHostingReleaseSwap;
 use Cowprod\DevMcp\Project\RemoteHostingPendingWatchdog;
+use Cowprod\DevMcp\Project\RemoteHostingSystemdControl;
 
 $now = 1794210000;
 assert(RemoteHostingReleaseSwap::pendingExpired($now, $now) === false);
@@ -71,6 +72,21 @@ if ($invalid['failed_deployments'] !== 1 || $invalid['scan_complete'] !== false)
     throw new RuntimeException('Invalid watchdog grant not failed closed');
 }
 
+// A damaged Git release must never prevent stopping an exact lab unit.
+// Starting or daemon-reloading still requires full release verification.
+$needsRelease = new ReflectionMethod(RemoteHostingSystemdControl::class, 'requiresReleaseEvidence');
+foreach (['start' => true, 'daemon-reload' => true, 'stop' => false] as $action => $expected) {
+    if ($needsRelease->invoke(null, $action) !== $expected) {
+        throw new RuntimeException('Hosting stop recovery preflight is not fail-safe');
+    }
+}
+try {
+    $needsRelease->invoke(null, 'restart');
+    throw new LogicException('Unapproved systemd operation accepted');
+} catch (RuntimeException $expected) {
+    // No new systemd action has been authorized.
+}
+
 // No scenario involving the pure clock grants remote activation.
 // The watchdog is a local root-only maintenance operation: its CLI must
 // not be exposed as an agent gateway verb or a central queued action.
@@ -78,7 +94,9 @@ $gateway = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-gateway'
 $queue = file_get_contents(dirname(__DIR__, 2) . '/bin/hosting-queue-policy.php');
 $cli = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-root');
 $expiry = file_get_contents(dirname(__DIR__, 2) . '/src/Project/RemoteHostingReleaseSwap.php');
+$stopControl = file_get_contents(dirname(__DIR__, 2) . '/src/Project/RemoteHostingSystemdControl.php');
 if (!is_string($gateway) || !is_string($queue) || !is_string($cli) || !is_string($expiry)
+    || !is_string($stopControl)
     || str_contains($gateway, "'expire-pending'")
     || str_contains($queue, "'expire-pending'")
     || !str_contains($cli, "RemoteHostingPendingWatchdog::scan()")
@@ -86,5 +104,15 @@ if (!is_string($gateway) || !is_string($queue) || !is_string($cli) || !is_string
     || !str_contains($expiry, "self::locked(")
     || !str_contains($expiry, "RemoteHostingSystemdControl::run(\$request, 'stop')")) {
     throw new RuntimeException('Watchdog must remain root-only and fenced by the activation lock');
+}
+// Guard the regression at the exact expiry call site: stop MUST precede
+// journal/link cleanup even when blobs are corrupt or missing.
+$start = strpos($expiry, 'function expireInitial(');
+$end = strpos($expiry, 'function pendingExpired(', $start === false ? 0 : $start);
+if ($start === false || $end === false || $end <= $start
+    || str_contains(substr($expiry, $start, $end - $start), 'RemoteHostingReleaseFilesystemEvidence::inspect(')
+    || !str_contains($stopControl, 'self::requiresReleaseEvidence($operation)')
+    || !str_contains($stopControl, 'self::approvedUnitName($plan)')) {
+    throw new RuntimeException('Damaged pending release can block safe policy-pinned stop');
 }
 echo "PASS: 900s timeout, clock-skew rejection and isolated root-only watchdog\n";
