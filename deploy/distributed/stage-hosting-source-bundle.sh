@@ -28,6 +28,7 @@ classes=(
   RemoteHostingPortEvidence
   RemoteHostingPeerEvidence
   RemoteHostingPendingWatchdog
+  RemoteHostingLabBootstrap
   RemoteHostingReleaseFilesystemEvidence
   RemoteHostingReleasePlan
   RemoteHostingReleaseStager

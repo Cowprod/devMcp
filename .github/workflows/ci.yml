@@ -33,6 +33,7 @@ jobs:
           php -l src/Project/RemoteHostingLocalPolicy.php
           php -l src/Project/RemoteHostingPeerEvidence.php
           php -l src/Project/RemoteHostingPendingWatchdog.php
+          php -l src/Project/RemoteHostingLabBootstrap.php
           php -l src/Project/RemoteHostingBindEvidence.php
           php -l src/Project/RemoteHostingZeroTierMembership.php
           php -l src/Project/RemoteHostingZeroTierNetworkPin.php
@@ -68,6 +69,8 @@ jobs:
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-peer-evidence.php
       - name: Verify signed remote commit transport end-to-end
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-remote-commit-contract.php
+      - name: Verify one-shot root lab bootstrap contract
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-lab-bootstrap.php
       - name: Verify expiration of uncommitted initial hosting releases
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-pending-expiry.php
       - name: Verify local hosting release swap contract
