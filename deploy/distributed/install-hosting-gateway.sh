@@ -100,4 +100,22 @@ systemctl is-enabled --quiet devmcp-hosting-watchdog.timer
 # Subsequent socket activations resolve the new immutable gateway.
 # Existing active requests retain their already-open executable inode.
 /bin/bash "$active_helper" promote "$revision"
-echo "PASS: hosting IPC and pending-release watchdog opted in at $revision; zero applications activated"
+# The administrator has explicitly enabled hosting and installed its IPC.
+# Complete the workflow by opting the enrolled agent into the hosting queue;
+# otherwise the socket is live but no remote deployment can ever reach it.
+agent_policy=/etc/devmcp/hosting-agent-policy.php
+if [[ -e "$agent_policy" || -L "$agent_policy" ]]; then
+  trusted_file "$agent_policy" 644 || { echo 'Conflicting agent hosting policy' >&2; exit 1; }
+fi
+machine_id="$(php -r '$c=require $argv[1]; echo $c["machine_id"] ?? "";' "$identity")"
+[[ "$machine_id" =~ ^[a-f0-9]{32}$ ]] || { echo 'Invalid enrolled machine ID' >&2; exit 1; }
+agent_tmp="$(mktemp /etc/devmcp/.hosting-agent-policy.XXXXXXXX)"
+printf '<?php\\nreturn [\\x27enabled\\x27 => true, \\x27machine_id\\x27 => \\x27%s\\x27];\\n' "$machine_id" > "$agent_tmp"
+chmod 0644 "$agent_tmp"
+if [[ -e "$agent_policy" ]] && ! cmp -s "$agent_tmp" "$agent_policy"; then
+  rm -f "$agent_tmp"
+  echo 'Existing agent hosting policy differs; refusing overwrite' >&2
+  exit 1
+fi
+mv -f "$agent_tmp" "$agent_policy"
+echo "PASS: hosting IPC, watchdog and remote hosting queue polling opted in at $revision; zero applications activated"
