@@ -40,6 +40,7 @@ for name in "${hosting_classes[@]}"; do
   printf '%s\n' '<?php declare(strict_types=1);' > "$tmp/state/repository/src/Project/$name.php"
 done
 
+cp bin/devmcp-hosting-root "$tmp/state/repository/bin/devmcp-hosting-root"
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
   remote-readonly-actions.php remote-job-policy.php remote-local-policy.php; do
   printf '%s\n' '<?php return true;' > "$tmp/state/repository/bin/$name"
@@ -96,7 +97,9 @@ grep -Fq "Agent already current: $target" "$tmp/out1"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
 bundle="$tmp/agent-bin/hosting-bundles/$target"
 [[ -f "$bundle/Project/RemoteHostingUnitInstaller.php" ]]
-[[ "$(find "$bundle" -type f | wc -l)" -eq "${#hosting_classes[@]}" ]]
+[[ -f "$bundle/devmcp-hosting-root" ]]
+cmp -s bin/devmcp-hosting-root "$bundle/devmcp-hosting-root"
+[[ "$(find "$bundle" -type f | wc -l)" -eq "$((${#hosting_classes[@]} + 1))" ]]
 
 # 2) Same SHA, one newly required helper missing: complete it unattended.
 rm "$tmp/agent-bin/remote-job-policy.php"
@@ -117,7 +120,18 @@ if bash "$tmp/updater.sh" > "$tmp/out3" 2>&1; then
 fi
 grep -Fq 'Installed helper drift detected' "$tmp/out3"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
-# 4) An altered, already staged source bundle fails closed without stopping
+# 4) A modified privileged executor is never silently repaired by the updater.
+printf "\n# tampered\n" >> "$bundle/devmcp-hosting-root"
+: > "$SYSTEMCTL_LOG"
+if bash "$tmp/updater.sh" > "$tmp/out4cli" 2>&1; then
+  echo "FAIL: modified hosting executor accepted" >&2
+  exit 1
+fi
+grep -Fq "Hosting executor drift" "$tmp/out4cli"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+cp bin/devmcp-hosting-root "$bundle/devmcp-hosting-root"
+
+# 5) An altered, already staged source bundle fails closed without stopping
 # the live agent. A new release is never silently used to repair drift.
 cp "$tmp/state/repository/bin/remote-job-policy.php" "$tmp/agent-bin/remote-job-policy.php"
 printf '%s\n' '<?php return false;' > "$bundle/Project/RemoteHostingReleasePlan.php"
