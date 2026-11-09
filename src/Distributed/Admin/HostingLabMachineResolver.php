@@ -20,11 +20,14 @@ final class HostingLabMachineResolver
             throw new InvalidArgumentException('Invalid exact hosting machine name');
         }
 
+        // Exact PHP comparison rejects case-insensitive MySQL collation aliases.
         // LIMIT 2 also fails closed if an old registry contains duplicate names.
-        $stmt = $db->prepare('SELECT id, status FROM dm_machine WHERE name = ? LIMIT 2');
+        $stmt = $db->prepare('SELECT id, name, status FROM dm_machine WHERE name = ? LIMIT 2');
         $stmt->execute([$exactName]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        if (count($rows) !== 1 || $rows[0]['status'] !== 'active') {
+        if (count($rows) !== 1 || !is_string($rows[0]['name'] ?? null)
+            || !hash_equals($exactName, $rows[0]['name'])
+            || $rows[0]['status'] !== 'active') {
             throw new RuntimeException('Hosting machine name must uniquely resolve to an active machine');
         }
         $id = $rows[0]['id'];
