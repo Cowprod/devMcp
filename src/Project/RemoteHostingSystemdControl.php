@@ -46,6 +46,7 @@ final class RemoteHostingSystemdControl
                 || @readlink($current) !== 'releases/' . $plan['revision']) {
                 throw new RuntimeException('Requested hosting release is not selected');
             }
+            self::requireDynamicUserReadAccess($plan);
             $pin = RemoteHostingZeroTierNetworkPin::inspect($request);
             if (($pin['root_policy_network_verified'] ?? null) !== true) {
                 throw new RuntimeException('Hosting network pin is no longer valid');
@@ -77,6 +78,31 @@ final class RemoteHostingSystemdControl
             'expected_service_state_observed' => true,
             'independent_peer_health_verified' => false,
         ];
+    }
+
+    /** @param array<string,mixed> $plan */
+    private static function requireDynamicUserReadAccess(array $plan): void
+    {
+        // The service runs as systemd DynamicUser, not as root. A root-only
+        // workspace (0700) would pass provenance validation but leave every
+        // HTTP/WS service unable to read its own entrypoint.
+        $dirs = [
+            '/srv', RemoteHostingReleasePlan::WORKSPACE_ROOT,
+            $plan['workspace'], $plan['workspace'] . '/releases',
+            $plan['workspace'] . '/releases/' . $plan['revision'],
+        ];
+        if (in_array($plan['runtime'], ['static', 'php'], true)) {
+            $dirs[] = $plan['workspace'] . '/releases/' . $plan['revision'] . '/public';
+        }
+        foreach ($dirs as $dir) {
+            clearstatcache(true, $dir);
+            $meta = @lstat($dir);
+            if (!is_array($meta) || ($meta['mode'] & 0170000) !== 0040000
+                || $meta['uid'] !== 0 || ($meta['mode'] & 0005) !== 0005
+                || ($meta['mode'] & 0022) !== 0) {
+                throw new RuntimeException('Hosting release is inaccessible to isolated service user');
+            }
+        }
     }
 
     /** @param array<string,mixed> $plan */
