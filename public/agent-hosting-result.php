@@ -4,6 +4,7 @@ use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+require dirname(__DIR__) . '/bin/hosting-queue-policy.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -52,22 +53,60 @@ try {
         (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $match[1], true);
     $receipt = $payload['result']['receipt'];
-    // The central server is not entitled to infer peer-health from an
-    // agent's acknowledgement or to label any release as deployed.
-    if (($receipt['deployment_complete'] ?? null) !== false
-        || ($receipt['peer_health_verified'] ?? null) !== false) {
-        throw new RuntimeException('untrusted_hosting_completion_claim');
-    }
-    $json = json_encode($payload['result'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-    $stmt = $db->prepare(
-        "UPDATE dm_remote_hosting_job SET state = ?, result_json = ?,
-         finished_at = UTC_TIMESTAMP(6)
-         WHERE id = ? AND machine_id = ? AND state = 'claimed'"
-    );
-    $stmt->execute([$payload['result']['ok'] ? 'succeeded' : 'failed',
-        $json, $payload['job_id'], $machineId]);
-    if ($stmt->rowCount() !== 1) {
-        throw new RuntimeException('job_not_claimed');
+    // The central endpoint is an ACK receiver, NOT a trusted deployment
+    // attestor. Even an asserted successful commit remains agent-reported.
+    // The only actual approval is the root-side HMAC check on caseRouter.
+    $db->beginTransaction();
+    try {
+        $select = $db->prepare(
+            "SELECT action_name, request_json FROM dm_remote_hosting_job
+             WHERE id = ? AND machine_id = ? AND state = 'claimed' FOR UPDATE"
+        );
+        $select->execute([$payload['job_id'], $machineId]);
+        $job = $select->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($job)) {
+            throw new RuntimeException('job_not_claimed');
+        }
+        $requested = json_decode((string) $job['request_json'], true, 8, JSON_THROW_ON_ERROR);
+        $commit = $job['action_name'] === 'commit-initial' && $payload['result']['ok'];
+        if (($receipt['deployment_complete'] ?? null) !== $commit
+            || ($receipt['peer_health_verified'] ?? null) !== $commit) {
+            throw new RuntimeException('invalid_hosting_receipt');
+        }
+        if ($commit) {
+            $proof = $requested['proof'] ?? null;
+            $result = $receipt['result'] ?? null;
+            if (!is_array($requested) || !hostingQueueRequest('commit-initial', $requested)
+                || !is_array($result)
+                || ($receipt['operation'] ?? null) !== 'commit-initial'
+                || ($result['operation_id'] ?? null) !== $requested['operation_id']
+                || ($result['project_id'] ?? null) !== $requested['project_id']
+                || ($result['revision'] ?? null) !== $requested['revision']
+                || ($result['hosting_service_active'] ?? null) !== true
+                || ($result['nonce_replay_fenced'] ?? null) !== true
+                || ($result['peer_health_verified'] ?? null) !== true
+                || ($result['deployment_complete'] ?? null) !== true
+                || !is_array($proof)) {
+                throw new RuntimeException('unbound_commit_ack');
+            }
+        }
+        $json = json_encode($payload['result'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $stmt = $db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = ?, result_json = ?,
+             finished_at = UTC_TIMESTAMP(6)
+             WHERE id = ? AND machine_id = ? AND state = 'claimed'"
+        );
+        $stmt->execute([$payload['result']['ok'] ? 'succeeded' : 'failed',
+            $json, $payload['job_id'], $machineId]);
+        if ($stmt->rowCount() !== 1) {
+            throw new RuntimeException('job_not_claimed');
+        }
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $error;
     }
     echo '{"protocol_version":1,"ok":true}' . "\n";
 } catch (Throwable $error) {
