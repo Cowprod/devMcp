@@ -44,6 +44,37 @@ l'ensemble des trois créations. L'absence de préparation, une préparation
 échouée, un SHA différent, un projet désactivé ou des permissions centrale
 manquantes **refusent sans insertion partielle**.
 
+## Variante root par nom exact de machine
+
+Après un enrôlement `--bootstrap-name`, l'administrateur TouchDeck peut
+éviter de recopier manuellement le `machine_id` SQL pour les deux phases.
+Le CLI accepte `--prepare-name` avec une approbation distincte :
+
+```json
+{"machine_name":"case","revision":"<SHA Git main 40 hex>","approval":"PREPARE_CASE_HOSTING_LAB_BY_NAME"}
+```
+
+Après trois préparations `succeeded`, `--activate-name` exige **un autre**
+consentement explicite :
+
+```json
+{"machine_name":"case","revision":"<même SHA Git main 40 hex>","approval":"ACTIVATE_CASE_HOSTING_LAB_BY_NAME"}
+```
+
+Le nom est une valeur exacte de `dm_machine.name`, non une découverte de
+réseau : une différence de casse, un nom ambigu, inactif ou révoqué est
+refusé **avant toute mise en file**. Le resolver central vérifie une identité
+agent valide ; la transaction SQL existante verrouille ensuite de nouveau
+la machine, l'identité et les trois grants, sans insertion partielle. Le
+résultat contient le `machine_id` réel et les trois `deployment_id`.
+L'ancien mode explicite `--prepare` / `--activate` par ID reste supporté.
+Les marqueurs d'approbation des deux modes ne sont pas interchangeables.
+
+**Ce mode ne change ni les permissions root, ni le drapeau central d'opt-in,
+ni les droits de l'agent.** Il ne fonctionne qu'après l'intervention de root
+sur TouchDeck et le bootstrap local déjà autorisé sur caseRouter. Aucune
+commande de cette section ne constitue une preuve de déploiement.
+
 ## Séquence de validation terrain
 
 Le routeur prépare via l'agent séparément autorisé, puis démarre les unités
