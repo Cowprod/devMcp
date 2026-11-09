@@ -36,6 +36,12 @@ trusted_file "$policy" 600 || {
 [[ -d "$checkout/.git" && ! -L "$checkout" ]] || {
   echo 'Missing auto-update checkout' >&2; exit 1;
 }
+[[ -z "$(git -C "$checkout" status --porcelain --untracked-files=no)" ]] || {
+  echo "Hosting source checkout is modified" >&2; exit 1;
+}
+[[ "$(git -C "$checkout" config --get remote.origin.url)" == "https://github.com/Cowprod/devMcp.git" ]] || {
+  echo "Untrusted hosting source repository" >&2; exit 1;
+}
 [[ "$(git -C "$checkout" rev-parse HEAD)" == "$revision" ]] || {
   echo 'Installed bundle does not match the selected checkout SHA' >&2; exit 1;
 }
