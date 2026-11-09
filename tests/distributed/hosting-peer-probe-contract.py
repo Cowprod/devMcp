@@ -43,11 +43,11 @@ $plan = [
     'bind_ipv4' => '192.168.194.189',
     'port' => (int) $argv[5],
 ];
-\\Cowprod\\DevMcp\\Project\\RemoteHostingPeerEvidence::verifyClaim(
+\Cowprod\DevMcp\Project\RemoteHostingPeerEvidence::verifyClaim(
     $plan, str_repeat('d', 32), $proof, '192.168.194.188',
     hex2bin($argv[2]), time()
 );
-echo "PASS\\n";
+echo "PASS\n";
 """
 
 
