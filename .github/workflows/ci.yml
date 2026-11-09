@@ -32,6 +32,7 @@ jobs:
           php -l src/Project/RemoteHostingWorkspaceEvidence.php
           php -l src/Project/RemoteHostingGitEvidence.php
           php -l src/Project/RemoteHostingGitRefresh.php
+          php -l src/Project/RemoteHostingLocalPreparation.php
           php -l src/Project/RemoteHostingGitTreeEvidence.php
           php -l src/Project/RemoteHostingReleaseFilesystemEvidence.php
           php -l src/Project/RemoteHostingReleaseStager.php
