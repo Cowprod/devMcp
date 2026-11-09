@@ -8,10 +8,14 @@ It prints a machine-readable observation that an operator can corroborate.
 import argparse
 import base64
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import socket
+import stat
+import time
+import re
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MARKERS = {
@@ -134,11 +138,51 @@ def main():
     parser.add_argument("--target-ip", required=True)
     parser.add_argument("--peer-ip", required=True)
     parser.add_argument("--port", required=True, type=int)
+    parser.add_argument("--operation-id", required=True)
+    parser.add_argument("--deployment-id", required=True)
+    parser.add_argument("--machine-id", required=True)
+    parser.add_argument("--project-id", required=True)
+    parser.add_argument("--revision", required=True)
+    parser.add_argument("--key-file", required=True)
     args = parser.parse_args()
     if args.port < 12000 or args.port > 19999:
         parser.error("port must be 12000..19999")
+    for name, length in (("operation_id", 32), ("deployment_id", 32),
+                         ("machine_id", 32), ("revision", 40)):
+        if not re.fullmatch("[a-f0-9]{" + str(length) + "}",
+                            getattr(args, name)):
+            parser.error("invalid " + name)
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", args.project_id):
+        parser.error("invalid project_id")
     try:
-        result = probe(args.runtime, args.target_ip, args.port, args.peer_ip)
+        metadata = os.lstat(args.key_file)
+        if (not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != os.geteuid() or metadata.st_nlink != 1
+                or metadata.st_size != 32):
+            raise ValueError("Untrusted peer signing key")
+        with open(args.key_file, "rb") as key_stream:
+            key = key_stream.read(33)
+        if len(key) != 32:
+            raise ValueError("Invalid peer signing key size")
+        probe(args.runtime, args.target_ip, args.port, args.peer_ip)
+        result = {
+            "version": 1,
+            "operation_id": args.operation_id,
+            "deployment_id": args.deployment_id,
+            "machine_id": args.machine_id,
+            "project_id": args.project_id,
+            "revision": args.revision,
+            "runtime": args.runtime,
+            "target_ip": args.target_ip,
+            "source_peer_ip": args.peer_ip,
+            "port": args.port,
+            "observed_at": int(time.time()),
+            "http_verified": True,
+            "websocket_verified": args.runtime == "node",
+        }
+        canonical = json.dumps(result, sort_keys=True, separators=(",", ":"),
+                               ensure_ascii=False).encode("utf-8")
+        result["signature"] = hmac.new(key, canonical, hashlib.sha256).hexdigest()
     except (OSError, ValueError, RuntimeError, UnicodeError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "error": type(exc).__name__,
                           "deployment_committed": False}))
