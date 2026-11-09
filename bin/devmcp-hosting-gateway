@@ -23,7 +23,7 @@ function hostingGatewayDecode(string $raw): array
     sort($keys);
     if ($keys !== ['action', 'request', 'version'] || $input['version'] !== 1
         || !is_string($input['action'])
-        || !in_array($input['action'], ['prepare-all', 'activate-initial', 'abort-initial'], true)
+        || !in_array($input['action'], ['prepare-all', 'activate-initial', 'abort-initial', 'commit-initial'], true)
         || !is_array($input['request']) || array_is_list($input['request'])) {
         throw new InvalidArgumentException('Gateway action rejected');
     }
@@ -33,6 +33,9 @@ function hostingGatewayDecode(string $raw): array
     $expected = ['deployment_id', 'machine_id', 'project_id', 'revision'];
     if ($input['action'] !== 'prepare-all') {
         $expected[] = 'operation_id';
+    }
+    if ($input['action'] === 'commit-initial') {
+        $expected[] = 'proof';
     }
     sort($expected);
     if ($keys !== $expected) {
@@ -53,6 +56,39 @@ function hostingGatewayDecode(string $raw): array
             || preg_match('/^[a-f0-9]{32}$/D', $request['operation_id']) !== 1
             || $request['operation_id'] === str_repeat('0', 32))) {
         throw new InvalidArgumentException('Invalid gateway operation');
+    }
+    if ($input['action'] === 'commit-initial') {
+        $proof = $request['proof'];
+        if (!is_array($proof) || array_is_list($proof)) {
+            throw new InvalidArgumentException('Missing peer health evidence');
+        }
+        $keys = array_keys($proof);
+        sort($keys);
+        $allowed = ['version', 'operation_id', 'deployment_id', 'machine_id',
+            'project_id', 'revision', 'runtime', 'target_ip', 'source_peer_ip',
+            'port', 'observed_at', 'http_verified', 'websocket_verified', 'signature'];
+        sort($allowed);
+        if ($keys !== $allowed || ($proof['version'] ?? null) !== 1
+            || !is_string($proof['signature'])
+            || preg_match('/^[a-f0-9]{64}$/D', $proof['signature']) !== 1
+            || !is_int($proof['observed_at'])
+            || ($proof['http_verified'] ?? null) !== true
+            || !in_array($proof['runtime'], ['static', 'php', 'node'], true)
+            || ($proof['websocket_verified'] ?? null) !== ($proof['runtime'] === 'node')
+            || !is_int($proof['port']) || $proof['port'] < 12000 || $proof['port'] > 19999
+            || !is_string($proof['source_peer_ip']) || !is_string($proof['target_ip'])
+            || filter_var($proof['source_peer_ip'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || filter_var($proof['target_ip'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || $proof['source_peer_ip'] === $proof['target_ip']) {
+            throw new InvalidArgumentException('Untrusted peer proof shape');
+        }
+        foreach (['operation_id', 'deployment_id', 'machine_id', 'project_id', 'revision'] as $field) {
+            if ($proof[$field] !== $request[$field]) {
+                throw new InvalidArgumentException('Peer proof is for another operation');
+            }
+        }
+        // No HMAC or policy check at this unprivileged ingress; the root
+        // verifier MUST authenticate the key, freshness, port and source.
     }
     return $input;
 }
@@ -102,8 +138,10 @@ function hostingGatewayMain(): int
             throw new RuntimeException('Hosting operation denied or failed');
         }
         $result = json_decode($output, true, 12, JSON_THROW_ON_ERROR);
+        $committed = $job['action'] === 'commit-initial';
         if (!is_array($result) || ($result['operation'] ?? null) !== $job['action']
-            || ($result['deployment_complete'] ?? null) !== false) {
+            || ($result['deployment_complete'] ?? null) !== $committed
+            || ($result['peer_health_verified'] ?? null) !== $committed) {
             throw new RuntimeException('Untrusted hosting executor receipt');
         }
         echo json_encode(['version' => 1, 'ok' => true, 'receipt' => $result],
