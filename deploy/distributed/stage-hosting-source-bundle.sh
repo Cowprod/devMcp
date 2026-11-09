@@ -26,6 +26,7 @@ classes=(
   RemoteHostingLocalPolicy
   RemoteHostingLocalPreparation
   RemoteHostingPortEvidence
+  RemoteHostingPeerEvidence
   RemoteHostingReleaseFilesystemEvidence
   RemoteHostingReleasePlan
   RemoteHostingReleaseStager
