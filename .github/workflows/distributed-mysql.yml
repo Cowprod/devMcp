@@ -36,6 +36,16 @@ jobs:
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261101_preview_port_reservation.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261102_project_runtime_catalog.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261102_agent_zerotier_address.sql
+      - name: Apply and reapply dedicated hosting signed-commit migrations
+        env:
+          MYSQL_PWD: testpass
+        run: |
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/006_remote_hosting_jobs.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/007_remote_hosting_signed_commit.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/007_remote_hosting_signed_commit.sql
+          mysql -h 127.0.0.1 -u devmcp_test -N -B devmcp_test \
+            -e "SHOW COLUMNS FROM dm_remote_hosting_job LIKE 'action_name'" |
+            grep -Fq 'commit-initial'
       - name: SQL integration tests
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
