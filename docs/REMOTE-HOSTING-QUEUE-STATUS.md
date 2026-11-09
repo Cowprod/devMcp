@@ -51,3 +51,41 @@ Pas de modification WAN/LAN, routage, NAT, pare-feu, Nginx du routeur,
 été exécuté dans cette PR.
 
 **État physique attesté : 0/3 applications.**
+
+## Contrôle de santé signé et commit initial (PR #146)
+
+La sonde `deploy/distributed/hosting-peer-probe.py` doit tourner sur
+**un autre pair ZeroTier**, avec une clé HMAC de 32 octets conservée dans
+un fichier local 0600 appartenant à son utilisateur. Elle exige les
+identifiants exacts du déploiement, un nonce d'activation, le SHA Git,
+le port et les IPv4 source/destination, puis vérifie HTTP et, pour Node,
+la réponse WebSocket. Elle signe une observation canonique JSON.
+
+Le routeur ne reçoit que l'observation signée. Son administrateur
+prépare explicitement `/etc/devmcp/hosting-peer-proof.json` root:root
+0600 avec exactement deux clés, dans cet ordre :
+`{"source_peer_ip":"<IP_ZEROTIER_PAIR>","hmac_key_hex":"<64_HEX>"}`.
+La clé hex est la représentation des mêmes 32 octets secrets que le
+fichier de la sonde. **Ne jamais transmettre la clé à l'agent, au central,
+à la file de jobs ou à un dépôt Git.**
+
+Une fois l'activation dans l'état pending, l'administrateur root peut
+utiliser `php /opt/devmcp-agent/bin/hosting-active/devmcp-hosting-root
+commit-initial` avec un unique JSON sur stdin regroupant les
+identifiants, `operation_id` et `proof`. Cette commande n'est **pas**
+exposée par `devmcp-hosting-gateway`, volontairement : une tâche
+centrale ne peut pas fabriquer elle-même sa confirmation.
+
+Le commit root vérifie à nouveau la politique locale, le journal
+d'activation, le pointeur `current`, la provenance de la release, la
+signature HMAC, sa fraîcheur (120 secondes, avance maximale 15 secondes)
+et le service applicatif actif. Il archive ensuite l'intention sous
+son nonce, empêchant la réutilisation. Une signature invalide laisse
+le journal non résolu, jamais « déployé ». Le mécanisme ne certifie
+**que la première activation** : les upgrades restent bloqués.
+
+Reste à développer et vérifier : acheminement sûr de la preuve depuis
+le pair (hors agent), ordonnanceur de délai/rollback des activations
+pending et exécution réelle du bootstrap, de la migration SQL et des
+trois prises de service. Pas d'intervention distante demandée avant
+validation de ce chemin complet.
