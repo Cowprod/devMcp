@@ -17,11 +17,11 @@ use RuntimeException;
 final class RemoteHostingReleaseSwap
 {
     /** @param array<string,mixed> $request @return array<string,mixed> */
-    public static function switch(array $request, string $operationId): array
+    public static function switch(array $request, string $operationId, bool $requireNoPrevious = false): array
     {
         self::requireRootAndNonce($operationId);
         $plan = RemoteHostingLocalPolicy::preview($request);
-        return self::locked($plan['workspace'], function () use ($request, $plan, $operationId): array {
+        return self::locked($plan['workspace'], function () use ($request, $plan, $operationId, $requireNoPrevious): array {
             RemoteHostingWorkspaceEvidence::inspect($request);
             RemoteHostingReleaseFilesystemEvidence::inspect($request);
             self::requireInactive($plan);
@@ -34,6 +34,9 @@ final class RemoteHostingReleaseSwap
             // journal has been archived. Replays cannot begin a new switch.
             self::rejectSettledOperation($workspace, $operationId);
             $previous = self::current($workspace);
+            if ($requireNoPrevious && $previous !== null) {
+                throw new RuntimeException('First-release activation cannot replace existing current');
+            }
             if ($previous === $plan['revision']) {
                 throw new RuntimeException('Requested revision already active');
             }
