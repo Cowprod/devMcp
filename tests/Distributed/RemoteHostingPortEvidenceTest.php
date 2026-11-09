@@ -90,6 +90,47 @@ final class RemoteHostingPortEvidenceTest extends TestCase
         }
     }
 
+    public function testThreeDemoPortsAreCheckedAsOnePreflightBatch(): void
+    {
+        $empty4 = self::table(8);
+        $empty6 = self::table(32);
+        // No TCP listener: safe to proceed to the separate privileged
+        // policy-bound checks (this fixture never authorizes activation).
+        RemoteHostingPortEvidence::checkLabPorts($empty4, $empty6);
+        RemoteHostingPortEvidence::checkLabPorts(
+            self::table(8, '01', '44C2'), self::table(32, '0A', '1F90')
+        );
+        foreach ([17601, 17602, 17603] as $port) {
+            foreach ([4, 6] as $version) {
+                try {
+                    RemoteHostingPortEvidence::checkLabPorts(
+                        $version === 4 ? self::table(8, '0A', sprintf('%04X', $port)) : $empty4,
+                        $version === 6 ? self::table(32, '0A', sprintf('%04X', $port)) : $empty6
+                    );
+                    self::fail('Occupied demo port was accepted during batch bootstrap');
+                } catch (InvalidArgumentException $e) {
+                    self::assertStringContainsString('occupied', $e->getMessage());
+                }
+            }
+        }
+    }
+
+    public function testBatchPreflightFailsClosedOnMalformedKernelEvidence(): void
+    {
+        foreach ([
+            ['missing TCP header', self::table(32)],
+            [self::table(8), self::table(8, '0A', '44C1')],
+            [self::table(8, '0A', 'FFFF'), str_repeat('x', 1048577)],
+        ] as [$tcp, $tcp6]) {
+            try {
+                RemoteHostingPortEvidence::checkLabPorts($tcp, $tcp6);
+                self::fail('Invalid TCP snapshot accepted before root bootstrap');
+            } catch (InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     public function testIgnoresUnrelatedPortsAndNonListenStates(): void
     {
         $r = RemoteHostingPortEvidence::check(

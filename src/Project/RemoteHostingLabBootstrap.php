@@ -170,6 +170,11 @@ final class RemoteHostingLabBootstrap
         // Git when one of the three lab runtimes cannot actually start.
         // No apt, systemctl start, network or shell commands are attempted.
         self::requireRuntimePreflight();
+        // Reject a collision on ANY of the three fixed demo ports before the
+        // first clone, workspace creation or root-only consent publication.
+        // Unit installation separately rechecks the port against current
+        // ZeroTier membership; this initial scan is not a reservation.
+        RemoteHostingPortEvidence::inspectLabPorts();
 
         $policyBytes = json_encode($parsed['policy'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
         $peerBytes = json_encode($parsed['peer'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
