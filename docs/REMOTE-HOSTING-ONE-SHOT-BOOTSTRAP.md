@@ -76,8 +76,13 @@ systemd et le groupe `devmcp-agent`. L'absence d'une dépendance bloque
 l'intégralité du lot de trois, plutôt que de créer un grant partiel.
 Le socket IPC doit appartenir à root:devmcp-agent (0660), dans des
 répertoires root non modifiables par le groupe ou les autres ; l'agent
-refuse toute substitution de socket. Aucune de ces protections n'accorde
-un droit de déploiement supplémentaire.
+refuse toute substitution de socket. L'installateur privilégié contrôle
+désormais le véritable inode Unix (type socket, propriétaire, GID
+devmcp-agent, mode 0660 et nlink=1) et son répertoire parent root 0755,
+**avant** de promouvoir le nouveau bundle et **avant** de publier le
+consentement de polling de l'agent. Un systemctl is-active seul ne suffit
+pas. Le bootstrap répète ensuite le contrôle, en défense supplémentaire.
+Aucune de ces protections n'accorde un droit de déploiement supplémentaire.
 
 Une fois le code fusionné, l'auto-update de l'agent peut apporter
 le bundle immutable ; il ne l'exécute pas. Le **seul** appel privilégié
