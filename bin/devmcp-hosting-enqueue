@@ -67,7 +67,8 @@ function hostingEnqueueMain(array $argv): int
         // a crashed claim; never silently retry an activation.
         $pending = $db->prepare(
             "SELECT id FROM dm_remote_hosting_job
-             WHERE deployment_id = ? AND state IN ('queued','claimed')
+             WHERE deployment_id = ? AND (state = 'claimed'
+               OR (state = 'queued' AND expires_at > UTC_TIMESTAMP(6)))
              LIMIT 1 FOR UPDATE"
         );
         $pending->execute([$request['deployment_id']]);
