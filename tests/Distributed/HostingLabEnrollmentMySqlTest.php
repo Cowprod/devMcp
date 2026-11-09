@@ -129,7 +129,7 @@ final class HostingLabEnrollmentMySqlTest extends TestCase
             try {
                 HostingLabMachineResolver::resolve($this->db, $invalid);
                 self::fail('Unapproved machine name resolved');
-            } catch (\\InvalidArgumentException|RuntimeException $expected) {
+            } catch (\InvalidArgumentException|RuntimeException $expected) {
                 // A nonexistent or invalid name is never interpreted as an ID.
             }
         }
