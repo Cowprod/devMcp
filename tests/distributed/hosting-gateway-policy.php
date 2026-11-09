@@ -23,6 +23,7 @@ assert(!accepts([...$valid, 'action' => 'systemctl']));
 assert(!accepts([...$valid, 'action' => 'switch']));
 assert(!accepts([...$valid, 'action' => 'rollback']));
 assert(!accepts([...$valid, 'action' => 'settle-rollback']));
+assert(!accepts([...$valid, 'action' => 'commit-initial']));
 assert(!accepts([...$valid, 'action' => 'activate-initial']));
 assert(!accepts([...$valid, 'request' => [...$valid['request'], 'path' => '/etc/shadow']]));
 assert(!accepts([...$valid, 'request' => [...$valid['request'], 'project_id' => '../caseRouter']]));
