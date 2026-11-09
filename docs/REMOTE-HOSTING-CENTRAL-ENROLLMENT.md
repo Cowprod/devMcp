@@ -53,6 +53,33 @@ laisse un état 006 connu, que le prochain appel peut achever sans fabriquer
 d'affectation. Après migration vérifiée, l'enrôlement garde sa transaction
 SQL séparée et conserve ses règles idempotentes existantes.
 
+### Variante sans recopier un identifiant machine (nouvelle option root)
+
+Le central fournit aussi `--bootstrap-name` pour une intervention root
+**unique sur TouchDeck**, après sauvegarde vérifiée et opt-in central déjà
+accordé. Le JSON de consentement sur stdin a les clés exactes dans cet ordre :
+
+```json
+{"machine_name":"case","approval":"MIGRATE_AND_ENROLL_CASE_HOSTING_LAB_BY_NAME","backup_confirmed":true}
+```
+
+Le nom `case` est **un exemple à remplacer par la valeur exacte**
+de `dm_machine.name`. La résolution est effectuée via une requête SQL
+paramétrée, sans recherche approximative, avec refus si la machine
+n'existe pas, n'est pas active, si son identifiant est invalide ou
+si elle n'a pas d'identité d'agent valide. Cette vérification précède
+**toute DDL 006/007**. Un nom inconnu ne crée pas de machine et ne
+provoque aucune migration. Le résultat rend le vrai `machine_id`,
+les trois `deployment_ids` et le `machine_name` utilisé : l'opérateur
+peut conserver les IDs pour le bootstrap local ultérieur.
+
+Le mode par ID `--bootstrap` demeure inchangé. Cette option n'accorde
+aucun rôle MCP, aucune exécution distante et n'active pas le drapeau
+`remote_hosting_queue_enabled`. Si la configuration centrale root-only
+n'est pas déjà approuvée, l'exécution est **refusée**. Rien n'est
+installé sur caseRouter par ce CLI ; les trois applications restent
+non attestées tant que les preuves de santé/commit root manquent.
+
 L'ancienne option `--apply` reste strictement inchangée : **elle n'exécute
 aucune DDL** et exige les migrations déjà appliquées. Cette nouvelle option
 réduit les prérequis centraux à une invocation, mais ne dispense jamais de
