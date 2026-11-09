@@ -31,6 +31,7 @@ jobs:
           php -l src/Project/SqlProjectConfiguration.php
           php -l src/Project/RemoteHostingUnitDraft.php
           php -l src/Project/RemoteHostingLocalPolicy.php
+          php -l src/Project/RemoteHostingPeerEvidence.php
           php -l src/Project/RemoteHostingBindEvidence.php
           php -l src/Project/RemoteHostingZeroTierMembership.php
           php -l src/Project/RemoteHostingZeroTierNetworkPin.php
@@ -62,6 +63,8 @@ jobs:
           php -l bin/devmcp-admin-projects-export
           php -l bin/devmcp-admin-android
           python3 -m py_compile bin/devmcp-serial-capture
+      - name: Verify cryptographically bound remote peer receipt
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-peer-evidence.php
       - name: Verify local hosting release swap contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-release-transaction-contract.php
       - name: Reject unprivileged central hosting enqueue
