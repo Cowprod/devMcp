@@ -104,6 +104,26 @@ corrigée implicitement et aucun service routeur n'est touché ;
 `/etc/devmcp/hosting-agent-policy.php` (0644) est publié **en dernier**,
 pour n'autoriser l'interrogation de la file qu'une fois l'IPC prêt.
 
+### Révision ultérieure du gateway privilégié (root seulement)
+
+L'auto-update **ne change jamais** le lien actif du gateway : elle dépose
+uniquement un nouveau bundle immuable inerte. Après une mise à jour de
+l'agent, le propriétaire root peut répéter explicitement l'installation
+contrôlée du gateway à partir du nouveau SHA, sans modifier les
+politiques de l'agent. `install-hosting-gateway.sh` vérifie le lien
+précédemment actif, refuse toute cible hors
+`hosting-bundles/<40 hex>`, tout ancien/nouveau bundle non root ou aux
+droits divergents, puis n'effectue la bascule du lien `hosting-active`
+**par renommage atomique qu'après** validation du socket et du timer
+hosting. L'ancienne cible reste sélectionnée si une vérification échoue.
+
+Une installation répétée au même SHA est idempotente. Cette possibilité
+de mise à niveau locale ne constitue **pas** une délégation de mise à
+jour automatique du code privilégié : une telle délégation demanderait
+un consentement root distinct. Les commandes de l'agent à distance ne
+peuvent pas appeler ce mécanisme, et aucun service applicatif n'est
+démarré pendant l'opération.
+
 Aucun des trois services applicatifs n'est démarré pendant ce bootstrap.
 En cas d'échec avant publication finale, les fichiers de politique
 éventuellement créés restent root-only pour inspection : pas de reset

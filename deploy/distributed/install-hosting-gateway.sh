@@ -73,16 +73,15 @@ if (!is_array($p) || !is_array($c) || ($p["version"] ?? null) !== 1 ||
 }
 php -l "$bundle/devmcp-hosting-root" >/dev/null
 php -l "$bundle/devmcp-hosting-gateway" >/dev/null
-[[ ! -L "$root/hosting-active" || "$(readlink "$root/hosting-active")" == "hosting-bundles/$revision" ]] || {
-  echo 'Conflicting existing hosting-active pointer' >&2; exit 1;
+# Local-root upgrade path: previous immutable pins are accepted only if
+# they still point to a trusted versioned bundle. Never rotate from the agent
+# updater, and never change a live gateway before all systemd checks succeed.
+active_helper="$checkout/deploy/distributed/promote-hosting-active.sh"
+[[ -f "$active_helper" && ! -L "$active_helper" ]] || {
+  echo 'Missing fixed local hosting gateway promotion helper' >&2; exit 1;
 }
-[[ ! -e "$root/hosting-active" || -L "$root/hosting-active" ]] || {
-  echo 'Hosting active path occupied' >&2; exit 1;
-}
-if [[ ! -L "$root/hosting-active" ]]; then
-  ln -s "hosting-bundles/$revision" "$root/.hosting-active-$revision"
-  mv -T -- "$root/.hosting-active-$revision" "$root/hosting-active"
-fi
+bash -n "$active_helper"
+/bin/bash "$active_helper" check "$revision"
 for filename in devmcp-hosting.socket devmcp-hosting@.service devmcp-hosting-watchdog.service devmcp-hosting-watchdog.timer; do
   destination="/etc/systemd/system/$filename"
   if [[ ! -e "$destination" ]]; then
@@ -97,4 +96,8 @@ systemctl is-active --quiet devmcp-hosting.socket
 # abandoned first-release lab service after a durable 15-minute timeout.
 systemctl enable --now devmcp-hosting-watchdog.timer
 systemctl is-enabled --quiet devmcp-hosting-watchdog.timer
+# Atomic upgrade occurs LAST, only on explicit local-root opt-in.
+# Subsequent socket activations resolve the new immutable gateway.
+# Existing active requests retain their already-open executable inode.
+/bin/bash "$active_helper" promote "$revision"
 echo "PASS: hosting IPC and pending-release watchdog opted in at $revision; zero applications activated"
