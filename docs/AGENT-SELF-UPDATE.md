@@ -71,6 +71,17 @@ assure les mises à jour du code de l'agent.
 
 **Auto-update du code ≠ approbation de nouvelles actions.**
 
+La mise à jour peut déposer un nouveau bundle `hosting-bundles/<SHA>` mais
+**n'installe pas le socket d'hébergement et ne promeut jamais
+`hosting-active`**. Même lorsqu'une politique locale d'hébergement est
+déjà active, l'installateur exige une approbation root distincte
+(`install-hosting-gateway.sh <SHA> --root-approved`). Le bootstrap
+root explicite `bootstrap-lab` fournit cet argument. Une ancienne
+version de l'updater passant seulement le SHA est refusée par
+l'installateur du nouveau checkout. Une mise à jour ordinaire de l'agent
+reste indépendante de ce refus ; aucune activation applicative n'en
+résulte.
+
 L'auto-update permet de distribuer des correctifs et de nouveaux types de
 diagnostic. Il ne modifie jamais
 `/etc/devmcp/remote-readonly-policy.php`, la configuration d'enrôlement

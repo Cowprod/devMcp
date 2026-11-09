@@ -117,7 +117,13 @@ pour n'autoriser l'interrogation de la file qu'une fois l'IPC prêt.
 ### Révision ultérieure du gateway privilégié (root seulement)
 
 L'auto-update **ne change jamais** le lien actif du gateway : elle dépose
-uniquement un nouveau bundle immuable inerte. Après une mise à jour de
+uniquement un nouveau bundle immuable inerte. L'installateur privilégié
+exige désormais deux arguments : le SHA immuable et `--root-approved`.
+Cela empêche même **l'ancienne version** de l'auto-updater (qui ne
+transmettait qu'un SHA) de promouvoir le gateway pendant sa mise à niveau ;
+cette ancienne invocation peut signaler une erreur transitoire après que
+l'agent a été mis à jour. Une relance du nouveau timer ne promeut rien.
+Après une mise à jour de
 l'agent, le propriétaire root peut répéter explicitement l'installation
 contrôlée du gateway à partir du nouveau SHA, sans modifier les
 politiques de l'agent. `install-hosting-gateway.sh` vérifie le lien

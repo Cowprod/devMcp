@@ -16,6 +16,7 @@ printf '%s\n' "$target" > "$tmp/state/installed-revision"
 sed -e "s|/var/lib/devmcp-agent-update|$tmp/state|g" \
   -e "s|/opt/devmcp-agent/bin|$tmp/agent-bin|g" \
   -e "s|/etc/devmcp/agent.php|$tmp/etc/agent.php|g" \
+  -e "s|/etc/devmcp/hosting-policy.json|$tmp/etc/hosting-policy.json|g" \
   -e "s|/run/lock/devmcp-agent-update.lock|$tmp/update.lock|g" \
   deploy/distributed/self-update-agent.sh > "$tmp/updater.sh"
 bash -n "$tmp/updater.sh"
@@ -93,10 +94,32 @@ STUB
 chmod +x "$tmp/fake/"*
 export PATH="$tmp/fake:$PATH"
 
+# Simulate an already opted-in hosting lab with a pinned privileged gateway.
+# Even an old self-updater must not promote it to the newly checked-out SHA.
+printf '%s\n' '{"enabled":true}' > "$tmp/etc/hosting-policy.json"
+export HOSTING_INSTALLER_LOG="$tmp/hosting-installer.log"
+cat > "$tmp/state/repository/deploy/distributed/install-hosting-gateway.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$HOSTING_INSTALLER_LOG"
+exit 0
+STUB
+chmod +x "$tmp/state/repository/deploy/distributed/install-hosting-gateway.sh"
+oldpin=2222222222222222222222222222222222222222
+ln -s "hosting-bundles/$oldpin" "$tmp/agent-bin/hosting-active"
+
+# The privileged installer must reject the legacy unattended SHA-only call.
+if bash deploy/distributed/install-hosting-gateway.sh "$target" > "$tmp/installer-denied" 2>&1; then
+  echo 'FAIL: privileged installer accepted legacy updater argv' >&2
+  exit 1
+fi
+grep -Fq -- '--root-approved' "$tmp/installer-denied"
+
 # 1) Idempotent on complete matching SHA.
 bash "$tmp/updater.sh" > "$tmp/out1"
 grep -Fq "Agent already current: $target" "$tmp/out1"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
+[[ ! -e "$HOSTING_INSTALLER_LOG" ]]
+[[ "$(readlink "$tmp/agent-bin/hosting-active")" == "hosting-bundles/$oldpin" ]]
 bundle="$tmp/agent-bin/hosting-bundles/$target"
 [[ -f "$bundle/Project/RemoteHostingUnitInstaller.php" ]]
 [[ -f "$bundle/devmcp-hosting-root" ]]
@@ -114,6 +137,16 @@ cmp -s "$tmp/state/repository/bin/remote-job-policy.php" "$tmp/agent-bin/remote-
 [[ "$(cat "$tmp/state/installed-revision")" == "$target" ]]
 grep -Fq "stop devmcp-agent.timer" "$SYSTEMCTL_LOG"
 grep -Fq "start devmcp-agent.service" "$SYSTEMCTL_LOG"
+[[ ! -e "$HOSTING_INSTALLER_LOG" ]]
+[[ "$(readlink "$tmp/agent-bin/hosting-active")" == "hosting-bundles/$oldpin" ]]
+
+# 2b) A new agent revision stages code but never activates privileged code.
+printf '%s\n' "$oldpin" > "$tmp/state/installed-revision"
+bash "$tmp/updater.sh" > "$tmp/out2b"
+grep -Fq "PASS: agent updated to $target" "$tmp/out2b"
+[[ "$(cat "$tmp/state/installed-revision")" == "$target" ]]
+[[ ! -e "$HOSTING_INSTALLER_LOG" ]]
+[[ "$(readlink "$tmp/agent-bin/hosting-active")" == "hosting-bundles/$oldpin" ]]
 
 # 3) Same SHA but existing binary drift: fail closed before stopping services.
 : > "$SYSTEMCTL_LOG"
