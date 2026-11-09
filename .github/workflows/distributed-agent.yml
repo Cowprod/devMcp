@@ -50,6 +50,10 @@ jobs:
         run: |
           bash -n tests/Distributed/hosting-gateway-promotion-smoke.sh
           bash tests/Distributed/hosting-gateway-promotion-smoke.sh
+      - name: Hosting queue opt-in PHP generation regression
+        run: |
+          bash -n tests/Distributed/hosting-agent-policy-format-smoke.sh
+          bash tests/Distributed/hosting-agent-policy-format-smoke.sh
       - name: Systemd unit validation
         run: |
           grep -Fx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' deploy/distributed/devmcp-agent.service
