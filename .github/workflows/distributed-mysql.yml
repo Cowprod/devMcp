@@ -65,6 +65,8 @@ jobs:
         run: |
           php -l bin/devmcp-hosting-lab-batch
           php -l src/Distributed/Admin/HostingLabBatchEnqueue.php
+          php -l bin/devmcp-hosting-lab-commit
+          php -l src/Distributed/Admin/HostingLabCommitEnqueue.php
           php -l tests/Distributed/HostingLabBatchEnqueueMySqlTest.php
           vendor/bin/phpunit tests/Distributed/HostingLabBatchEnqueueMySqlTest.php
 
