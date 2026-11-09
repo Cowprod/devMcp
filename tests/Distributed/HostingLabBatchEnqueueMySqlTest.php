@@ -130,6 +130,62 @@ final class HostingLabBatchEnqueueMySqlTest extends TestCase
         self::assertSame(6, $this->countJobs());
     }
 
+    public function testSuccessfulInitialActivationFencesAllThreeFutureInitialBatches(): void
+    {
+        HostingLabBatchEnqueue::enqueue($this->db, $this->machineId, $this->revision, 'prepare');
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'prepare-all'"
+        )->execute([$this->machineId]);
+        $activated = HostingLabBatchEnqueue::enqueue(
+            $this->db, $this->machineId, $this->revision, 'activate'
+        );
+
+        // Only one of the three runtimes acknowledged its first activation.
+        // The central must fail closed for the entire batch, not reissue
+        // another nonce for that runtime while its root-local state is unknown.
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'failed', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'activate-initial'"
+        )->execute([$this->machineId]);
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE id = ?"
+        )->execute([$activated['jobs']['static']['job_id']]);
+
+        foreach (['prepare', 'activate'] as $phase) {
+            try {
+                HostingLabBatchEnqueue::enqueue(
+                    $this->db, $this->machineId, $this->revision, $phase
+                );
+                self::fail('Repeated initial ' . $phase . ' accepted');
+            } catch (RuntimeException $expected) {
+                self::assertStringContainsString('root recovery required', $expected->getMessage());
+            }
+        }
+        self::assertSame(6, $this->countJobs());
+    }
+
+    public function testFailedInitialActivationStillAllowsFreshPreparation(): void
+    {
+        HostingLabBatchEnqueue::enqueue($this->db, $this->machineId, $this->revision, 'prepare');
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'prepare-all'"
+        )->execute([$this->machineId]);
+        HostingLabBatchEnqueue::enqueue($this->db, $this->machineId, $this->revision, 'activate');
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'failed', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'activate-initial'"
+        )->execute([$this->machineId]);
+
+        $retry = HostingLabBatchEnqueue::enqueue(
+            $this->db, $this->machineId, $this->revision, 'prepare'
+        );
+        self::assertSame(3, $retry['jobs_queued']);
+        self::assertSame(9, $this->countJobs());
+    }
+
     public function testRevocationAndWrongRevisionNeverPartiallyEnqueue(): void
     {
         $revoked = $this->deployments['php'];
