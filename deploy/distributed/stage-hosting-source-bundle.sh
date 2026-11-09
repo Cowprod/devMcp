@@ -19,13 +19,16 @@ classes=(
   RemoteHostingActivationRecoveryEvidence
   RemoteHostingBindEvidence
   RemoteHostingGitEvidence
+  RemoteHostingGitRefresh
   RemoteHostingGitProof
   RemoteHostingGitTreeEvidence
   RemoteHostingLocalPolicy
+  RemoteHostingLocalPreparation
   RemoteHostingPortEvidence
   RemoteHostingReleaseFilesystemEvidence
   RemoteHostingReleasePlan
   RemoteHostingReleaseStager
+  RemoteHostingReleaseSwap
   RemoteHostingUnitDraft
   RemoteHostingUnitInstaller
   RemoteHostingWorkspaceEvidence
