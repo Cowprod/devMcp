@@ -58,7 +58,17 @@ hosting_socket_acl_ready "$tmp/run" "$socket" "$uid" "$gid"
 # changing the active privileged bundle and enabling queue polling.
 acl_line="$(grep -nF 'hosting_socket_acl_ready /run/devmcp-hosting /run/devmcp-hosting/agent.sock 0' "$installer" | cut -d: -f1)"
 promote_line="$(grep -nF '/bin/bash "$active_helper" promote "$revision"' "$installer" | cut -d: -f1)"
-grant_line="$(grep -nF 'agent_policy=/etc/devmcp/hosting-agent-policy.php' "$installer" | cut -d: -f1)"
-[[ "$acl_line" =~ ^[0-9]+$ && "$promote_line" =~ ^[0-9]+$ && "$grant_line" =~ ^[0-9]+$
-   && "$acl_line" -lt "$promote_line" && "$promote_line" -lt "$grant_line" ]]
-echo 'PASS: hosting socket type, owner, group, mode and root directory gate polling opt-in'
+policy_line="$(grep -nF 'agent_policy=/etc/devmcp/hosting-agent-policy.php' "$installer" | cut -d: -f1)"
+render_line="$(grep -nF 'hosting_agent_policy_payload "$machine_id" > "$agent_tmp"' "$installer" | cut -d: -f1)"
+reject_line="$(grep -nF 'Existing agent hosting policy differs; refusing overwrite' "$installer" | cut -d: -f1)"
+unit_line="$(grep -nF 'systemctl enable --now devmcp-hosting.socket' "$installer" | cut -d: -f1)"
+publish_line="$(grep -nF 'mv -f "$agent_tmp" "$agent_policy"' "$installer" | cut -d: -f1)"
+# Reject an incompatible agent policy before changing units or the live gateway.
+# After the socket ACL is proven, promote the bundle and publish the grant last.
+for line in "$policy_line" "$render_line" "$reject_line" "$unit_line" "$acl_line" "$promote_line" "$publish_line"; do
+  [[ "$line" =~ ^[0-9]+$ ]] || { echo 'FAIL: missing unique gateway gate' >&2; exit 1; }
+done
+[[ "$policy_line" -lt "$render_line" && "$render_line" -lt "$reject_line"
+   && "$reject_line" -lt "$unit_line" && "$unit_line" -lt "$acl_line"
+   && "$acl_line" -lt "$promote_line" && "$promote_line" -lt "$publish_line" ]]
+echo 'PASS: polling policy preflight before side effects, socket ACL before gateway promotion, grant published last'
