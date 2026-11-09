@@ -18,7 +18,7 @@
 
 ## Conditions d'activation — NON satisfaites
 
-1. La migration SQL 006 doit être appliquée par une procédure centrale revue ;
+1. Les migrations SQL 006 **puis 007** doivent être appliquées par une procédure centrale revue ;
    l'existence du fichier SQL ne modifie pas la base distante.
 2. La configuration serveur `remote_hosting_queue_enabled=true` doit
    être approuvée et installée hors dépôt. Valeur absente = refus.
@@ -107,6 +107,11 @@ et vérifie sa liaison au job d'origine avant archivage SQL, sans
 le considérer comme une observation réseau indépendante : un ACK d'agent
 peut être mensonger. La **preuve de déploiement terrain** doit toujours
 être obtenue depuis le pair ZeroTier indépendant.
+
+La migration 007 étend l'ENUM SQL `action_name` : sans elle, le central
+refuserait l'insertion du job `commit-initial` même avec le code correct.
+Elle est ré-exécutable, mais n'est jamais appliquée automatiquement sur
+la base réelle. Le workflow MySQL la teste après 006 et une seconde fois.
 
 Ce changement ne crée **aucune autorisation**, ne modifie pas les
 actions `caserouter` en lecture seule, et n'installe ni socket, ni
