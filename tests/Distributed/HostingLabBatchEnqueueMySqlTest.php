@@ -6,6 +6,7 @@ namespace Cowprod\DevMcp\Tests\Distributed;
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchEnqueue;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabEnrollment;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabCommitEnqueue;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -156,5 +157,137 @@ final class HostingLabBatchEnqueueMySqlTest extends TestCase
         $stmt = $this->db->prepare('SELECT COUNT(*) FROM dm_remote_hosting_job WHERE machine_id = ?');
         $stmt->execute([$this->machineId]);
         return (int) $stmt->fetchColumn();
+    }
+
+    public function testSignedPeerCommitMustFollowSuccessfulMatchingActivation(): void
+    {
+        HostingLabBatchEnqueue::enqueue($this->db, $this->machineId, $this->revision, 'prepare');
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'prepare-all'"
+        )->execute([$this->machineId]);
+        $activated = HostingLabBatchEnqueue::enqueue(
+            $this->db, $this->machineId, $this->revision, 'activate'
+        );
+        $nonce = $activated['jobs']['node']['operation_id'];
+        $proof = $this->peerProof('node', $nonce);
+
+        // An activation acknowledgment still in the queue is not a health grant.
+        try {
+            HostingLabCommitEnqueue::enqueue($this->db, $proof);
+            self::fail('Signed claim accepted before agent activation');
+        } catch (RuntimeException $expected) {
+            self::assertStringContainsString('outstanding', $expected->getMessage());
+        }
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'activate-initial'"
+        )->execute([$this->machineId]);
+
+        $queued = HostingLabCommitEnqueue::enqueue($this->db, $proof);
+        self::assertSame('pending_root_peer_verification', $queued['phase']);
+        self::assertSame($nonce, $queued['operation_id']);
+        self::assertFalse($queued['peer_hmac_verified']);
+        self::assertFalse($queued['deployment_complete']);
+        self::assertSame(7, $this->countJobs());
+        $stored = $this->db->prepare(
+            'SELECT action_name, request_json FROM dm_remote_hosting_job WHERE id = ?'
+        );
+        $stored->execute([$queued['job_id']]);
+        $job = $stored->fetch(PDO::FETCH_ASSOC);
+        self::assertSame('commit-initial', $job['action_name']);
+        $request = json_decode($job['request_json'], true, 8, JSON_THROW_ON_ERROR);
+        self::assertSame($proof, $request['proof']);
+        self::assertSame($nonce, $request['operation_id']);
+
+        try {
+            HostingLabCommitEnqueue::enqueue($this->db, $proof);
+            self::fail('Duplicate pending commit job accepted');
+        } catch (RuntimeException $expected) {
+            self::assertStringContainsString('outstanding', $expected->getMessage());
+        }
+        self::assertSame(7, $this->countJobs());
+    }
+
+    public function testSignedPeerCommitRejectsReplaysStaleClaimsAndCrossRuntime(): void
+    {
+        HostingLabBatchEnqueue::enqueue($this->db, $this->machineId, $this->revision, 'prepare');
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'prepare-all'"
+        )->execute([$this->machineId]);
+        $activated = HostingLabBatchEnqueue::enqueue(
+            $this->db, $this->machineId, $this->revision, 'activate'
+        );
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE machine_id = ? AND action_name = 'activate-initial'"
+        )->execute([$this->machineId]);
+        $proof = $this->peerProof('php', $activated['jobs']['php']['operation_id']);
+
+        foreach ([
+            array_merge($proof, ['revision' => str_repeat('b', 40)]),
+            array_merge($proof, ['runtime' => 'node']),
+            array_merge($proof, ['observed_at' => time() - 121]),
+            array_merge($proof, ['websocket_verified' => true]),
+            array_merge($proof, ['operation_id' => str_repeat('e', 32)]),
+        ] as $invalid) {
+            try {
+                HostingLabCommitEnqueue::enqueue($this->db, $invalid);
+                self::fail('Invalid signed claim accepted');
+            } catch (\InvalidArgumentException|RuntimeException $expected) {
+                // All of these failures must leave the queue unchanged.
+            }
+            self::assertSame(6, $this->countJobs());
+        }
+
+        $this->db->prepare('UPDATE dm_deployment SET enabled = 0 WHERE id = ?')
+            ->execute([$this->deployments['php']]);
+        try {
+            HostingLabCommitEnqueue::enqueue($this->db, $proof);
+            self::fail('Revoked commit grant accepted');
+        } catch (RuntimeException $expected) {
+            self::assertStringContainsString('grant mismatch', $expected->getMessage());
+        }
+        self::assertSame(6, $this->countJobs());
+        $this->db->prepare('UPDATE dm_deployment SET enabled = 1 WHERE id = ?')
+            ->execute([$this->deployments['php']]);
+
+        $queued = HostingLabCommitEnqueue::enqueue($this->db, $proof);
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded', finished_at = UTC_TIMESTAMP(6) "
+            . "WHERE id = ?"
+        )->execute([$queued['job_id']]);
+        try {
+            HostingLabCommitEnqueue::enqueue($this->db, $proof);
+            self::fail('Already committed initial release was replayed');
+        } catch (RuntimeException $expected) {
+            self::assertStringContainsString('already recorded', $expected->getMessage());
+        }
+        self::assertSame(7, $this->countJobs());
+    }
+
+    /** @return array<string,mixed> */
+    private function peerProof(string $runtime, string $operationId): array
+    {
+        $ports = ['static' => 17601, 'php' => 17602, 'node' => 17603];
+        $projects = ['static' => 'lab-static', 'php' => 'lab-php', 'node' => 'lab-node'];
+        return [
+            'version' => 1,
+            'operation_id' => $operationId,
+            'deployment_id' => $this->deployments[$runtime],
+            'machine_id' => $this->machineId,
+            'project_id' => $projects[$runtime],
+            'revision' => $this->revision,
+            'runtime' => $runtime,
+            'target_ip' => '10.77.10.2',
+            'source_peer_ip' => '10.77.10.3',
+            'port' => $ports[$runtime],
+            'observed_at' => time(),
+            'http_verified' => true,
+            'websocket_verified' => $runtime === 'node',
+            // Syntactic fixture only: HMAC validation is exclusively root-local.
+            'signature' => str_repeat('f', 64),
+        ];
     }
 }

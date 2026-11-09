@@ -62,3 +62,46 @@ commits root. Les upgrades restent explicitement hors périmètre de cette
 commande (premier déploiement seulement). Aucune action sur les interfaces
 WAN/LAN, routes, NAT, pare-feu, services critiques ou checkout
 `Cowprod/caseRouter` n'est permise.
+
+## Validation signée et commit par runtime (phase suivante)
+
+Une fois les trois jobs `activate-initial` **confirmés succeeded** par
+le central (cela ne prouve pas encore le fonctionnement des sites),
+exécuter `deploy/distributed/hosting-peer-probe.py` depuis un **autre
+appareil ZeroTier** pour chaque runtime, avec la clé HMAC enregistrée
+localement sur ce pair (fichier 0600 de 32 octets). La sonde valide le
+marqueur HTTP, la source IP réellement liée et, pour Node, le handshake
+et l'écho WebSocket. Elle produit un objet JSON signé avec le
+`operation_id` exact de l'activation correspondante.
+
+La nouvelle commande centrale root-only est
+`bin/devmcp-hosting-lab-commit` (sans argument, approbation JSON
+sur stdin, une preuve par invocation) :
+
+```json
+{"approval":"COMMIT_CASE_HOSTING_LAB","proof":{"version":1,"operation_id":"<nonce 32 hex>","deployment_id":"<id 32 hex>","machine_id":"<id 32 hex>","project_id":"lab-static","revision":"<SHA 40 hex>","runtime":"static","target_ip":"<IPv4 ZeroTier caseRouter>","source_peer_ip":"<IPv4 ZeroTier du second pair>","port":17601,"observed_at":0,"http_verified":true,"websocket_verified":false,"signature":"<HMAC 64 hex>"}}
+```
+
+L'exemple est **un schéma**, pas une preuve exécutable (`observed_at=0`
+sera refusé). Il faut envelopper **sans altérer** la sortie JSON réelle
+de la sonde dans `proof`, puis l'envoyer immédiatement : le central
+refuse une observation âgée de plus de 30 secondes, et l'agent devra
+consommer le job sous 120 secondes. Les trois engagements sont
+**intentionnellement individuels** : l'agent ne poll qu'un job toutes
+les 60 secondes ; mettre trois preuves en file simultanément les
+laisserait expirer avant l'authentification root. Répéter la sonde après
+chaque commit reçu, et ne considérer un site déployé qu'après retour
+succeeded de son `commit-initial` et preuve externe correspondante.
+
+La classe `HostingLabCommitEnqueue` verrouille la machine et le grant
+SQL dans une transaction, exige l'enrôlement actif, un
+`activate-initial` **succeeded** avec nonce=ID du job le plus récent,
+une release et un runtime identiques, aucun job concurrent, puis met
+en file exactement un `commit-initial`. Elle interdit le rejeu après
+commit central réussi ; un échec/une expiration exige une **nouvelle**
+preuve fraîche. Le central ne possède **pas** la clé HMAC et retourne
+`peer_hmac_verified=false`, `deployment_complete=false`.
+L'authentification réelle et la décision durable de commit restent
+uniquement dans l'exécuteur root local de caseRouter ; si le commit
+n'aboutit pas avant le watchdog, l'activation initiale est annulée.
+Aucun rôle MCP, permission d'agent ou service critique n'est modifié.
