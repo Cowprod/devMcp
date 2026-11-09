@@ -24,13 +24,55 @@ function remoteHostingOptIn(string $machineId): bool
         && hash_equals($machineId, $config['machine_id']);
 }
 
+/**
+ * Verify the actual systemd-created hosting socket and every traversed
+ * directory. The ordinary read-only agent must never send a privileged job
+ * to a spoofed socket or accept its forged completion receipt.
+ *
+ * @param array<string,mixed> $run
+ * @param array<string,mixed> $dir
+ * @param array<string,mixed> $socket
+ * @param array<string,mixed>|false $group
+ */
+function remoteHostingTrustedSocketMetadata(
+    array $run, array $dir, array $socket, array|false $group
+): bool {
+    if ($group === false || !is_int($group['gid'] ?? null)) {
+        return false;
+    }
+    foreach ([$run, $dir] as $directory) {
+        if (($directory['mode'] & 0170000) !== 0040000
+            || ($directory['mode'] & 0022) !== 0
+            || ($directory['uid'] ?? null) !== 0) {
+            return false;
+        }
+    }
+    return ($socket['mode'] & 0170000) === 0140000
+        && ($socket['mode'] & 07777) === 0660
+        && ($socket['uid'] ?? null) === 0
+        && ($socket['gid'] ?? null) === $group['gid'];
+}
+
+/** Refuse any untrusted /run ancestor, socket or unexpected socket owner. */
+function remoteHostingSocketIdentity(): ?array
+{
+    $root = @lstat('/run');
+    $dir = @lstat('/run/devmcp-hosting');
+    $socket = @lstat('/run/devmcp-hosting/agent.sock');
+    $group = function_exists('posix_getgrnam') ? posix_getgrnam('devmcp-agent') : false;
+    if (!is_array($root) || !is_array($dir) || !is_array($socket)
+        || !remoteHostingTrustedSocketMetadata($root, $dir, $socket, $group)) {
+        return null;
+    }
+    return ['dev' => $socket['dev'], 'ino' => $socket['ino']];
+}
+
 /** @return array<string,mixed> */
 function remoteHostingSocketCall(array $job): array
 {
     $path = '/run/devmcp-hosting/agent.sock';
-    $stat = @lstat($path);
-    if (!is_array($stat) || ($stat['mode'] & 0170000) !== 0140000
-        || ($stat['mode'] & 0007) !== 0) {
+    $identity = remoteHostingSocketIdentity();
+    if ($identity === null) {
         return ['ok' => false, 'receipt' => ['deployment_complete' => false,
             'peer_health_verified' => false, 'error' => 'local_socket_unavailable']];
     }
@@ -47,6 +89,12 @@ function remoteHostingSocketCall(array $job): array
             'peer_health_verified' => false, 'error' => 'local_socket_denied']];
     }
     try {
+        // Identity check after connect detects replacement of the pathname
+        // between the initial stat and connect. Parent directories are
+        // immutable to the agent, so only root can stage this socket.
+        if (remoteHostingSocketIdentity() !== $identity) {
+            throw new RuntimeException('Hosting socket identity changed');
+        }
         stream_set_timeout($socket, 58);
         for ($offset = 0; $offset < strlen($message); $offset += $written) {
             $written = fwrite($socket, substr($message, $offset));
