@@ -20,6 +20,7 @@ classes=(
   RemoteHostingBindEvidence
   RemoteHostingGitEvidence
   RemoteHostingGitRefresh
+  RemoteHostingInitialActivation
   RemoteHostingGitProof
   RemoteHostingGitTreeEvidence
   RemoteHostingLocalPolicy
@@ -29,6 +30,7 @@ classes=(
   RemoteHostingReleasePlan
   RemoteHostingReleaseStager
   RemoteHostingReleaseSwap
+  RemoteHostingSystemdControl
   RemoteHostingUnitDraft
   RemoteHostingUnitInstaller
   RemoteHostingWorkspaceEvidence
