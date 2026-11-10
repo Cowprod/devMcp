@@ -67,8 +67,9 @@ final class RemoteHostingBindEvidence
                     continue;
                 }
                 // An address on a down interface is not a valid bind target.
-                $flags = $details['flags'] ?? null;
-                if (!is_int($flags) || ($flags & 1) !== 1) {
+                // net_get_interfaces() reports interface state in `up`.
+                // Its flags belong to individual unicast entries on Linux.
+                if (($details['up'] ?? null) !== true) {
                     throw new InvalidArgumentException('Bind address belongs to a down interface');
                 }
                 $owners[$name] = true;
