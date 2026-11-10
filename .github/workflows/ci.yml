@@ -101,6 +101,7 @@ jobs:
           ! php bin/devmcp-hosting-central-submit arbitrary aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           bash -n deploy/distributed/install-hosting-central-operator.sh
           ! bash deploy/distributed/install-hosting-central-operator.sh
+          bash tests/distributed/hosting-central-bootstrap-smoke.sh
       - name: Reject unprivileged hosting executor invocation
         run: |
           ! php bin/devmcp-hosting-root prepare </dev/null

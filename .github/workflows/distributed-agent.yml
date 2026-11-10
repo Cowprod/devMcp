@@ -42,6 +42,8 @@ jobs:
           shellcheck --severity=error deploy/distributed/promote-hosting-active.sh
           shellcheck --severity=error deploy/distributed/stage-hosting-source-bundle.sh
           shellcheck --severity=error deploy/distributed/install-agent-self-update.sh
+          bash -n deploy/distributed/bootstrap-hosting-central.sh
+          shellcheck --severity=error deploy/distributed/bootstrap-hosting-central.sh
       - name: Self-update same-revision integration smoke
         run: |
           bash -n tests/Distributed/self-update-agent-smoke.sh
