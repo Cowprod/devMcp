@@ -31,6 +31,11 @@ return [
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit', 'inspect'],
         'cwd' => '.', 'timeout' => 35, 'target' => 'local',
     ],
+    'hosting.lab.verify' => [
+        'description' => 'Vérifie HTTP/WebSocket depuis le pair ZeroTier central et confirme les trois déploiements. Répéter après les jobs de commit pour obtenir deployment_complete=true.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit', 'verify'],
+        'cwd' => '.', 'timeout' => 35, 'target' => 'local',
+    ],
     'hosting.lab.prepare' => [
         'description' => 'Enfile atomiquement les trois préparations caseRouter via le socket local explicitement autorisé.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit',
