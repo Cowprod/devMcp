@@ -78,7 +78,8 @@ final class HostingLabCentralInspection
             . 'WHERE d.machine_id = ? AND d.project_id = ?'
         );
         $last = $schemaState === 'ready' ? $db->prepare(
-            'SELECT action_name, state FROM dm_remote_hosting_job '
+            'SELECT action_name, state, created_at, expires_at, claimed_at, finished_at, '
+            . '(expires_at <= UTC_TIMESTAMP(6)) AS deadline_elapsed FROM dm_remote_hosting_job '
             . 'WHERE machine_id = ? AND deployment_id = ? '
             . 'ORDER BY created_at DESC, id DESC LIMIT 1'
         ) : null;
@@ -100,9 +101,29 @@ final class HostingLabCentralInspection
                 $last->execute([$machineId, $row['id']]);
                 $job = $last->fetch(PDO::FETCH_ASSOC);
                 if (is_array($job)) {
+                    // SQL UTC_TIMESTAMP(6) is authoritative for deadlines:
+                    // PHP and the operator's laptop may have different clocks.
+                    // A claimed job is NEVER assumed safe to retry or complete.
+                    $state = (string) $job['state'];
+                    $claimed = $job['claimed_at'] !== null;
+                    $deadlineElapsed = (int) $job['deadline_elapsed'] === 1;
+                    $deliveryState = match (true) {
+                        $state === 'queued' && $deadlineElapsed => 'expired_unclaimed',
+                        $state === 'queued' => 'awaiting_agent',
+                        $state === 'claimed' && $deadlineElapsed => 'claimed_unresolved_after_deadline',
+                        $state === 'claimed' => 'claimed_unresolved',
+                        $state === 'expired' && !$claimed => 'expired_unclaimed',
+                        default => 'terminal',
+                    };
                     $latest = [
                         'action' => $job['action_name'],
-                        'state' => $job['state'],
+                        'state' => $state,
+                        'delivery_state' => $deliveryState,
+                        'created_at' => $job['created_at'],
+                        'expires_at' => $job['expires_at'],
+                        'claimed_at' => $job['claimed_at'],
+                        'finished_at' => $job['finished_at'],
+                        'deadline_elapsed' => $deadlineElapsed,
                     ];
                 }
             }

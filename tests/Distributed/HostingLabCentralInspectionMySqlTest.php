@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Tests\Distributed;
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabCentralInspection;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchEnqueue;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabEnrollment;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use PDO;
@@ -128,5 +129,64 @@ final class HostingLabCentralInspectionMySqlTest extends TestCase
         self::assertFalse($revoked['central_queue_prerequisites_met']);
         self::assertContains('active_agent_identity_missing', $revoked['blockers']);
         self::assertFalse($revoked['deployment_complete']);
+    }
+
+    public function testDeliveryStatesExplainUnclaimedExpiryWithoutAuthorizingRetry(): void
+    {
+        HostingLabEnrollment::enroll($this->db, $this->machineId);
+        $batch = HostingLabBatchEnqueue::enqueue(
+            $this->db, $this->machineId, str_repeat('f', 40), 'prepare'
+        );
+
+        $queued = HostingLabCentralInspection::inspect($this->db, $this->machineName, true);
+        self::assertTrue($queued['central_queue_prerequisites_met']);
+        self::assertSame([], $queued['blockers']);
+        foreach (['static', 'php', 'node'] as $runtime) {
+            $latest = $queued['deployments'][$runtime]['latest_central_job'];
+            self::assertSame('prepare-all', $latest['action']);
+            self::assertSame('queued', $latest['state']);
+            self::assertSame('awaiting_agent', $latest['delivery_state']);
+            self::assertNull($latest['claimed_at']);
+            self::assertNull($latest['finished_at']);
+            self::assertFalse($latest['deadline_elapsed']);
+            self::assertNotEmpty($latest['created_at']);
+            self::assertNotEmpty($latest['expires_at']);
+        }
+
+        // SQL clock is authoritative, not the inspector host's wall clock.
+        $this->db->prepare(
+            'UPDATE dm_remote_hosting_job SET expires_at = '
+            . 'DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 SECOND) WHERE id = ?'
+        )->execute([$batch['jobs']['static']['job_id']]);
+        $expired = HostingLabCentralInspection::inspect($this->db, $this->machineName, true);
+        self::assertSame('expired_unclaimed',
+            $expired['deployments']['static']['latest_central_job']['delivery_state']);
+        self::assertSame('queued',
+            $expired['deployments']['static']['latest_central_job']['state']);
+        self::assertTrue(
+            $expired['deployments']['static']['latest_central_job']['deadline_elapsed']);
+        self::assertTrue($expired['central_queue_prerequisites_met']);
+
+        // A claimed job may have reached root: never report it as retryable.
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'claimed',
+             claimed_at = UTC_TIMESTAMP(6), expires_at =
+             DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 1 SECOND) WHERE id = ?"
+        )->execute([$batch['jobs']['php']['job_id']]);
+        $claimed = HostingLabCentralInspection::inspect($this->db, $this->machineName, true);
+        self::assertSame('claimed_unresolved_after_deadline',
+            $claimed['deployments']['php']['latest_central_job']['delivery_state']);
+        self::assertNotNull($claimed['deployments']['php']['latest_central_job']['claimed_at']);
+
+        $this->db->prepare(
+            "UPDATE dm_remote_hosting_job SET state = 'succeeded',
+             claimed_at = UTC_TIMESTAMP(6), finished_at = UTC_TIMESTAMP(6) WHERE id = ?"
+        )->execute([$batch['jobs']['node']['job_id']]);
+        $finished = HostingLabCentralInspection::inspect($this->db, $this->machineName, true);
+        self::assertSame('terminal',
+            $finished['deployments']['node']['latest_central_job']['delivery_state']);
+        // SQL acknowledgement is never proof of a live or peer-verified service.
+        self::assertFalse($finished['deployment_complete']);
+        self::assertFalse($finished['peer_health_verified']);
     }
 }
