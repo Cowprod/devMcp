@@ -10,6 +10,7 @@ declare(strict_types=1);
  */
 use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchConsent;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabBatchEnqueue;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabCentralInspection;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabMachineResolver;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabOperatorRequest;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabSchemaMigration;
@@ -46,6 +47,7 @@ function hostingOperatorMain(): int
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabSchemaMigration.php',
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabMachineResolver.php',
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabBatchEnqueue.php',
+        dirname(__DIR__) . '/src/Distributed/Admin/HostingLabCentralInspection.php',
         dirname(__DIR__) . '/src/Distributed/Registry/DatabaseConnection.php',
     ];
     foreach ($files as $path) {
@@ -76,9 +78,13 @@ function hostingOperatorMain(): int
         (string) ($config['writer_password'] ?? '')
     );
     $machineId = HostingLabMachineResolver::resolve($db, $request['machine_name']);
-    $result = HostingLabBatchEnqueue::enqueue(
-        $db, $machineId, $request['revision'], $request['phase']
-    );
+    $result = $request['phase'] === 'inspect'
+        ? ['phase' => 'inspect'] + HostingLabCentralInspection::inspect(
+            $db, $request['machine_name'], true
+        )
+        : HostingLabBatchEnqueue::enqueue(
+            $db, $machineId, $request['revision'], $request['phase']
+        );
     echo json_encode([
         'version' => 1, 'ok' => true, 'result' => $result,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
