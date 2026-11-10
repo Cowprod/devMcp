@@ -94,8 +94,15 @@ ou incohérence d'adresse interdit la signature. Aucune route n'est modifiée.
 Cette contrainte exclut temporairement l'exécution de la sonde signée
 depuis un Mac : y utiliser les contrôles manuels HTTP/WebSocket sans les
 présenter comme attestation HMAC, ou employer un pair Linux ZeroTier
-approuvé. Le HMAC reçu reste soumis aux vérifications de release et au
-commit local indépendant ; la sonde ne déclenche jamais l'activation.
+approuvé. Les adresses source et cible sont désormais strictement limitées
+aux trois blocs **RFC1918** (10/8, 172.16/12, 192.168/16), comme dans le
+vérificateur PHP local : `ipaddress.is_private` de Python n'est pas
+équivalent et inclut d'autres plages. Si iproute2 retourne un `src` ou
+`prefsrc` qui diffère de l'adresse du pair explicitement demandée, la sonde
+refuse aussi de signer. Ces deux validations précèdent le premier accès
+HTTP/WebSocket ; elles n'ouvrent aucun port et ne modifient aucune route.
+Le HMAC reçu reste soumis aux vérifications de release et au commit local
+indépendant ; la sonde ne déclenche jamais l'activation.
 
 ## Validation de code
 

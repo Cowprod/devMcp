@@ -168,6 +168,35 @@ class PeerProbeContract(unittest.TestCase):
               self.assertRaises(RuntimeError)):
             probe.assert_zerotier_route(TARGET, PEER)
 
+    def test_rfc1918_policy_matches_local_php_before_network(self):
+        # Python ipaddress.is_private includes non-RFC1918 ranges; the PHP
+        # verifier rejects them even when a ZeroTier-looking route exists.
+        for address in ("10.2.3.4", "172.16.0.1", "172.31.255.254",
+                        "192.168.2.15"):
+            self.assertTrue(probe.is_rfc1918_ipv4(probe.ipaddress.ip_address(address)))
+        for address in ("198.18.0.1", "192.0.2.5", "203.0.113.6",
+                        "100.64.0.1", "169.254.10.1", "127.0.0.1", "8.8.8.8"):
+            self.assertFalse(probe.is_rfc1918_ipv4(probe.ipaddress.ip_address(address)))
+            for target, peer in ((address, PEER), (TARGET, address)):
+                with self.subTest(target=target, peer=peer):
+                    with (mock.patch.object(probe, "assert_zerotier_route") as route,
+                          mock.patch.object(probe.socket, "socket") as network,
+                          self.assertRaises(ValueError)):
+                        probe.probe("static", target, 17601, peer)
+                    route.assert_not_called()
+                    network.assert_not_called()
+        self.assertFalse(probe.is_rfc1918_ipv4(probe.ipaddress.ip_address("::1")))
+
+    def test_route_source_mismatch_is_rejected_before_network(self):
+        for source_field in ("src", "prefsrc"):
+            with self.subTest(field=source_field):
+                fake_route = [{"dev": "ztabcd1234", source_field: "192.168.194.187"}]
+                with (mock.patch.object(probe.subprocess, "run",
+                                        return_value=mock.Mock(stdout=json.dumps(fake_route))) as ip,
+                      self.assertRaises(RuntimeError)):
+                    probe.assert_zerotier_route(TARGET, PEER)
+                ip.assert_called_once()
+
     def test_wrong_route_rejected_before_any_health_request(self):
         with (mock.patch.object(probe, "assert_zerotier_route",
                                 side_effect=RuntimeError("LAN only")) as route,
