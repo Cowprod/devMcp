@@ -9,7 +9,7 @@ if (!is_string($source)) {
     exit(1);
 }
 $start = strpos($source, '$post = static function (string $endpoint, string $body)');
-$end = strpos($source, '$poll = $post(', $start === false ? 0 : $start);
+$end = strpos($source, '// The hosting queue is an independently opted-in surface.', $start === false ? 0 : $start);
 if ($start === false || $end === false) {
     fwrite(STDERR, "Remote polling transport not found\n");
     exit(1);
@@ -47,6 +47,23 @@ if (!is_string($log) || !str_contains($log, 'http=%d; curl_errno=%d')
     exit(1);
 }
 $afterPoll = substr($source, $end);
+// A privileged hosting claim must not wait for optional preview or workspace
+// reports: those can each consume network timeouts before the ten-minute TTL.
+$pingAccepted = strpos($source, 'central ping accepted (protocol=1)');
+$hostingPoll = strpos($source, 'remoteHostingPollOnce($post, $config[\'machine_id\'])');
+$preview = strpos($source, '$previewRequests = $data[\'preview_port_requests\']');
+$workspaces = strpos($source, '$deployments = $data[\'deployments\']');
+if ($pingAccepted === false || $hostingPoll === false || $preview === false
+    || $workspaces === false || !($pingAccepted < $hostingPoll
+    && $hostingPoll < $preview && $preview < $workspaces)) {
+    fwrite(STDERR, "Hosting poll must precede optional network work after authenticated ping\\n");
+    exit(1);
+}
+if (!str_contains($transport, "str_starts_with(\\$endpoint, '/v1/agent/hosting-')")
+    || !str_contains($transport, "'/v1/agent/hosting-poll'")) {
+    fwrite(STDERR, "Hosting poll diagnostics must be labeled independently\\n");
+    exit(1);
+}
 if (!str_contains($afterPoll, 'invalid remote read-only poll protocol')) {
     fwrite(STDERR, "Missing invalid poll protocol diagnostic\n");
     exit(1);
