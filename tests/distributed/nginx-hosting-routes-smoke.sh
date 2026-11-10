@@ -56,4 +56,13 @@ grep -Fq 'ip -o -4 addr show' "$installer"
 grep -Fq 'flock -n 9' "$installer"
 grep -Fq 'Untrusted central lock file' "$installer"
 grep -Fq 'cmp -s -- "$backup" "$conf"' "$installer"
-printf 'PASS: private hosting routes, idempotence, fail-closed layout and installer syntax\n'
+# Before the root installer requires PHP config, the *full* config path must
+# pass the same ownership, write-bit, hardlink and size restrictions as the
+# central root-only batch tools. Checking only the UID is insufficient.
+grep -Fq 'for trusted_dir in /etc /etc/devmcp-admin' "$installer"
+grep -Fq '8#$dir_mode & 0022' "$installer"
+grep -Fq '8#$config_mode & 0022' "$installer"
+grep -Fq 'config_links" == 1' "$installer"
+grep -Fq 'config_size" -le 65536' "$installer"
+grep -Fq 'Untrusted central configuration file permissions' "$installer"
+printf 'PASS: private hosting routes, idempotence, root config trust and installer syntax\n'
