@@ -40,8 +40,8 @@ final class RemoteHostingZeroTierNetworkPinTest extends TestCase
     private static function membership(array $plan): array
     {
         $kernel = RemoteHostingBindEvidence::check($plan, [
-            'enp1s0' => ['flags' => 1, 'unicast' => [['address' => '10.52.10.1']]],
-            'zt12345678' => ['flags' => 1, 'unicast' => [['address' => '192.168.194.189']]],
+            'enp1s0' => ['up' => true, 'unicast' => [['address' => '10.52.10.1']]],
+            'zt12345678' => ['up' => true, 'unicast' => [['address' => '192.168.194.189']]],
         ]);
         return RemoteHostingZeroTierMembership::check($plan, $kernel, [[
             'id' => '8056c2e21c000001',
