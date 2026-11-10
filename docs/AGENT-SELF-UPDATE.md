@@ -15,6 +15,13 @@ caseRouter.
 - `devmcp-agent-update.timer` vérifie le dépôt `Cowprod/devMcp`, branche
   `main`, au démarrage puis toutes les 6 heures, avec délai aléatoire.
 - Une seule mise à jour à la fois est autorisée (verrou `flock`).
+  Le verrou persistant `/run/lock/devmcp-agent-update.lock` doit être un
+  fichier régulier `root:root` en mode `0600`, avec un seul lien physique,
+  dans un répertoire réel appartenant à root. Un lien symbolique, un lien
+  physique supplémentaire ou des permissions élargies bloquent l'updater
+  **avant tout fetch et toute ouverture en écriture** ; le verrou n'est
+  jamais tronqué. Le refus n'autorise pas de réparation automatique des
+  permissions et ne modifie pas l'identité de l'agent.
 - Le dépôt Git de mise à jour, les sauvegardes temporaires et le SHA de
   version sont dans `/var/lib/devmcp-agent-update`, **root-only**.
   Ne jamais stocker ces données dans `/var/lib/devmcp-agent`, modifiable
