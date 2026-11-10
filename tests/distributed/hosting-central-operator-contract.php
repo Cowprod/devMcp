@@ -210,4 +210,5 @@ if (!str_contains($installer, 'trusted_file "$target" && cmp -s "$prefix/$name" 
     || !str_contains($installer, 'if [[ "$was_enabled" -eq 0 ]]')) {
     throw new RuntimeException('Central operator rollback could destroy existing units');
 }
+require __DIR__ . '/hosting-central-inspection-fence-smoke.php';
 echo "PASS: central three-demo root socket protocol, read-only inspection, consent, opt-in and rollback contracts\n";

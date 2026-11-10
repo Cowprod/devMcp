@@ -45,6 +45,10 @@ final class HostingLabCentralInspection
                 'machine_found' => false,
                 'blockers' => [count($matches) > 1 ? 'machine_name_ambiguous' : 'machine_not_found'],
                 'central_queue_prerequisites_met' => false,
+                'central_queue_write_fences_clear' => false,
+                'central_queue_write_fence_blockers' => [
+                    count($matches) > 1 ? 'machine_name_ambiguous' : 'machine_not_found',
+                ],
                 'deployment_complete' => false,
             ];
         }
@@ -83,6 +87,20 @@ final class HostingLabCentralInspection
             . 'WHERE machine_id = ? AND deployment_id = ? '
             . 'ORDER BY created_at DESC, id DESC LIMIT 1'
         ) : null;
+        // Mirror the root-only batch enqueue fences with read-only queries.
+        // Do not infer safety from the *latest* job alone: an older claimed
+        // operation remains unresolved even after a newer terminal record.
+        $outstanding = $schemaState === 'ready' ? $db->prepare(
+            "SELECT id FROM dm_remote_hosting_job WHERE deployment_id = ? "
+            . "AND (state = 'claimed' OR (state = 'queued' "
+            . 'AND expires_at > UTC_TIMESTAMP(6))) LIMIT 1'
+        ) : null;
+        $activated = $schemaState === 'ready' ? $db->prepare(
+            "SELECT id FROM dm_remote_hosting_job WHERE deployment_id = ? "
+            . "AND action_name IN ('activate-initial', 'commit-initial') "
+            . "AND state = 'succeeded' LIMIT 1"
+        ) : null;
+        $writeFenceBlockers = [];
         $deployments = [];
         foreach (self::DEMOS as $runtime => $spec) {
             $find->execute([$machineId, $spec['project']]);
@@ -127,12 +145,31 @@ final class HostingLabCentralInspection
                     ];
                 }
             }
+            // These are informational snapshots, not an enqueue grant.
+            // The transactional writer independently checks the same fences
+            // again under row locks before inserting any of the three jobs.
+            $hasOutstanding = null;
+            $hasSuccessfulInitial = null;
+            if ($valid && $outstanding !== null && $activated !== null) {
+                $outstanding->execute([$row['id']]);
+                $hasOutstanding = $outstanding->fetchColumn() !== false;
+                $activated->execute([$row['id']]);
+                $hasSuccessfulInitial = $activated->fetchColumn() !== false;
+                if ($hasOutstanding) {
+                    $writeFenceBlockers[] = 'outstanding_central_job_' . $runtime;
+                }
+                if ($hasSuccessfulInitial) {
+                    $writeFenceBlockers[] = 'initial_activation_already_succeeded_' . $runtime;
+                }
+            }
             $deployments[$runtime] = [
                 'project_id' => $spec['project'],
                 'deployment_id' => $valid ? $row['id'] : null,
                 'port' => $spec['port'],
                 'grant_valid' => $valid,
                 'latest_central_job' => $latest,
+                'outstanding_central_job' => $hasOutstanding,
+                'initial_activation_already_succeeded' => $hasSuccessfulInitial,
                 'peer_health_verified' => false,
             ];
         }
@@ -148,6 +185,8 @@ final class HostingLabCentralInspection
             'deployments' => $deployments,
             'blockers' => $blockers,
             'central_queue_prerequisites_met' => $blockers === [],
+            'central_queue_write_fences_clear' => $blockers === [] && $writeFenceBlockers === [],
+            'central_queue_write_fence_blockers' => array_merge($blockers, $writeFenceBlockers),
             'local_root_policy_verified' => false,
             'peer_health_verified' => false,
             'deployment_complete' => false,
