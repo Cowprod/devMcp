@@ -55,10 +55,35 @@ assert(hostingQueuePollReply([...$reply, 'jobs' => [[...$reply['jobs'][0], 'work
 assert(hostingQueuePollReply([...$reply, 'jobs' => [[...$reply['jobs'][0], 'action' => 'workspace.read']]], $machine) === null);
 
 require_once dirname(__DIR__, 2) . '/bin/remote-hosting-queue.php';
+// The root-owned PHP opt-in is unsafe if a non-root actor can replace it
+// through a writable parent directory. Check every ancestor and inode.
+$trustedDir = ['mode' => 0040755, 'uid' => 0];
+$trustedPolicy = ['mode' => 0100644, 'uid' => 0, 'nlink' => 1, 'size' => 100];
+assert(remoteHostingTrustedAgentPolicyMetadata($trustedDir, $trustedDir, $trustedPolicy));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, ['mode' => 0040775, 'uid' => 0], $trustedPolicy));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    ['mode' => 0040777, 'uid' => 0], $trustedDir, $trustedPolicy));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, ['mode' => 0040755, 'uid' => 1000], $trustedPolicy));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    ['mode' => 0120777, 'uid' => 0], $trustedDir, $trustedPolicy));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'mode' => 0120777]));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'mode' => 0100664]));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'uid' => 1000]));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'nlink' => 2]));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'size' => 0]));
+assert(!remoteHostingTrustedAgentPolicyMetadata(
+    $trustedDir, $trustedDir, [...$trustedPolicy, 'size' => 2049]));
+
 // A malicious unprivileged process must not impersonate the privileged
 // socket and forge a successful 'commit-initial' execution receipt.
-$trustedDir = ['mode' => 0040755, 'uid' => 0];
-$trustedSocket = ['mode' => 0140660, 'uid' => 0, 'gid' => 140];
+$trustedSocket = ['mode' => 0140660, 'uid' => 0, 'gid' => 140, 'nlink' => 1];
 $trustedGroup = ['gid' => 140];
 assert(remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, $trustedSocket, $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, $trustedSocket, false));
@@ -66,8 +91,9 @@ assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$truste
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'uid' => 999], $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'mode' => 0140666], $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'mode' => 0100660], $trustedGroup));
+assert(!remoteHostingTrustedSocketMetadata($trustedDir, $trustedDir, [...$trustedSocket, 'nlink' => 2], $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, ['mode' => 0040777, 'uid' => 0], $trustedSocket, $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata(['mode' => 0120777, 'uid' => 0], $trustedDir, $trustedSocket, $trustedGroup));
 assert(!remoteHostingTrustedSocketMetadata($trustedDir, ['mode' => 0040755, 'uid' => 999], $trustedSocket, $trustedGroup));
 
-echo "PASS: hosting queue isolation and exact protocol constraints\n";
+echo "PASS: hosting queue protocol, root opt-in path and Unix socket identity\n";

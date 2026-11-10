@@ -7,13 +7,39 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/hosting-queue-policy.php';
 
+/**
+ * Trust the complete root-owned opt-in path, not merely the policy inode.
+ * A group/other-writable parent permits renaming a trusted file out of the
+ * way and substituting a different PHP policy before require executes.
+ *
+ * Pure metadata predicate to regression-test the fail-closed checks without
+ * changing /etc or requiring the tests to run as root.
+ */
+function remoteHostingTrustedAgentPolicyMetadata(array $etc, array $dir, array $file): bool
+{
+    foreach ([$etc, $dir] as $parent) {
+        if (($parent['mode'] & 0170000) !== 0040000
+            || ($parent['mode'] & 0022) !== 0
+            || ($parent['uid'] ?? null) !== 0) {
+            return false;
+        }
+    }
+    return ($file['mode'] & 0170000) === 0100000
+        && ($file['mode'] & 07777) === 0644
+        && ($file['uid'] ?? null) === 0
+        && ($file['nlink'] ?? null) === 1
+        && is_int($file['size'] ?? null)
+        && $file['size'] >= 1 && $file['size'] <= 2048;
+}
+
 function remoteHostingOptIn(string $machineId): bool
 {
     $path = '/etc/devmcp/hosting-agent-policy.php';
+    $etc = @lstat('/etc');
+    $dir = @lstat('/etc/devmcp');
     $meta = @lstat($path);
-    if (!is_array($meta) || ($meta['mode'] & 0170000) !== 0100000
-        || ($meta['mode'] & 07777) !== 0644 || $meta['uid'] !== 0
-        || $meta['nlink'] !== 1 || $meta['size'] > 2048) {
+    if (!is_array($etc) || !is_array($dir) || !is_array($meta)
+        || !remoteHostingTrustedAgentPolicyMetadata($etc, $dir, $meta)) {
         return false;
     }
     $config = require $path;
@@ -50,7 +76,8 @@ function remoteHostingTrustedSocketMetadata(
     return ($socket['mode'] & 0170000) === 0140000
         && ($socket['mode'] & 07777) === 0660
         && ($socket['uid'] ?? null) === 0
-        && ($socket['gid'] ?? null) === $group['gid'];
+        && ($socket['gid'] ?? null) === $group['gid']
+        && ($socket['nlink'] ?? null) === 1;
 }
 
 /** Refuse any untrusted /run ancestor, socket or unexpected socket owner. */

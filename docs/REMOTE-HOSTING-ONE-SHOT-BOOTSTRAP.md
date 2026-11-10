@@ -76,7 +76,16 @@ systemd et le groupe `devmcp-agent`. L'absence d'une dépendance bloque
 l'intégralité du lot de trois, plutôt que de créer un grant partiel.
 Le socket IPC doit appartenir à root:devmcp-agent (0660), dans des
 répertoires root non modifiables par le groupe ou les autres ; l'agent
-refuse toute substitution de socket. L'installateur privilégié contrôle
+refuse toute substitution de socket. Son propre contrôle de l'inode
+Unix exige également un seul lien physique (`nlink=1`) avant de
+transmettre une requête privilégiée. La politique de polling
+`/etc/devmcp/hosting-agent-policy.php` n'est évaluée par PHP qu'après
+contrôle de ses deux répertoires parents (/etc et /etc/devmcp), qui
+doivent être des répertoires réels root-owned et non inscriptibles
+par le groupe ou les autres. Le fichier doit rester régulier, mono-lien,
+root-owned, mode 0644 et de taille bornée (1–2048 octets).
+Un contrôle d'ACL refusé désactive simplement le polling hosting :
+il n'octroie aucune permission nouvelle et ne touche aucun service. L'installateur privilégié contrôle
 désormais le véritable inode Unix (type socket, propriétaire, GID
 devmcp-agent, mode 0660 et nlink=1) et son répertoire parent root 0755,
 **avant** de promouvoir le nouveau bundle et **avant** de publier le
