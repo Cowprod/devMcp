@@ -29,6 +29,8 @@ final class RemoteProjectCreationMySqlTest extends TestCase
     private string $project;
     private string $root;
     private string $oldPath;
+    private ?string $oldEnvPath;
+    private ?string $oldServerPath;
 
     protected function setUp(): void
     {
@@ -46,10 +48,12 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         file_put_contents($this->root.'/work/README.md','Created by the project API');
         $this->git(['add','README.md'],$this->root.'/work');$this->git(['commit','-m','Initial repository'],$this->root.'/work');
         $this->git(['clone','--bare',$this->root.'/work',$this->root.'/remote.git'],$this->root);
-        file_put_contents($this->root.'/fake/ssh',"#!/bin/sh\nfor arg in \"\$@\"; do [ \"\$arg\" = -G ] && exit 0; done\nexec /usr/bin/git-upload-pack \"\$DEVMCP_TEST_BARE\"\n");
+        file_put_contents($this->root.'/fake/ssh',"#!/bin/sh\nfor arg in \"\$@\"; do [ \"\$arg\" = -G ] && exit 0; done\nexec /usr/bin/git-upload-pack ".escapeshellarg($this->root.'/remote.git')."\n");
         chmod($this->root.'/fake/ssh',0700);
-        $this->oldPath=(string)getenv('PATH');putenv('PATH='.$this->root.'/fake:'.$this->oldPath);
-        putenv('DEVMCP_TEST_BARE='.$this->root.'/remote.git');
+        $this->oldPath=(string)getenv('PATH');
+        $this->oldEnvPath=$_ENV['PATH']??null;$this->oldServerPath=$_SERVER['PATH']??null;
+        $path=$this->root.'/fake:'.$this->oldPath;
+        putenv('PATH='.$path);$_ENV['PATH']=$path;$_SERVER['PATH']=$path;
     }
 
     protected function tearDown(): void
@@ -61,7 +65,10 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $this->db->prepare('DELETE FROM dm_agent_zerotier_address WHERE machine_id=?')->execute([$this->machine]);
         $this->db->prepare('DELETE FROM dm_machine WHERE id=?')->execute([$this->machine]);
         if(isset($this->oldPath))putenv('PATH='.$this->oldPath);
-        putenv('DEVMCP_TEST_BARE');
+        if(isset($this->oldPath)){
+            if($this->oldEnvPath===null)unset($_ENV['PATH']);else $_ENV['PATH']=$this->oldEnvPath;
+            if($this->oldServerPath===null)unset($_SERVER['PATH']);else $_SERVER['PATH']=$this->oldServerPath;
+        }
         if(isset($this->root)&&is_dir($this->root)){
             $it=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->root,\FilesystemIterator::SKIP_DOTS),\RecursiveIteratorIterator::CHILD_FIRST);
             foreach($it as $f){if($f->isDir()&&!$f->isLink())rmdir($f->getPathname());else unlink($f->getPathname());}
@@ -86,7 +93,7 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $remote=new RemoteTools($this->db,$this->root.'/sources');$store=new ProvisioningStore($this->db);
         $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),$remote,$creator,$store);
         $created=$tools->projectCreate($this->project,'Automatic remote project','CREATE_PROJECT','agent-'.$this->machine);
-        self::assertSame('provisioning',$created['state']);self::assertSame(1,$requests);
+        self::assertSame('provisioning',$created['state'],json_encode($created));self::assertSame(1,$requests);
         self::assertFalse($created['workspace_created']);self::assertFalse($store->get($this->project)['actions_enabled']);
         $queue=new RemoteProjectQueue($this->db);
         self::assertNull($queue->claim(str_repeat('f',32)));

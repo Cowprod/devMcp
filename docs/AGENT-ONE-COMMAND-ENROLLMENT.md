@@ -29,7 +29,7 @@ créer son workspace. Attendre que le job retourné réussisse : le projet devie
 `active` uniquement après confirmation de l’agent. Aucun dépôt, répertoire ni
 réglage par projet ne doit être préparé à la main sur la machine cible.
 Le même parcours est accessible via l’action `project.create.remote` du projet
-`devmcp-admin`, avec `id`, `machine` et `description`.
+`devmcp-admin`, avec `project_id`, `machine` et `description`.
 
 Écrire le code dans le dépôt créé, puis appeler `action_start` :
 

@@ -182,6 +182,7 @@ final class RemoteProjectRuntime
                 self::write($unitPath, $previousUnit, 0644);
                 self::command(['/usr/bin/systemctl', 'daemon-reload']);
                 self::command(['/usr/bin/systemctl', 'start', $service]);
+                self::awaitHttp('http://' . $ip . ':' . $port . '/');
             } elseif ($previousUnit === null) {
                 self::command(['/usr/bin/systemctl', 'disable', $service]);
             }
@@ -189,6 +190,17 @@ final class RemoteProjectRuntime
         }
         return array_replace($meta, ['runtime' => $runtime, 'port' => $port,
             'url' => 'http://' . $ip . ':' . $port, 'active_revision' => $meta['revision']]);
+    }
+
+    private static function awaitHttp(string $url): void
+    {
+        for ($attempt = 0; $attempt < 40; ++$attempt) {
+            $context = stream_context_create(['http' => ['timeout' => 1, 'ignore_errors' => true]]);
+            $body = @file_get_contents($url, false, $context);
+            if (is_string($body) && preg_match('~^HTTP/\S+ 200\b~', $http_response_header[0] ?? '')) return;
+            usleep(250000);
+        }
+        throw new RuntimeException('Previous project service could not be restored');
     }
 
     private static function port(string $ip, string $project): int

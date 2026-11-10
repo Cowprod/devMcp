@@ -76,10 +76,12 @@ bash "$hosting_bundle" "$checkout" "$bin" "$target"
 
 # Project-capable installations update their fixed broker with the same release.
 # Existing hosting-enabled lab agents migrate to this complete project agent.
-if [[ -f /etc/devmcp/agent-projects.php ]] || { [[ -f /etc/devmcp/hosting-policy.json ]] &&
-  php -r '$p=json_decode(file_get_contents($argv[1]),true);exit(($p["enabled"]??false)===true?0:1);' /etc/devmcp/hosting-policy.json; }; then
-  bash "$checkout/deploy/distributed/install-agent-projects.sh" "$checkout" "$target"
-fi
+install_project_runtime() {
+  if [[ -f /etc/devmcp/agent-projects.php ]] || { [[ -f /etc/devmcp/hosting-policy.json ]] &&
+    php -r '$p=json_decode(file_get_contents($argv[1]),true);exit(($p["enabled"]??false)===true?0:1);' /etc/devmcp/hosting-policy.json; }; then
+    bash "$checkout/deploy/distributed/install-agent-projects.sh" "$checkout" "$target"
+  fi
+}
 
 # The updater may stage immutable hosting bundles only. A locally approved
 # privileged gateway pin is NEVER reconciled, installed or rotated by this
@@ -110,6 +112,7 @@ if [[ "$current" == "$target" ]]; then
     echo 'Installed updater drift detected' >&2; exit 1;
   }
   if [[ "$missing_helpers" -eq 0 ]]; then
+    install_project_runtime
     echo "Agent already current: $target"
     echo "PASS: hosting bundle staged; privileged gateway pin unchanged"
     exit 0
@@ -190,6 +193,7 @@ cp -p "$updater_dst" "$stage/backup-self-update-agent.sh"
 systemctl stop devmcp-agent.timer
 timer_stopped=1
 systemctl stop devmcp-agent.service
+install_project_runtime
 replacing=1
 # Install dependencies before the executable entrypoint. The old agent timer may
 # have left an in-flight activation: never expose a new entrypoint while its
