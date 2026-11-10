@@ -125,6 +125,35 @@ foreach ([
         throw new RuntimeException('Central operator transactional bootstrap contract missing: ' . $required);
     }
 }
+// Two simultaneous privileged installations must not race their state
+// snapshots or let the rejected invocation disable the winner's socket.
+foreach ([
+    'lock_path="$lock_dir/devmcp-hosting-central-operator.lock"',
+    'set -C; : > "$lock_path"',
+    "'0:0:600:1'",
+    'exec 9<>"$lock_path"',
+    'flock -n 9',
+    'Another central operator installation is in progress',
+] as $required) {
+    if (!str_contains($installer, $required)) {
+        throw new RuntimeException('Central operator installation lacks exclusive root lock: ' . $required);
+    }
+}
+$lockPos = strpos($installer, 'flock -n 9');
+$statePos = strpos($installer, 'was_active=0');
+if ($lockPos === false || $statePos === false || $lockPos >= $statePos) {
+    throw new RuntimeException('Operator must hold lock before snapshotting socket state');
+}
+// If a move succeeds but its subsequent validation fails, the new file must
+// already be in the rollback ledger. A no-replace skip leaves its stage.
+$movePos = strpos($installer, 'mv -n -- "$stage" "$target"');
+$trackPos = strpos($installer, 'installed_units+=("$name")');
+$verifyPos = strpos($installer, 'cmp -s "$prefix/$name" "$target" || {', $movePos === false ? 0 : $movePos);
+if ($movePos === false || $trackPos === false || $verifyPos === false
+    || !($movePos < $trackPos && $trackPos < $verifyPos)
+    || !str_contains($installer, '! -e "$stage" && -f "$target"')) {
+    throw new RuntimeException('Post-move failure cannot be safely rolled back');
+}
 // Rollback must remove only newly installed units, never pre-existing copies.
 if (!str_contains($installer, 'trusted_file "$target" && cmp -s "$prefix/$name" "$target"')
     || !str_contains($installer, 'if [[ "$rc" -ne 0 && "$mutation_started" -eq 1')

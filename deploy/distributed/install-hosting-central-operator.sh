@@ -9,6 +9,34 @@ umask 077
   echo 'Usage (TouchDeck central root only): install-hosting-central-operator.sh --root-approved' >&2
   exit 2
 }
+# Prevent overlapping administrator runs from snapshotting stale socket states.
+# A failed second installer must never stop/disable a successful first one.
+# Reuse a persistent root-owned inode instead of truncating a live lock file.
+lock_dir=/run/lock
+lock_path="$lock_dir/devmcp-hosting-central-operator.lock"
+[[ -d "$lock_dir" && ! -L "$lock_dir" &&
+   "$(stat -c '%u:%g' "$lock_dir")" == '0:0' ]] || {
+  echo 'Untrusted central operator lock directory' >&2
+  exit 1
+}
+if [[ ! -e "$lock_path" && ! -L "$lock_path" ]]; then
+  ( set -C; : > "$lock_path" ) 2>/dev/null || {
+    echo 'Unable to create exclusive central operator lock' >&2
+    exit 1
+  }
+fi
+[[ -f "$lock_path" && ! -L "$lock_path" &&
+   "$(stat -c '%u:%g:%a:%h' "$lock_path")" == '0:0:600:1' ]] || {
+  echo 'Untrusted central operator lock file' >&2
+  exit 1
+}
+command -v flock >/dev/null
+exec 9<>"$lock_path"
+flock -n 9 || {
+  echo 'Another central operator installation is in progress' >&2
+  exit 1
+}
+
 trusted_dir() {
   [[ -d "$1" && ! -L "$1" && "$(stat -c '%u' "$1")" == 0 &&
      $((8#$(stat -c '%a' "$1") & 0022)) == 0 ]]
@@ -172,12 +200,21 @@ for name in devmcp-hosting-central-operator.socket devmcp-hosting-central-operat
       exit 1
     }
     mv -n -- "$stage" "$target"
-    [[ ! -e "$stage" && -f "$target" && ! -L "$target" ]] &&
+    # Track a successful placement BEFORE validation so a failed post-move
+    # permission/content check can still remove our newly created unit.
+    # GNU mv -n returns success even when it skips an existing target:
+    # in that case the source stage remains and must NOT be tracked.
+    if [[ ! -e "$stage" && -f "$target" && ! -L "$target" ]]; then
+      installed_units+=("$name")
+    else
+      echo 'Central operator systemd unit appeared during installation' >&2
+      exit 1
+    fi
+    [[ "$(stat -c '%u:%g:%a:%h' "$target")" == '0:0:644:1' ]] &&
       cmp -s "$prefix/$name" "$target" || {
       echo 'Central operator systemd unit changed during installation' >&2
       exit 1
     }
-    installed_units+=("$name")
   fi
 done
 mutation_started=1
