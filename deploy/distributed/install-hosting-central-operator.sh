@@ -118,6 +118,7 @@ done
 # undo only files created by this invocation and restore the previous
 # enabled/active states. Never remove an already installed matching unit.
 installed_units=()
+staged_units=()
 mutation_started=0
 installation_committed=0
 rollback_operator_install() {
@@ -133,6 +134,10 @@ rollback_operator_install() {
       systemctl disable "$socket_unit" >/dev/null 2>&1 ||
         echo 'WARNING: central operator socket disable failed during rollback' >&2
     fi
+    for stage in "${staged_units[@]}"; do
+      rm -f -- "$stage" ||
+        echo 'WARNING: central operator unit staging cleanup failed' >&2
+    done
     for name in "${installed_units[@]}"; do
       target="/etc/systemd/system/$name"
       # Do not delete a file which an independent administrator has modified.
@@ -158,7 +163,20 @@ for name in devmcp-hosting-central-operator.socket devmcp-hosting-central-operat
   target="/etc/systemd/system/$name"
   if [[ ! -e "$target" ]]; then
     mutation_started=1
-    install -m 0644 -o root -g root "$prefix/$name" "$target"
+    # Stage in the same filesystem; never leave half-written systemd units.
+    stage="$(mktemp "/etc/systemd/system/.$name.XXXXXXXX")"
+    staged_units+=("$stage")
+    install -m 0644 -o root -g root "$prefix/$name" "$stage"
+    [[ ! -e "$target" && ! -L "$target" ]] || {
+      echo 'Central operator systemd unit appeared during installation' >&2
+      exit 1
+    }
+    mv -n -- "$stage" "$target"
+    [[ ! -e "$stage" && -f "$target" && ! -L "$target" ]] &&
+      cmp -s "$prefix/$name" "$target" || {
+      echo 'Central operator systemd unit changed during installation' >&2
+      exit 1
+    }
     installed_units+=("$name")
   fi
 done
