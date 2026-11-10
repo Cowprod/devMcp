@@ -14,6 +14,7 @@ use Cowprod\DevMcp\Distributed\Admin\HostingLabCentralInspection;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabMachineResolver;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabOperatorRequest;
 use Cowprod\DevMcp\Distributed\Admin\HostingLabSchemaMigration;
+use Cowprod\DevMcp\Distributed\Admin\HostingLabVerification;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 
 function hostingOperatorTrustedPath(string $path, bool $directory = false): void
@@ -48,6 +49,8 @@ function hostingOperatorMain(): int
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabMachineResolver.php',
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabBatchEnqueue.php',
         dirname(__DIR__) . '/src/Distributed/Admin/HostingLabCentralInspection.php',
+        dirname(__DIR__) . '/src/Distributed/Admin/HostingLabCommitEnqueue.php',
+        dirname(__DIR__) . '/src/Distributed/Admin/HostingLabVerification.php',
         dirname(__DIR__) . '/src/Distributed/Registry/DatabaseConnection.php',
     ];
     foreach ($files as $path) {
@@ -79,16 +82,17 @@ function hostingOperatorMain(): int
     );
     // Inventory must report missing/revoked enrollment as a blocker,
     // whereas writes still require the exact active machine resolver.
-    $result = $request['phase'] === 'inspect'
-        ? ['phase' => 'inspect'] + HostingLabCentralInspection::inspect(
-            $db, $request['machine_name'], true
-        )
-        : HostingLabBatchEnqueue::enqueue(
+    $result = match ($request['phase']) {
+        'verify' => HostingLabVerification::run($db, $request['machine_name'], $config),
+        'inspect' => ['phase' => 'inspect'] + HostingLabCentralInspection::inspect(
+            $db, $request['machine_name'], true),
+        default => HostingLabBatchEnqueue::enqueue(
             $db,
             HostingLabMachineResolver::resolve($db, $request['machine_name']),
             $request['revision'],
             $request['phase']
-        );
+        ),
+    };
     echo json_encode([
         'version' => 1, 'ok' => true, 'result' => $result,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
