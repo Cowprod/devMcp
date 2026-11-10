@@ -30,8 +30,12 @@ remote read-only job. The script refuses to proceed unless:
 1. The central Nginx vhost is a regular root:root 0644 file, has a single
    literal IPv4 TLS listener on a local `zt*` device, and already routes
    `/v1/agent/ping`.
-2. The central configuration is root-owned, the existing writer is
-   configured, and `remote_hosting_queue_enabled` is strictly `true`.
+2. The central PHP configuration is a root-owned, single-link regular
+   file (1–65536 bytes) without group/other write bits, under root-owned,
+   non-group/other-writable `/etc` and `/etc/devmcp-admin` directories.
+   This check is required because the installer evaluates the PHP config as
+   root. The existing writer must be configured, and
+   `remote_hosting_queue_enabled` must be strictly `true`.
 3. Both PHP handlers exist and pass PHP syntax checking, PHP 8.3 FPM is
    available, and the existing Nginx configuration passes `nginx -t`.
 4. The renderer recognizes exactly one controlled vhost and rejects any
