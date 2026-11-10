@@ -158,3 +158,27 @@ les droits root locaux, **ni** une écoute HTTP/WS, **ni** le déploiement :
 systématiquement retournés. Utiliser les vrais IDs avant d'appliquer
 l'approbation root `--bootstrap` ou `--apply` ; aucun opt-in n'est activé
 par cette commande. Le suivi reste dans l'issue #138.
+
+## Diagnostic de livraison de la file, sans intervention sur le routeur
+
+La sortie de `devmcp-hosting-lab-inspect` contient maintenant
+`deployments.<runtime>.latest_central_job` avec `created_at`,
+`expires_at`, `claimed_at`, `finished_at`, `deadline_elapsed`
+(calculé **par MySQL en UTC**, et non par l'horloge du poste) et
+`delivery_state`. Ce dernier vaut :
+
+- `awaiting_agent` : tâche encore en file, non réclamée et non expirée ;
+- `expired_unclaimed` : date limite dépassée sans prise en charge ;
+- `claimed_unresolved` ou `claimed_unresolved_after_deadline` :
+  prise en charge attestée par SQL mais aucun résultat final ;
+- `terminal` : résultat SQL final, **pas** preuve de déploiement.
+
+Un `state=queued` peut rester physiquement en base après sa date limite :
+il n'est marqué `expired` que lors d'un prochain polling authentifié de
+l'agent. Ne pas réenfiler automatiquement une tâche `claimed` : elle a
+potentiellement atteint l'exécuteur root. Toute récupération doit conserver
+les barrières d'autorisation locales, le journal d'activation et la preuve
+de pair indépendant. `central_queue_prerequisites_met=true` n'atteste
+que du registre, pas de la livraison ni du fonctionnement des trois services.
+Ce diagnostic est strictement en lecture seule et ne divulgue ni jeton
+agent, ni HMAC, ni contenu du job.
