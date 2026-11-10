@@ -17,7 +17,11 @@ texte complets de **125 octets maximum** et répond par écho. Ping/Pong
 est implémenté. Toutes les trames client doivent être masquées. Les
 fragments, extensions, grands messages, payloads UTF-8 invalides et
 opcodes non prévus sont rejetés. Les connexions sont bornées et
-interrompues après inactivité.
+interrompues après inactivité. Un client qui provoque une erreur TCP sur
+une connexion WebSocket (notamment un reset abrupt) est isolé : la connexion
+est détruite sans propager d'exception qui arrêterait le processus Node.
+Le smoke CI exerce ce cas sur loopback et vérifie que `/healthz` répond
+encore après la déconnexion.
 
 **Ce protocole minimal n'est pas un serveur WebSocket de production** :
 pas de gestion des messages longs, compression, backpressure avancée,
