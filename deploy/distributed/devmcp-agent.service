@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-TimeoutStartSec=180
+TimeoutStartSec=600
 User=devmcp-agent
 Group=devmcp-agent
 ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php

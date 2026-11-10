@@ -7,7 +7,7 @@ checkout=/var/lib/devmcp-agent-update/repository
 root=/var/lib/devmcp-agent-update
 bin=/opt/devmcp-agent/bin
 marker=/var/lib/devmcp-agent-update/installed-revision
-files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php hosting-queue-policy.php remote-hosting-queue.php"
+files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php hosting-queue-policy.php remote-hosting-queue.php remote-project-queue.php"
 updater_src="$checkout/deploy/distributed/self-update-agent.sh"
 updater_dst="$bin/self-update-agent.sh"
 [[ "$(id -u)" -eq 0 && "$#" -eq 0 ]] || { echo 'Requires root; no arguments' >&2; exit 2; }
@@ -73,6 +73,13 @@ hosting_bundle="$checkout/deploy/distributed/stage-hosting-source-bundle.sh"
 }
 bash -n "$hosting_bundle"
 bash "$hosting_bundle" "$checkout" "$bin" "$target"
+
+# Project-capable installations update their fixed broker with the same release.
+# Existing hosting-enabled lab agents migrate to this complete project agent.
+if [[ -f /etc/devmcp/agent-projects.php ]] || { [[ -f /etc/devmcp/hosting-policy.json ]] &&
+  php -r '$p=json_decode(file_get_contents($argv[1]),true);exit(($p["enabled"]??false)===true?0:1);' /etc/devmcp/hosting-policy.json; }; then
+  bash "$checkout/deploy/distributed/install-agent-projects.sh" "$checkout" "$target"
+fi
 
 # The updater may stage immutable hosting bundles only. A locally approved
 # privileged gateway pin is NEVER reconciled, installed or rotated by this

@@ -25,11 +25,15 @@ try {
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
     if (!is_array($payload) || ($payload['protocol_version'] ?? null) !== 1
-        || count($payload) < 1 || count($payload) > 3
-        || array_diff(array_keys($payload), ['protocol_version', 'preview_port_claim', 'zerotier_ipv4']) !== []) {
+        || count($payload) < 1 || count($payload) > 4
+        || array_diff(array_keys($payload), ['protocol_version', 'preview_port_claim', 'zerotier_ipv4', 'agent_version']) !== []) {
         throw new RuntimeException('Invalid protocol');
     }
     $claim = $payload['preview_port_claim'] ?? null;
+    if (isset($payload['agent_version']) && (!is_string($payload['agent_version'])
+        || preg_match('/^projects-v1:[a-f0-9]{40}$/D', $payload['agent_version']) !== 1)) {
+        throw new RuntimeException('agent_version');
+    }
     $reportedIp = $payload['zerotier_ipv4'] ?? null;
     if (array_key_exists('zerotier_ipv4', $payload) && !is_string($reportedIp)) {
         throw new RuntimeException('Invalid IPv4 report');
@@ -83,6 +87,9 @@ try {
         $deployments[] = ['id' => $row['id'], 'workspace_path' => $row['workspace_path']];
     }
 
+    if (isset($payload['agent_version'])) {
+        $db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$payload['agent_version'], $machineId]);
+    }
     $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments];
     // Capability is advertised only after the migration is readable.
     $response['zerotier_address_supported'] = false;

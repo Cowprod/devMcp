@@ -16,7 +16,9 @@ try {
         throw new RuntimeException('size');
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
-    if (!is_array($payload) || array_keys($payload) !== ['protocol_version','job_id','result']
+    $projectQueue = is_array($payload) && ($payload['queue'] ?? null) === 'projects';
+    if (!is_array($payload) || array_keys($payload) !== ($projectQueue
+        ? ['protocol_version','queue','job_id','result'] : ['protocol_version','job_id','result'])
         || $payload['protocol_version'] !== 1
         || !is_string($payload['job_id']) || !preg_match('/^[a-f0-9]{32}$/D', $payload['job_id'])
         || !is_array($payload['result'])) {
@@ -40,6 +42,11 @@ try {
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
         (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $matches[1], true);
+    if ($projectQueue) {
+        (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db))->finish($machineId, $payload['job_id'], $payload['result']);
+        echo '{"protocol_version":1,"ok":true}';
+        exit;
+    }
     $result = json_encode($payload['result'], JSON_THROW_ON_ERROR);
     if (strlen($result) > 65536) {
         throw new RuntimeException('result_size');

@@ -79,6 +79,9 @@ final class ProjectTools
             }
         }
         foreach ($projects as &$entry) {
+            if ($this->remoteTools !== null && $this->remoteTools->projectQueue()->project($entry['id']) !== null) {
+                $entry = array_replace($entry, $this->remoteTools->describe($entry['id']));
+            }
             $entry = $this->withLocalPreviewStatus($entry);
         }
         unset($entry);
@@ -166,8 +169,11 @@ final class ProjectTools
      * local workspace and automatic lifecycle activation.
      * Never deletes a repository or workspace on partial failure.
      */
-    public function projectCreate(string $project_id, string $description, string $confirmation): array
+    public function projectCreate(string $project_id, string $description, string $confirmation, string $machine = 'local'): array
     {
+        if ($machine !== 'local' && $machine !== gethostname()) {
+            return $this->projectCreateRemote($project_id, $description, $machine, $confirmation);
+        }
         if ($confirmation !== 'CREATE_PROJECT') {
             throw new InvalidArgumentException('Confirmation explicite requise');
         }
@@ -234,6 +240,40 @@ final class ProjectTools
             'state' => 'active',
             'actions_authorized' => (bool) $project['actions_enabled'],
         ];
+    }
+
+    public function projectCreateRemote(string $project_id, string $description, string $machine, string $confirmation): array
+    {
+        if ($confirmation !== 'CREATE_PROJECT' || $this->githubCreator === null
+            || $this->provisioning === null || $this->remoteTools === null) {
+            throw new InvalidArgumentException('Remote project creation is not configured');
+        }
+        \Cowprod\DevMcp\Project\RemoteProjectPackage::projectId($project_id);
+        $destination = $this->remoteTools->machineForProvisioningPreview($machine);
+        $queue = $this->remoteTools->projectQueue();
+        $queue->assertReady();
+        $queue->assertMachineReady($destination['id']);
+        $repository = $this->githubCreator->organization() . '/' . $project_id;
+        $preview = $this->projectCreatePreview($project_id, $description, $repository, 'create',
+            'remote', $machine, \Cowprod\DevMcp\Project\RemoteProjectPackage::ROOT . '/' . $project_id);
+        $this->provisioning->assertAvailableForCreate($project_id, $repository);
+        $github = $this->githubRepositoryCreate($repository, 'CREATE_PRIVATE_REPOSITORY');
+        $record = $this->provisioning->registerCentral(\Cowprod\DevMcp\Project\ProvisioningState::begin($preview));
+        $record = $this->provisioning->advance($project_id, $record['revision'], 'repository_ready');
+        $record = $this->provisioning->advance($project_id, $record['revision'], 'machine_assigned', ['machine' => $destination['id']]);
+        $queue->register($project_id, $repository, $destination['id']);
+        try {
+            $job = $this->remoteTools->createRemoteWorkspace($project_id);
+        } catch (\Throwable $error) {
+            return ['project' => $record, 'github' => $github, 'state' => 'partial_failure',
+                'workspace_created' => false, 'actions_authorized' => false,
+                'failure' => ['stage' => 'remote_source_snapshot', 'message' => $error->getMessage()],
+                'recovery_action' => 'project.provision'];
+        }
+        $this->audit->append(['project' => $project_id, 'action' => 'project.create.remote',
+            'machine_id' => $destination['id'], 'outcome' => 'queued']);
+        return ['project' => $record, 'github' => $github, 'job' => $job,
+            'state' => 'provisioning', 'workspace_created' => false, 'actions_authorized' => false];
     }
 
     /** Attach a current host-only observation; never infer remote peer access. */

@@ -1,0 +1,18 @@
+[Unit]
+Description=devMcp project operation
+[Service]
+Type=oneshot
+User=root
+Group=root
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/php /opt/devmcp-agent/project-active/devmcp-agent-project-broker.php
+TimeoutStartSec=105
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/etc/devmcp
+ReadWritePaths=/srv/devmcp-projects /etc/systemd/system
