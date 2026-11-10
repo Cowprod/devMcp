@@ -20,33 +20,33 @@ routes="$(dirname "$renderer")/nginx-hosting-routes.conf"
   exit 1
 }
 
-# This installer executes the repository renderer as root. Verify the FULL
-# source path before running PHP: even a root-owned regular file can be swapped
-# if a parent directory is writable by another user.
+# The Git checkout is intentionally writable by the deployment account.
+# Never execute PHP from that checkout as root. Pin the reviewed Git blobs,
+# copy them to a private root-owned snapshot, and execute ONLY that snapshot.
+# Revisions to the renderer/template require updating these reviewed pins.
 for source_dir in /opt /opt/devmcp /opt/devmcp/deploy /opt/devmcp/deploy/distributed; do
   [[ -d "$source_dir" && ! -L "$source_dir" ]] || {
-    echo 'Untrusted central hosting source directory' >&2
-    exit 1
-  }
-  read -r source_owner source_mode < <(stat -c '%u %a' "$source_dir")
-  [[ "$source_owner" == 0 ]] && (( (8#$source_mode & 0022) == 0 )) || {
-    echo 'Untrusted central hosting source directory' >&2
-    exit 1
+    echo 'Untrusted central hosting source directory' >&2; exit 1;
   }
 done
-for source_file in "$renderer" "$routes"; do
-  [[ -f "$source_file" && ! -L "$source_file" ]] || {
-    echo 'Untrusted central hosting renderer or template' >&2
-    exit 1
-  }
-  read -r source_owner source_mode source_links source_size < <(stat -c '%u %a %h %s' "$source_file")
-  [[ "$source_owner" == 0 && "$source_links" == 1
-     && "$source_size" -ge 1 && "$source_size" -le 65536 ]] \
-    && (( (8#$source_mode & 0022) == 0 )) || {
-    echo 'Untrusted central hosting renderer or template' >&2
-    exit 1
-  }
-done
+[[ -f "$renderer" && ! -L "$renderer" && -f "$routes" && ! -L "$routes" ]] || {
+  echo 'Missing or linked central hosting source' >&2; exit 1;
+}
+[[ "$(git hash-object -- "$renderer")" == '16dc5db499a4e702dd0003dab3e1d9ef2acc7536'
+   && "$(git hash-object -- "$routes")" == '7a246b7130c65fd4cb749f003f6a099be125ea4a' ]] || {
+  echo 'Central hosting source differs from reviewed revision' >&2; exit 1;
+}
+snapshot="$(mktemp -d /run/devmcp-hosting-render.XXXXXXXX)"
+chmod 0700 "$snapshot"
+trap 'rm -rf -- "$snapshot"' EXIT
+install -o root -g root -m 0600 "$renderer" "$snapshot/render-hosting-central-routes.php"
+install -o root -g root -m 0600 "$routes" "$snapshot/nginx-hosting-routes.conf"
+[[ "$(git hash-object -- "$snapshot/render-hosting-central-routes.php")" == '16dc5db499a4e702dd0003dab3e1d9ef2acc7536'
+   && "$(git hash-object -- "$snapshot/nginx-hosting-routes.conf")" == '7a246b7130c65fd4cb749f003f6a099be125ea4a' ]] || {
+  echo 'Central hosting snapshot integrity check failed' >&2; exit 1;
+}
+renderer="$snapshot/render-hosting-central-routes.php"
+routes="$snapshot/nginx-hosting-routes.conf"
 
 # Serialize privileged vhost replacements. A permanent root-owned lock inode
 # survives atomic conf renames; kernel flock is released on crash/exit.
@@ -160,7 +160,7 @@ cleanup() {
     mv -f -- "$backup" "$conf" || true
     nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
   fi
-  rm -f -- "$stage" "$backup"
+  rm -f -- "$stage" "$backup"\n  rm -rf -- "$snapshot"
   exit "$rc"
 }
 trap cleanup EXIT
