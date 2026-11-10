@@ -13,7 +13,28 @@ updater_dst="$bin/self-update-agent.sh"
 [[ "$(id -u)" -eq 0 && "$#" -eq 0 ]] || { echo 'Requires root; no arguments' >&2; exit 2; }
 [[ -f /etc/devmcp/agent.php && ! -L /etc/devmcp/agent.php ]] || { echo 'Agent not enrolled' >&2; exit 1; }
 [[ -d "$root" && ! -L "$root" && -d "$bin" && ! -L "$bin" ]] || { echo 'Invalid agent directories' >&2; exit 1; }
-exec 9>/run/lock/devmcp-agent-update.lock
+# The unattended updater runs as root. Never truncate/follow an attacker-
+# controlled lock path: /run/lock may be sticky and writable to other users.
+# Keep one root-owned inode across runs, as for the hosting installers.
+lock_path=/run/lock/devmcp-agent-update.lock
+lock_dir="${lock_path%/*}"
+[[ -d "$lock_dir" && ! -L "$lock_dir"
+   && "$(stat -c '%u:%g' "$lock_dir")" == '0:0' ]] || {
+  echo 'Untrusted agent updater lock directory' >&2
+  exit 1
+}
+if [[ ! -e "$lock_path" && ! -L "$lock_path" ]]; then
+  ( set -C; : > "$lock_path" ) 2>/dev/null || {
+    echo 'Cannot create exclusive agent updater lock' >&2
+    exit 1
+  }
+fi
+[[ -f "$lock_path" && ! -L "$lock_path"
+   && "$(stat -c '%u:%g:%a:%h' "$lock_path")" == '0:0:600:1' ]] || {
+  echo 'Untrusted agent updater lock file' >&2
+  exit 1
+}
+exec 9<>"$lock_path"
 flock -n 9 || { echo 'Update already running'; exit 0; }
 
 if [[ ! -d "$checkout/.git" ]]; then
