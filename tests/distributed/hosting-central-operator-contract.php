@@ -1,0 +1,104 @@
+<?php
+
+declare(strict_types=1);
+
+// Run without root, network, SQL, Composer or a systemd manager.
+require_once dirname(__DIR__, 2) . '/src/Distributed/Admin/HostingLabBatchConsent.php';
+require_once dirname(__DIR__, 2) . '/src/Distributed/Admin/HostingLabOperatorRequest.php';
+
+use Cowprod\DevMcp\Distributed\Admin\HostingLabOperatorRequest;
+
+function expectOperatorDenied(string $wire, string $machine = 'caseRouter'): void
+{
+    try {
+        HostingLabOperatorRequest::parse($wire, $machine);
+    } catch (Throwable) {
+        return;
+    }
+    throw new RuntimeException('Central operator accepted a rejected request');
+}
+function operatorWire(string $phase = 'prepare', string $approval = 'PREPARE_CASE_HOSTING_LAB_BY_NAME'): string
+{
+    return json_encode([
+        'version' => 1, 'phase' => $phase, 'machine_name' => 'caseRouter',
+        'revision' => str_repeat('a', 40), 'approval' => $approval,
+    ], JSON_THROW_ON_ERROR) . "\n";
+}
+$prepared = HostingLabOperatorRequest::parse(operatorWire(), 'caseRouter');
+if ($prepared !== [
+    'phase' => 'prepare', 'machine_name' => 'caseRouter',
+    'revision' => str_repeat('a', 40),
+]) {
+    throw new RuntimeException('Unexpected central operator preparation');
+}
+$activated = HostingLabOperatorRequest::parse(
+    operatorWire('activate', 'ACTIVATE_CASE_HOSTING_LAB_BY_NAME'), 'caseRouter'
+);
+if ($activated['phase'] !== 'activate') {
+    throw new RuntimeException('Missing central activation gate');
+}
+
+expectOperatorDenied(operatorWire('activate')); // preparation approval != activation
+expectOperatorDenied(operatorWire('prepare', 'ACTIVATE_CASE_HOSTING_LAB_BY_NAME'));
+expectOperatorDenied(operatorWire(), 'case');
+expectOperatorDenied(operatorWire(), 'CaseRouter');
+expectOperatorDenied(operatorWire(), ''); // empty root policy
+expectOperatorDenied(rtrim(operatorWire(), "\n")); // missing framing
+expectOperatorDenied(operatorWire() . "garbage");
+expectOperatorDenied(str_repeat('a', 513) . "\n");
+expectOperatorDenied("[]\n");
+expectOperatorDenied("{}\n");
+expectOperatorDenied("null\n");
+$valid = json_decode(operatorWire(), true, 6, JSON_THROW_ON_ERROR);
+$invalid = [
+    ['version' => 2],
+    ['phase' => 'abort'],
+    ['phase' => 'prepare-all'],
+    ['phase' => 0],
+    ['machine_name' => 'caseRouter;reboot'],
+    ['machine_name' => 'case'],
+    ['revision' => str_repeat('0', 40)],
+    ['revision' => strtoupper(str_repeat('a', 40))],
+    ['revision' => '../etc/passwd'],
+    ['approval' => 'PREPARE_CASE_HOSTING_LAB'],
+    ['approval' => ''],
+    ['deployment_id' => str_repeat('a', 32)],
+    ['machine_id' => str_repeat('b', 32)],
+];
+foreach ($invalid as $change) {
+    expectOperatorDenied(json_encode(array_replace($valid, $change),
+        JSON_THROW_ON_ERROR) . "\n");
+}
+foreach (['version', 'phase', 'machine_name', 'revision', 'approval'] as $field) {
+    $missing = $valid;
+    unset($missing[$field]);
+    expectOperatorDenied(json_encode($missing, JSON_THROW_ON_ERROR) . "\n");
+}
+
+// The opt-in socket must never be available through global shared actions
+// without a separate local project action grant.
+$actions = require dirname(__DIR__, 2) . '/config/shared-actions.php';
+foreach (['hosting.lab.prepare', 'hosting.lab.activate'] as $name) {
+    if (!isset($actions[$name]) || ($actions[$name]['target'] ?? null) !== 'local'
+        || ($actions[$name]['sync'] ?? false) !== false) {
+        throw new RuntimeException('Central operator action not bounded and asynchronous');
+    }
+}
+$socket = file_get_contents(dirname(__DIR__, 2)
+    . '/deploy/distributed/devmcp-hosting-central-operator.socket');
+$service = file_get_contents(dirname(__DIR__, 2)
+    . '/deploy/distributed/devmcp-hosting-central-operator@.service');
+$installer = file_get_contents(dirname(__DIR__, 2)
+    . '/deploy/distributed/install-hosting-central-operator.sh');
+if (!is_string($socket) || !str_contains($socket, 'SocketGroup=devmcp')
+    || !str_contains($socket, 'SocketMode=0660')
+    || !str_contains($socket, 'Accept=yes')
+    || !is_string($service) || !str_contains($service, 'User=root')
+    || !str_contains($service, 'StandardInput=socket')
+    || !str_contains($service, 'ProtectSystem=strict')
+    || !is_string($installer)
+    || !str_contains($installer, 'hosting_lab_operator_socket_enabled')
+    || !str_contains($installer, 'Central HTTPS hosting routes must be installed first')) {
+    throw new RuntimeException('Untrusted central operator installation contract');
+}
+echo "PASS: central three-demo root socket protocol, consent and opt-in fencing\n";

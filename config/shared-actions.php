@@ -23,6 +23,28 @@ return [
         ],
     ],
 
+    // These actions are inert unless a local project explicitly opts in AND
+    // a separate root-approved, caseRouter-only systemd socket is installed.
+    // No direct SQL, shell, sudo or generic remote deployment argument.
+    'hosting.lab.prepare' => [
+        'description' => 'Enfile atomiquement les trois préparations caseRouter via le socket local explicitement autorisé.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit',
+            'prepare', ['param' => 'revision']],
+        'cwd' => '.', 'timeout' => 35, 'target' => 'local',
+        'parameters' => [
+            'revision' => ['type' => 'git_sha', 'description' => 'SHA de release Git complet sur main.'],
+        ],
+    ],
+    'hosting.lab.activate' => [
+        'description' => 'Enfile les trois activations initiales seulement apres trois preparatifs confirmes, avec approbation locale.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit',
+            'activate', ['param' => 'revision']],
+        'cwd' => '.', 'timeout' => 35, 'target' => 'local',
+        'parameters' => [
+            'revision' => ['type' => 'git_sha', 'description' => 'Meme SHA Git que les trois preparations confirmees.'],
+        ],
+    ],
+
     'devmcp.update' => [
         'description' => 'Demande la mise à jour privilégiée de devMcp via le service systemd dédié.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-update-request'],

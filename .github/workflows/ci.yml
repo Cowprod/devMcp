@@ -21,6 +21,9 @@ jobs:
           php -l bin/devmcp-hosting-enqueue
           php -l bin/devmcp-hosting-root
           php -l bin/devmcp-hosting-gateway
+          php -l bin/devmcp-hosting-central-operator
+          php -l bin/devmcp-hosting-central-submit
+          php -l src/Distributed/Admin/HostingLabOperatorRequest.php
           php -l bin/hosting-queue-policy.php
           php -l bin/remote-hosting-queue.php
           php -l public/agent-hosting-poll.php
@@ -91,6 +94,13 @@ jobs:
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-queue-policy.php
       - name: Enforce isolated privileged IPC request contract
         run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/hosting-gateway-policy.php
+      - name: Verify explicit central operator socket and phase-separated consent
+        run: |
+          php tests/distributed/hosting-central-operator-contract.php
+          ! php bin/devmcp-hosting-central-operator </dev/null
+          ! php bin/devmcp-hosting-central-submit arbitrary aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          bash -n deploy/distributed/install-hosting-central-operator.sh
+          ! bash deploy/distributed/install-hosting-central-operator.sh
       - name: Reject unprivileged hosting executor invocation
         run: |
           ! php bin/devmcp-hosting-root prepare </dev/null
