@@ -85,6 +85,19 @@ def websocket_echo(sock, host, port):
 
 
 
+# Match the local PHP verifier (FILTER_VALIDATE_IP + RFC1918), not Python's
+# broader is_private classification (which also includes non-RFC1918 ranges).
+RFC1918 = tuple(ipaddress.ip_network(cidr) for cidr in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+))
+
+
+def is_rfc1918_ipv4(value):
+    return isinstance(value, ipaddress.IPv4Address) and any(
+        value in network for network in RFC1918
+    )
+
+
 def assert_zerotier_route(target, peer):
     """Fail closed unless the independent Linux peer will use its zt* adapter.
 
@@ -111,6 +124,11 @@ def assert_zerotier_route(target, peer):
     interface = routes[0].get("dev")
     if not isinstance(interface, str) or not re.fullmatch(r"zt[A-Za-z0-9]+", interface):
         raise RuntimeError("Peer route is not a ZeroTier interface")
+    # iproute2 may report either field depending on kernel/rule. A route that
+    # would select another IPv4 source cannot attest the requested peer.
+    if any(field in routes[0] and routes[0][field] != peer
+           for field in ("src", "prefsrc")):
+        raise RuntimeError("Peer source disagrees with ZeroTier route")
 
     adapters = ip_json("addr", "show", "dev", interface)
     if len(adapters) != 1 or adapters[0].get("ifname") != interface:
@@ -126,10 +144,7 @@ def assert_zerotier_route(target, peer):
 def probe(runtime, target, port, peer):
     target_ip = ipaddress.ip_address(target)
     peer_ip = ipaddress.ip_address(peer)
-    if (target_ip.version != 4 or peer_ip.version != 4
-            or not target_ip.is_private or not peer_ip.is_private
-            or target_ip.is_loopback or peer_ip.is_loopback
-            or target_ip.is_link_local or peer_ip.is_link_local
+    if (not is_rfc1918_ipv4(target_ip) or not is_rfc1918_ipv4(peer_ip)
             or target_ip == peer_ip):
         raise ValueError("Distinct private IPv4 ZeroTier addresses required")
     # A private LAN route must never be accepted as signed ZeroTier evidence.
