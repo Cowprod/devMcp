@@ -178,7 +178,7 @@ final class RemoteHostingLabBootstrap
 
         $policyBytes = json_encode($parsed['policy'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
         $peerBytes = json_encode($parsed['peer'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
-        $agentBytes = "<?php\nreturn " . var_export($parsed['agent'], true) . ";\n";
+        $agentBytes = self::agentPolicyBytes($config['machine_id']);
 
         // A prior local opt-in must be exact; never overwrite manual grants.
         self::refuseDrift(RemoteHostingLocalPolicy::FILE, $policyBytes, 0600);
@@ -277,6 +277,13 @@ final class RemoteHostingLabBootstrap
      * Check the exact fixed interpreter and systemd binaries used downstream.
      * This avoids leaving a partial opt-in because Node/PHP was absent.
      */
+    private static function agentPolicyBytes(string $machineId): string
+    {
+        // The gateway installer publishes this same file before returning.
+        // Both writers must agree byte-for-byte for repeatable bootstrap.
+        return sprintf("<?php\nreturn ['enabled' => true, 'machine_id' => '%s'];\n", $machineId);
+    }
+
     private static function requireRuntimePreflight(): void
     {
         if (!is_dir('/run/systemd/system')) {
