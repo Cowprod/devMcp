@@ -78,6 +78,10 @@ function closeWebSocket(socket, code) {
 
 let peers = 0;
 server.on("upgrade", (request, socket, head) => {
+  // A disconnected peer must not crash the entire lab service: a TCP RST
+  // can emit an error on this upgraded socket after the HTTP handshake.
+  // The socket is untrusted; never expose its error or reconnect here.
+  socket.on("error", () => socket.destroy());
   const connection = String(request.headers.connection || "")
     .toLowerCase().split(",").map((part) => part.trim());
   const key = request.headers["sec-websocket-key"];

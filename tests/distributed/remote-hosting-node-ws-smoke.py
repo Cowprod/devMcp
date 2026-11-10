@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import struct
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -86,6 +87,28 @@ def websocket_test(host, port):
         sock.sendall(masked_frame(8, b""))
 
 
+def reset_websocket_peer(host, port):
+    """Abrupt WebSocket peer loss must not terminate the demo process."""
+    key = base64.b64encode(b"0123456789abcdef").decode("ascii")
+    with socket.create_connection((host, port), timeout=3) as sock:
+        sock.settimeout(3)
+        request = (
+            f"GET /ws HTTP/1.1\r\nHost: {host}:{port}\r\n"
+            "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        ).encode("ascii")
+        sock.sendall(request)
+        reply = bytearray()
+        while b"\r\n\r\n" not in reply:
+            reply.extend(sock.recv(1))
+            assert len(reply) < 2048
+        assert b"HTTP/1.1 101 Switching Protocols" in reply
+        # Send an incomplete masked message and drop the connection with RST.
+        # The server may receive ECONNRESET while waiting for the rest.
+        sock.sendall(b"\x81\x85\x12\x34\x56\x78")
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+
+
 def main():
     assert DEMO.is_dir() and not DEMO.is_symlink()
     assert {path.name for path in DEMO.iterdir() if path.is_file()} == {"server.js", "package.json"}
@@ -133,7 +156,12 @@ def main():
         assert status(base + "/missing", "GET") == 404
         assert status(base + "/healthz", "POST") == 405
         websocket_test("127.0.0.1", port)
-        print("PASS: Node HTTP 200/404/405, wildcard rejection, WS handshake/echo/ping")
+        for _ in range(4):
+            reset_websocket_peer("127.0.0.1", port)
+        time.sleep(0.2)
+        assert server.poll() is None, "Node service crashed on peer disconnect"
+        assert status(base + "/healthz", "GET") == 200
+        print("PASS: Node HTTP, WS handshake/echo/ping, peer reset isolation")
     finally:
         server.terminate()
         try:
