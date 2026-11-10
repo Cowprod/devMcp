@@ -60,6 +60,8 @@ for file in "$prefix/bootstrap-hosting-central.sh" \
   /opt/devmcp/src/Distributed/Admin/HostingLabMachineResolver.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabBatchEnqueue.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabCentralInspection.php \
+  /opt/devmcp/src/Distributed/Admin/HostingLabCommitEnqueue.php \
+  /opt/devmcp/src/Distributed/Admin/HostingLabVerification.php \
   /opt/devmcp/src/Distributed/Registry/DatabaseConnection.php \
   "$config"; do
   trusted_file "$file" || {
