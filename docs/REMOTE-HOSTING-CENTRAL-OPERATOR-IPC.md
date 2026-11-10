@@ -23,6 +23,18 @@ transactions for the three named demos. It does not run any remote commands.
   socket to read the existing `HostingLabCentralInspection` inventory:
   exact machine identity, three deployment grants, latest SQL job per
   runtime and delivery state. It sends no SHA or caller-controlled query.
+  The read-only inventory also evaluates the **same cross-history write
+  fences** as the root-only batch writer: any unresolved `claimed` job,
+  any still-live `queued` job, or an earlier successful
+  `activate-initial`/`commit-initial` prohibits a new initial batch.
+  It reports `central_queue_write_fences_clear`, exact
+  `central_queue_write_fence_blockers`, and per-runtime indicators
+  separately from `central_queue_prerequisites_met`. These are
+  time-of-check snapshots, **never** authority to enqueue; the writer
+  repeats both queries under transactional locks. An expired unclaimed
+  queue entry is not treated as live, but an expired *claimed* entry
+  remains blocking. Even a newer terminal job cannot hide older
+  unresolved claimed work.
   Its receipt always says `deployment_complete=false`; a SQL job state
   is not an independent HTTP/WebSocket health check. It reports missing
   enrollment as a blocker rather than attempting to create one.
