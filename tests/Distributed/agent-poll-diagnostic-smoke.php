@@ -56,12 +56,12 @@ $workspaces = strpos($source, '$deployments = $data[\'deployments\']');
 if ($pingAccepted === false || $hostingPoll === false || $preview === false
     || $workspaces === false || !($pingAccepted < $hostingPoll
     && $hostingPoll < $preview && $preview < $workspaces)) {
-    fwrite(STDERR, "Hosting poll must precede optional network work after authenticated ping\\n");
+    fwrite(STDERR, "Hosting poll must precede optional network work after authenticated ping\n");
     exit(1);
 }
-if (!str_contains($transport, "str_starts_with(\\$endpoint, '/v1/agent/hosting-')")
+if (!str_contains($transport, "str_starts_with(" . '$endpoint' . ", '/v1/agent/hosting-')")
     || !str_contains($transport, "'/v1/agent/hosting-poll'")) {
-    fwrite(STDERR, "Hosting poll diagnostics must be labeled independently\\n");
+    fwrite(STDERR, "Hosting poll diagnostics must be labeled independently\n");
     exit(1);
 }
 if (!str_contains($afterPoll, 'invalid remote read-only poll protocol')) {
