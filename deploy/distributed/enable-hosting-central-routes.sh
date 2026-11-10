@@ -42,11 +42,34 @@ flock -n 9 || {
 
 # Do not follow symlinks, modify an unknown vhost, or change a foreign file.
 [[ -f "$conf" && ! -L "$conf" && "$(stat -c '%u:%g:%a:%h' "$conf")" == '0:0:644:1'
-  && -f "$config" && ! -L "$config" && "$(stat -c %u "$config")" == 0
+  && -f "$config" && ! -L "$config"
   && -f "$renderer" && ! -L "$renderer" && -f "$routes" && ! -L "$routes" ]] || {
   echo 'Central vhost, configuration or route installer not trusted' >&2
   exit 1
 }
+# The central PHP configuration is executed as root by the opt-in check.
+# Match the root-only lab CLIs: every parent must be root-owned and not
+# group/other writable; the config must be a bounded, single-link regular
+# file owned by root and not group/other writable. A symlink or writable
+# config could otherwise execute attacker-controlled PHP with root rights.
+for trusted_dir in /etc /etc/devmcp-admin; do
+  [[ -d "$trusted_dir" && ! -L "$trusted_dir" ]] || {
+    echo 'Untrusted central configuration directory' >&2
+    exit 1
+  }
+  read -r dir_owner dir_mode < <(stat -c '%u %a' "$trusted_dir")
+  [[ "$dir_owner" == 0 ]] && (( (8#$dir_mode & 0022) == 0 )) || {
+    echo 'Untrusted central configuration directory' >&2
+    exit 1
+  }
+done
+read -r config_owner config_mode config_links config_size < <(stat -c '%u %a %h %s' "$config")
+[[ "$config_owner" == 0 && "$config_links" == 1
+  && "$config_size" -ge 1 && "$config_size" -le 65536 ]] \
+  && (( (8#$config_mode & 0022) == 0 )) || {
+    echo 'Untrusted central configuration file permissions' >&2
+    exit 1
+  }
 # The SQL enrollment / grants and independent agent opt-in are not manufactured
 # by this installer. Confirm the operator-enabled central flag before exposure.
 php -r '
