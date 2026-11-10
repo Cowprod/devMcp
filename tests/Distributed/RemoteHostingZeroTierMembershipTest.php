@@ -46,8 +46,8 @@ final class RemoteHostingZeroTierMembershipTest extends TestCase
     private static function kernel(array $plan): array
     {
         return RemoteHostingBindEvidence::check($plan, [
-            'enp1s0' => ['flags' => 1, 'unicast' => [['address' => '10.52.10.1']]],
-            'zt12345678' => ['flags' => 1, 'unicast' => [['address' => '192.168.194.189']]],
+            'enp1s0' => ['up' => true, 'unicast' => [['address' => '10.52.10.1']]],
+            'zt12345678' => ['up' => true, 'unicast' => [['address' => '192.168.194.189']]],
         ]);
     }
 
