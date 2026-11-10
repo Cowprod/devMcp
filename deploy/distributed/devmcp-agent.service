@@ -1,10 +1,11 @@
 [Unit]
-Description=devMcp distributed agent (non-executing enrollment connectivity)
+Description=devMcp distributed agent (enrollment and project jobs)
 After=network-online.target zerotier-one.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
+TimeoutStartSec=180
 User=devmcp-agent
 Group=devmcp-agent
 ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php
