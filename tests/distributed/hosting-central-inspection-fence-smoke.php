@@ -268,7 +268,8 @@ function hostingActivationCheck(
 ): void {
     $result = HostingLabCentralInspection::inspect($db, 'caseRouter', true);
     if (($result['central_activation_ready'] ?? null) !== $expectedReady
-        || ($result['central_activation_revision'] ?? false) !== $revision
+        || !array_key_exists('central_activation_revision', $result)
+        || $result['central_activation_revision'] !== $revision
         || ($result['central_activation_blockers'] ?? null) !== $blockers
         || $db->writes !== 0 || $result['deployment_complete'] !== false) {
         throw new RuntimeException('Read-only three-demo activation readiness mismatch');
