@@ -39,6 +39,13 @@ remote read-only job. The script refuses to proceed unless:
 5. The updated vhost passes `nginx -t` before Nginx reload. On a failure
    after replacement, the original vhost is atomically restored and reload
    is retried. The installer does not change the listener or Nginx root.
+6. A root-owned exclusive `/run/lock/devmcp-hosting-central-nginx.lock`
+   prevents concurrent installer invocations across atomic file renames.
+   Symlinks and unexpected lock ownership/modes are rejected. The installer
+   also checks that the vhost still matches its saved baseline immediately
+   before replacement, refusing a detected concurrent manual edit. This is
+   an advisory lock: manual Nginx edits must still be coordinated by the
+   operator. No additional service or privileged agent action is installed.
 
 The two locations disable Basic Auth only for machine-scoped bearer
 authentication and remain restricted to POST, bounded bodies, TLS/ZeroTier,
