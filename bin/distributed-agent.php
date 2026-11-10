@@ -117,7 +117,8 @@ $post = static function (string $endpoint, string $body) use ($server, $headers,
     }
     $decoded = json_decode($response, true, 8);
     if (!is_array($decoded)) {
-        fwrite(STDERR, "devMcp: remote read-only response is not JSON object\n");
+        fwrite(STDERR, sprintf("devMcp: remote %s response is not JSON object\n",
+            str_starts_with($endpoint, '/v1/agent/hosting-') ? 'hosting' : 'read-only'));
         return null;
     }
     return $decoded;
@@ -234,7 +235,7 @@ if ($previewRequests !== [] && is_file($probePath) && !is_link($probePath)) {
         fwrite(STDOUT, "devMcp: preview TCP port reserved (HTTP service not verified)\n");
     }
 }
-// No remote jobs: only bounded, read-only inspection of registered workspaces.
+// Optional bounded inspection of registered workspaces; no remote shell commands.
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];
 if (!is_array($deployments) || count($deployments) > 32) {
