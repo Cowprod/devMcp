@@ -25,18 +25,20 @@ final class HostingLabOperatorRequest
         }
         $keys = array_keys($input);
         sort($keys);
-        // Inspection is read-only, with separate consent and NO Git SHA or
-        // caller-controlled query fields. It cannot enqueue any job.
-        if (($input['phase'] ?? null) === 'inspect') {
+        // Inspection and peer verification derive their identities from SQL;
+        // neither accepts caller-controlled paths, keys, proofs or Git SHAs.
+        if (in_array($input['phase'] ?? null, ['inspect', 'verify'], true)) {
+            $phase = $input['phase'];
             if ($keys !== ['approval', 'machine_name', 'phase', 'version']
                 || ($input['version'] ?? null) !== 1
-                || ($input['approval'] ?? null) !== 'INSPECT_CASE_HOSTING_LAB_BY_NAME'
+                || ($input['approval'] ?? null) !== ($phase === 'inspect'
+                    ? 'INSPECT_CASE_HOSTING_LAB_BY_NAME' : 'VERIFY_CASE_HOSTING_LAB_BY_NAME')
                 || !is_string($input['machine_name'] ?? null)
                 || !hash_equals($approvedMachine, $input['machine_name'])) {
                 throw new InvalidArgumentException('Invalid central operator inspection');
             }
             return [
-                'phase' => 'inspect',
+                'phase' => $phase,
                 'machine_name' => $approvedMachine,
                 'revision' => null,
             ];
