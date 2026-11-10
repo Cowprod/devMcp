@@ -3,6 +3,17 @@
 declare(strict_types=1);
 
 return [
+    'project.create.remote' => [
+        'description' => 'Crée un dépôt GitHub privé et demande la création réelle du workspace sur une machine équipée de l’agent projets.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-create-remote',
+            ['param' => 'project_id'], ['param' => 'machine'], ['param' => 'description']],
+        'cwd' => '.', 'timeout' => 240, 'target' => 'local',
+        'parameters' => [
+            'project_id' => ['type' => 'identifier', 'description' => 'Nouvel identifiant de projet, minuscules et tirets.'],
+            'machine' => ['type' => 'identifier', 'description' => 'Nom ou ID de la machine active choisie dans l’admin.'],
+            'description' => ['type' => 'text', 'description' => 'Description du projet.'],
+        ],
+    ],
     // TouchDeck OTA: all endpoints, board and firmware path are fixed inside the helper.
     'firmware.status' => [
         'description' => 'Consulte le manifeste OTA et les ESP32-C3 connectés avec leur version.',

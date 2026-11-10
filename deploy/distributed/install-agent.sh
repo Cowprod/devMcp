@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# devMcp agent bootstrap. Installs a connectivity-only agent, never remote execution.
+# devMcp full project agent bootstrap from one immutable release.
 set -euo pipefail
 
 usage() {
-  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP (--ca-file /path/to/ca.pem | --cert-sha256 HEX --cert-url HTTPS_URL) --token-stdin [--check-only]" >&2
+  echo "Usage: sudo bash install-agent.sh --server https://ZT_IP (--ca-file /path/to/ca.pem | --cert-sha256 HEX --cert-url HTTPS_URL) --release IMMUTABLE_SHA --token-stdin [--check-only]" >&2
   exit 2
 }
 SERVER=""
@@ -13,12 +13,14 @@ CERT_SHA256=""
 CERT_URL=""
 TOKEN=""
 TOKEN_STDIN=0
+AGENT_RELEASE=""
 while (($#)); do
   case "$1" in
     --server) (($# >= 2)) || usage; SERVER="$2"; shift 2 ;;
     --ca-file) (($# >= 2)) || usage; CA_FILE="$2"; shift 2 ;;
     --cert-sha256) (($# >= 2)) || usage; CERT_SHA256="$2"; shift 2 ;;
     --cert-url) (($# >= 2)) || usage; CERT_URL="$2"; shift 2 ;;
+    --release) (($# >= 2)) || usage; AGENT_RELEASE="$2"; shift 2 ;;
     --token-stdin) TOKEN_STDIN=1; shift ;;
     --check-only) CHECK_ONLY=1; shift ;;
     *) usage ;;
@@ -36,9 +38,11 @@ command -v systemctl >/dev/null || { echo "ERROR: systemd required" >&2; exit 1;
 # Install only missing OS packages before the enrollment token is read.
 # Never replace an existing PHP version or modify ZeroTier membership.
 missing=()
-command -v php >/dev/null || missing+=(php8.3-cli)
+command -v php >/dev/null || missing+=(php-cli)
 command -v ip >/dev/null || missing+=(iproute2)
 command -v curl >/dev/null || missing+=(curl)
+command -v git >/dev/null || missing+=(git)
+command -v node >/dev/null || missing+=(nodejs)
 command -v openssl >/dev/null || missing+=(openssl)
 command -v python3 >/dev/null || missing+=(python3)
 command -v sha256sum >/dev/null || missing+=(coreutils)
@@ -48,7 +52,12 @@ if command -v php >/dev/null; then
   }
 fi
 if ! command -v php >/dev/null || ! php -r 'exit(extension_loaded("curl") ? 0 : 1);'; then
-  missing+=(php8.3-curl)
+  if command -v php >/dev/null; then
+    php_series="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+    missing+=("php${php_series}-curl")
+  else
+    missing+=(php-curl)
+  fi
 fi
 if (("${#missing[@]}" > 0)); then
   command -v apt-get >/dev/null || { echo "ERROR: apt-get required to install missing dependencies" >&2; exit 1; }
@@ -72,6 +81,7 @@ ip -4 route get "$ZT_IP" | grep -Eq ' dev zt[^ ]+' || {
 }
 echo "Preflight OK: ${PRETTY_NAME:-$ID}, PHP $(php -r 'echo PHP_VERSION;'), ZeroTier route to $ZT_IP"
 if ((CHECK_ONLY)); then exit 0; fi
+[[ "$AGENT_RELEASE" =~ ^[a-f0-9]{40}$ ]] || { echo "ERROR: immutable --release required" >&2; exit 1; }
 if (( ! TOKEN_STDIN )); then echo "ERROR: --token-stdin required" >&2; exit 1; fi
 IFS= read -r TOKEN || true
 [[ "$TOKEN" =~ ^[a-f0-9]{64}$ ]] || { echo "ERROR: valid enrollment token required" >&2; exit 1; }
@@ -96,26 +106,22 @@ if [[ -n "$CERT_SHA256" || -n "$CERT_URL" ]]; then
 else
   [[ -f "$CA_FILE" && ! -L "$CA_FILE" ]] || { echo "ERROR: trusted CA file required" >&2; exit 1; }
 fi
-# Fetch agent code before consuming the one-time enrollment token.
-# The release ref is an immutable commit, not a moving branch.
-AGENT_RELEASE="166f287e5d8bea4a885b4b9d55509b6848c5f5f7"
-AGENT_BASE="https://raw.githubusercontent.com/Cowprod/devMcp/$AGENT_RELEASE"
+# Fetch and validate the exact complete release before consuming the token.
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"; if [[ -n "${CERT_TMP:-}" ]]; then rm -f "$CERT_TMP"; fi' EXIT
-curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
-  --output "$STAGING/distributed-agent.php" "$AGENT_BASE/bin/distributed-agent.php"
-curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
-  --output "$STAGING/devmcp-agent.service" "$AGENT_BASE/deploy/distributed/devmcp-agent.service"
-curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 30 \
-  --output "$STAGING/devmcp-agent.timer" "$AGENT_BASE/deploy/distributed/devmcp-agent.timer"
-php -l "$STAGING/distributed-agent.php" >/dev/null
-grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "$STAGING/devmcp-agent.service" || {
-  echo "ERROR: invalid agent service artifact" >&2; exit 1;
-}
-[[ -x /usr/bin/php ]] || { echo "ERROR: /usr/bin/php unavailable" >&2; exit 1; }
-grep -Fqx 'Unit=devmcp-agent.service' "$STAGING/devmcp-agent.timer" || {
-  echo "ERROR: invalid agent timer artifact" >&2; exit 1;
-}
+git -c core.hooksPath=/dev/null clone --quiet --no-checkout https://github.com/Cowprod/devMcp.git "$STAGING/repository"
+git -C "$STAGING/repository" -c core.hooksPath=/dev/null fetch --quiet origin "$AGENT_RELEASE"
+git -C "$STAGING/repository" -c core.hooksPath=/dev/null checkout --quiet --detach "$AGENT_RELEASE"
+SOURCE="$STAGING/repository"
+[[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$AGENT_RELEASE" ]] || { echo 'Release mismatch' >&2; exit 1; }
+files="distributed-agent.php inspect-workspace.php agent-preview-port-probe.php remote-readonly-actions.php remote-job-policy.php remote-local-policy.php hosting-queue-policy.php remote-hosting-queue.php remote-project-queue.php"
+for name in $files; do
+  [[ -f "$SOURCE/bin/$name" && ! -L "$SOURCE/bin/$name" ]] || { echo "Missing agent artifact: $name" >&2; exit 1; }
+  php -l "$SOURCE/bin/$name" >/dev/null
+done
+grep -Fqx 'ExecStart=/usr/bin/php /opt/devmcp-agent/bin/distributed-agent.php' "$SOURCE/deploy/distributed/devmcp-agent.service"
+grep -Fqx 'Unit=devmcp-agent.service' "$SOURCE/deploy/distributed/devmcp-agent.timer"
+bash -n "$SOURCE/deploy/distributed/install-agent-projects.sh"
 [[ ! -e /opt/devmcp-agent/bin/distributed-agent.php && ! -e /etc/systemd/system/devmcp-agent.service && ! -e /etc/systemd/system/devmcp-agent.timer ]] || {
   echo "ERROR: existing agent deployment; refusing overwrite" >&2; exit 1;
 }
@@ -148,7 +154,7 @@ if not isinstance(credential, str) or not re.fullmatch(r"[a-f0-9]{64}", credenti
 with open(sys.argv[2], "w", encoding="ascii") as f:
     f.write(machine_id + "\n" + credential + "\n")
 PY
-# Enrollment only. No agent process is started before local policy approval.
+# The authenticated admin invitation enrolls this machine; the admin activates it once.
 if ! getent passwd devmcp-agent >/dev/null; then
   useradd --system --home-dir /var/lib/devmcp-agent --shell /usr/sbin/nologin --user-group devmcp-agent
 fi
@@ -163,13 +169,24 @@ printf "<?php\nreturn ['machine_id' => '%s', 'central_url' => '%s', 'policy_file
 chown root:devmcp-agent /etc/devmcp/agent.php
 chmod 0640 /etc/devmcp/agent.php
 install -d -m 0755 -o root -g root /opt/devmcp-agent/bin
-install -m 0755 -o root -g root "$STAGING/distributed-agent.php" /opt/devmcp-agent/bin/distributed-agent.php
-install -m 0644 -o root -g root "$STAGING/devmcp-agent.service" /etc/systemd/system/devmcp-agent.service
-install -m 0644 -o root -g root "$STAGING/devmcp-agent.timer" /etc/systemd/system/devmcp-agent.timer
+for name in $files; do
+  install -m 0755 -o root -g root "$SOURCE/bin/$name" "/opt/devmcp-agent/bin/$name"
+done
+install -m 0644 -o root -g root "$SOURCE/deploy/distributed/devmcp-agent.service" /etc/systemd/system/devmcp-agent.service
+install -m 0644 -o root -g root "$SOURCE/deploy/distributed/devmcp-agent.timer" /etc/systemd/system/devmcp-agent.timer
+bash "$SOURCE/deploy/distributed/install-agent-projects.sh" "$SOURCE" "$AGENT_RELEASE"
+install -d -m0700 -o root -g root /var/lib/devmcp-agent-update
+[[ ! -e /var/lib/devmcp-agent-update/repository ]] || { echo 'Update checkout already exists' >&2; exit 1; }
+mv "$SOURCE" /var/lib/devmcp-agent-update/repository
+SOURCE=/var/lib/devmcp-agent-update/repository
+install -m0750 -o root -g root "$SOURCE/deploy/distributed/self-update-agent.sh" /opt/devmcp-agent/bin/self-update-agent.sh
+install -m0644 -o root -g root "$SOURCE/deploy/distributed/devmcp-agent-update.service" /etc/systemd/system/devmcp-agent-update.service
+install -m0644 -o root -g root "$SOURCE/deploy/distributed/devmcp-agent-update.timer" /etc/systemd/system/devmcp-agent-update.timer
+printf '%s\n' "$AGENT_RELEASE" > /var/lib/devmcp-agent-update/installed-revision
+chmod 0644 /var/lib/devmcp-agent-update/installed-revision
 systemctl daemon-reload
-systemctl enable --now devmcp-agent.timer
+systemctl enable --now devmcp-agent-update.timer devmcp-agent.timer
 systemctl start devmcp-agent.service
-echo "Installed and enrolled: machine $machine_id; devmcp-agent.timer enabled (remote execution disabled until explicitly approved)."
-systemctl is-enabled --quiet devmcp-agent.timer || { echo "ERROR: agent timer not enabled" >&2; exit 1; }
-systemctl --no-pager --full status devmcp-agent.timer || true
-
+echo "Installed and enrolled: project-capable machine $machine_id. Activate it once in the admin; projects need no manual setup."
+systemctl is-enabled --quiet devmcp-agent.timer
+systemctl is-active --quiet devmcp-projects.socket

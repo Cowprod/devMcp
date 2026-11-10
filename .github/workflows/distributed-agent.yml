@@ -32,6 +32,10 @@ jobs:
         run: |
           bash -n deploy/distributed/install-agent.sh
           shellcheck --severity=error deploy/distributed/install-agent.sh
+          bash -n deploy/distributed/install-agent-projects.sh
+          shellcheck --severity=error deploy/distributed/install-agent-projects.sh
+          php -l bin/devmcp-agent-project-broker.php
+          php -l bin/remote-project-queue.php
           bash -n deploy/distributed/self-update-agent.sh
           bash -n deploy/distributed/install-agent-self-update.sh
           shellcheck --severity=error deploy/distributed/self-update-agent.sh

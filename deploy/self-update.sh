@@ -68,6 +68,8 @@ update_stage=runtime-catalog-migration
 # The agent address table is metadata only; the server remains ZeroTier-only.
 update_stage=agent-zerotier-address-migration
 /usr/bin/php /opt/devmcp/bin/migrate-agent-zerotier-address.php --execute MIGRATE_AGENT_ZEROTIER_ADDRESS
+update_stage=remote-projects
+/usr/bin/php /opt/devmcp/bin/migrate-remote-projects.php --execute MIGRATE_REMOTE_PROJECTS
 # Provisioning runs inside systemd's read-only sandbox, unlike local CLI
 # diagnostics. Reconcile only the approved workspace root and narrow unit
 # drop-ins before the runtime is restarted.

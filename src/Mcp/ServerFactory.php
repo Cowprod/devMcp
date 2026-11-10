@@ -118,6 +118,7 @@ final class ServerFactory
             'properties' => [
                 'project_id' => ['type' => 'string', 'maxLength' => 64],
                 'description' => ['type' => 'string', 'maxLength' => 255],
+                'machine' => ['type' => 'string', 'description' => 'local par défaut, ou nom/ID d’une machine équipée de l’agent projets.'],
                 'confirmation' => ['type' => 'string', 'enum' => ['CREATE_PROJECT']],
             ],
             'required' => ['project_id', 'description', 'confirmation'],
@@ -134,7 +135,7 @@ final class ServerFactory
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
                 [$tools, 'projectCreate'], 'project_create',
-                description: 'Cree le depot GitHub prive, le workspace local et les actions standard SQL immediatement utilisables.',
+                description: 'Crée le dépôt GitHub privé et le workspace sur la machine choisie. Pour une machine distante, retourne un job à suivre jusqu’à la création effective.',
                 inputSchema: $projectCreateSchema,
             )
             ->addTool(

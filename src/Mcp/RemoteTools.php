@@ -17,7 +17,68 @@ use RuntimeException;
  */
 final class RemoteTools
 {
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(private readonly PDO $db, private readonly string $sourceRoot = '/var/lib/devmcp/remote-sources') {}
+
+    public function projectQueue(): \Cowprod\DevMcp\Project\RemoteProjectQueue
+    {
+        return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db);
+    }
+
+    public function createRemoteWorkspace(string $project): array
+    {
+        return $this->startManaged($project, 'project.provision', []);
+    }
+
+    private function startManaged(string $project, string $action, array $arguments): array
+    {
+        $q = $this->projectQueue();
+        $record = $q->project($project);
+        if ($record === null) {
+            throw new RuntimeException('Managed remote project not found');
+        }
+        $operation = match ($action) {
+            'project.provision' => 'create', 'workspace.sync' => 'sync', 'project.deploy' => 'deploy',
+            'project.status' => 'status', 'project.logs' => 'logs', 'git.head' => 'head',
+            'workspace.list' => 'list', 'workspace.read' => 'read', 'workspace.stat' => 'stat', 'workspace.find' => 'find',
+            default => throw new InvalidArgumentException('Unknown managed remote action'),
+        };
+        if ((int) $record['ready'] !== 1 && $operation !== 'create') {
+            throw new RuntimeException('Wait for the workspace creation job before using this project');
+        }
+        $allowed = match ($operation) {
+            'deploy' => ['runtime', 'commit'], 'sync' => ['commit'],
+            'list', 'read', 'stat', 'find' => ['path'], default => [],
+        };
+        if (array_diff(array_keys($arguments), $allowed)) {
+            throw new InvalidArgumentException('Unknown remote project argument');
+        }
+        $details = [];
+        if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
+            $commit = $arguments['commit'] ?? null;
+            if (($operation === 'sync' && $commit === null)
+                || ($commit !== null && (!is_string($commit) || preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1))) {
+                throw new InvalidArgumentException('Exact Git commit required');
+            }
+            if ($operation === 'deploy') {
+                if (!in_array($arguments['runtime'] ?? null, ['static', 'php', 'node'], true)) {
+                    throw new InvalidArgumentException('Explicit static, php or node runtime required');
+                }
+                $details['runtime'] = $arguments['runtime'];
+            }
+            $details['package'] = (new \Cowprod\DevMcp\Project\RemoteProjectSource($this->sourceRoot))
+                ->snapshot($project, $record['repository'], $commit);
+        } else {
+            $path = $arguments['path'] ?? '.';
+            if (!is_string($path)) {
+                throw new InvalidArgumentException('Relative project path required');
+            }
+            if ($path !== '.') {
+                \Cowprod\DevMcp\Project\RemoteProjectPackage::path($path);
+            }
+            $details['arguments'] = $arguments;
+        }
+        return $q->enqueue($project, $operation, $details);
+    }
 
     public static function fromConfig(array $config): ?self
     {
@@ -56,6 +117,8 @@ final class RemoteTools
     }
 
     private const ACTIONS = ['host.runtime', 'git.head', 'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find'];
+    private const MANAGED_ACTIONS = ['project.provision', 'git.head', 'workspace.list', 'workspace.read',
+        'workspace.stat', 'workspace.find', 'workspace.sync', 'project.deploy', 'project.status', 'project.logs'];
 
     /**
      * Read-only checks for a future provisioning request. Even disabled
@@ -112,6 +175,17 @@ final class RemoteTools
 
     public function describe(string $project): array
     {
+        $managed = $this->projectQueue()->project($project);
+        if ($managed !== null) {
+            $meta = $managed['metadata_json'] === null ? [] : json_decode($managed['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
+            return ['id' => $project, 'description' => 'Projet géré par l’agent distant', 'target' => 'remote',
+                'machine' => $managed['machine'], 'repository' => $managed['repository'],
+                'workspace' => $managed['workspace_path'], 'provisioning_state' => (int) $managed['ready'] === 1 ? 'active' : 'provisioning',
+                'preview_port' => $meta['port'] ?? null,
+                'preview_port_state' => isset($meta['port']) ? 'reserved' : 'not_allocated',
+                'preview_http_zerotier_host' => ($meta['central_http_verified'] ?? false) ? 'http' : 'not_checked',
+                'action_count' => count(self::MANAGED_ACTIONS)] + $meta;
+        }
         foreach ($this->projects() as $row) {
             if ($row['id'] === $project) {
                 // This is the server-side timestamp of the last authenticated
@@ -151,6 +225,21 @@ final class RemoteTools
     public function actions(string $project): array
     {
         $this->describe($project);
+        if ($this->projectQueue()->project($project) !== null) {
+            $actions = [];
+            foreach (self::MANAGED_ACTIONS as $id) {
+                $parameters = match ($id) {
+                    'project.deploy' => [['id' => 'runtime', 'type' => 'enum', 'values' => ['static', 'php', 'node'], 'required' => true],
+                        ['id' => 'commit', 'type' => 'git_sha', 'required' => false]],
+                    'workspace.sync' => [['id' => 'commit', 'type' => 'git_sha', 'required' => true]],
+                    'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find' => [['id' => 'path', 'type' => 'relative_path', 'required' => false]],
+                    default => [],
+                };
+                $actions[] = ['id' => $id, 'description' => 'Agent project operation: ' . $id,
+                    'target' => 'remote', 'sync_allowed' => false, 'parameters' => $parameters];
+            }
+            return ['project' => $project, 'actions' => $actions];
+        }
         return ['project' => $project, 'actions' => array_map(
             static fn(string $name): array => ['id' => $name, 'description' => 'Remote read-only action', 'target' => 'remote', 'sync_allowed' => false, 'parameters' => in_array($name, ['git.head', 'host.runtime'], true) ? [] : ($name === 'workspace.find' ? [['id' => 'path', 'type' => 'relative_path', 'required' => false], ['id' => 'filter', 'type' => 'enum', 'required' => false, 'values' => ['all', 'php', 'js', 'json', 'md']]] : [['id' => 'path', 'type' => 'relative_path', 'required' => false]])],
             self::ACTIONS
@@ -169,6 +258,9 @@ final class RemoteTools
 
     public function start(string $project, string $action, array $arguments = []): array
     {
+        if ($this->projectQueue()->project($project) !== null) {
+            return $this->startManaged($project, $action, $arguments);
+        }
         $this->action($project, $action);
         $query = $this->db->prepare(
             "SELECT dm_deployment.id FROM dm_deployment "
@@ -187,6 +279,10 @@ final class RemoteTools
 
     public function status(string $jobId): array
     {
+        $managed = $this->projectQueue()->status($jobId);
+        if ($managed !== null) {
+            return $managed;
+        }
         $row = $this->remoteJobStatus($jobId);
         return ['job_id' => $row['id'], 'action' => $row['action_name'], 'target' => 'remote',
             'status' => $row['state'], 'created_at' => $row['created_at'],
@@ -198,6 +294,9 @@ final class RemoteTools
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $jobId) !== 1) {
             return false;
+        }
+        if ($this->projectQueue()->status($jobId) !== null) {
+            return true;
         }
         $query = $this->db->prepare('SELECT id FROM dm_remote_readonly_job WHERE id = ?');
         $query->execute([$jobId]);

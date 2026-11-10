@@ -237,9 +237,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $invitation = (new EnrollmentService($writer))->issue((string) ($_POST['machine_id'] ?? ''));
                 break;
             case 'machine.approve':
-                if (empty($config['distributed_execution_approved'])) {
-                    throw new InvalidArgumentException('Activation désactivée : validation de sécurité requise');
-                }
                 $editor->approveMachine((string) ($_POST['machine_id'] ?? ''));
                 break;
             case 'machine.update':
@@ -505,6 +502,22 @@ foreach ($projectRows as &$projectRow) {
         ? 'http://' . $urlIp . ':' . $port : '';
 }
 unset($projectRow);
+$managedProjects = $db->query('SELECT p.project_id,p.metadata_json,p.ready,p.workspace_path,m.name AS machine FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id')->fetchAll(PDO::FETCH_ASSOC);
+foreach ($managedProjects as $managed) {
+    $id = $managed['project_id'];
+    if (!isset($projectRows[$id])) continue;
+    $meta = $managed['metadata_json'] === null ? [] : json_decode($managed['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
+    $projectRows[$id]['workspace'] = $managed['workspace_path'];
+    $projectRows[$id]['provisioning_machine'] = $managed['machine'];
+    $projectRows[$id]['provisioning_state'] = (int) $managed['ready'] === 1 ? 'active' : 'provisioning';
+    $projectRows[$id]['runtime_type'] = $meta['runtime'] ?? '';
+    $projectRows[$id]['runtime_configurable'] = false;
+    $projectRows[$id]['service_control_available'] = false;
+    $projectRows[$id]['preview_url'] = $meta['url'] ?? '';
+    $projectRows[$id]['preview_status_label'] = ($meta['central_http_verified'] ?? false)
+        ? 'HTTP vérifié depuis TouchDeck le ' . $meta['preview_http_checked_at_utc']
+        : 'Créé par l’agent · service non vérifié';
+}
 ksort($projectRows);
 
 function e(mixed $value): string
@@ -600,21 +613,32 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <?php if ($invitation !== null): ?><div class="alert alert-warning"><strong>Jeton d'enrôlement (affiché une seule fois)</strong><p class="mb-1">Expire à <?= e($invitation['expires_at']) ?> UTC. Ne le transmettez que par un canal sûr.</p><code class="user-select-all text-break"><?= e($invitation['token']) ?></code><?php if ($bootstrapCertHash !== false): ?><p class="mt-3 mb-1">Certificat TLS épinglé (SHA-256 du fichier PEM) :</p><code class="user-select-all text-break"><?= e($bootstrapCertHash) ?></code><p class="mt-2 mb-1">Installation du client (commande unique, jeton à usage unique) :</p>
 <div class="position-relative">
 <button type="button" id="copy-enrollment-command" class="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2" title="Copier la commande" aria-label="Copier la commande"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
-<pre id="enrollment-command" class="user-select-all text-wrap p-3 pe-5 bg-dark text-light">sudo -v &amp;&amp; { tmp=$(mktemp) &amp;&amp; curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location 'https://raw.githubusercontent.com/Cowprod/devMcp/5863a1e4552eb72edd000b9d992884da50abf138/deploy/distributed/install-agent.sh' -o "$tmp" &amp;&amp; { printf '%s\n' '<?= e($invitation['token']) ?>' | sudo -n bash "$tmp" --server <?= e($bootstrapServer) ?> --cert-url <?= e($bootstrapServer) ?>/devmcp-ca.crt --cert-sha256 <?= e($bootstrapCertHash) ?> --token-stdin; }; rc=$?; rm -f "$tmp"; test "$rc" -eq 0; }</pre>
+<?php
+try {
+    $installCommand = \Cowprod\DevMcp\Distributed\Admin\AgentInstallation::command(
+        \Cowprod\DevMcp\Distributed\Admin\AgentInstallation::revision(dirname(__DIR__)),
+        $bootstrapServer, $bootstrapCertHash, $invitation['token']);
+} catch (Throwable $installError) {
+    $installCommand = null;
+}
+?>
+<?php if ($installCommand !== null): ?><pre id="enrollment-command" class="user-select-all text-wrap p-3 pe-5 bg-dark text-light"><?= e($installCommand) ?></pre><?php else: ?><p class="text-warning">Révision déployée introuvable : commande d’installation indisponible.</p><?php endif; ?>
 </div>
 <div id="copy-enrollment-feedback" class="small" role="status" aria-live="polite">Commande avec jeton à usage unique.</div>
 <script>
 document.getElementById('copy-enrollment-command').addEventListener('click', async function () {
     const feedback = document.getElementById('copy-enrollment-feedback');
+    const command = document.getElementById('enrollment-command');
+    if (!command) { feedback.textContent = 'Commande indisponible : révision déployée introuvable.'; return; }
     try {
-        await navigator.clipboard.writeText(document.getElementById('enrollment-command').textContent.trim());
+        await navigator.clipboard.writeText(command.textContent.trim());
         feedback.textContent = 'Commande copiée : elle contient un jeton secret.';
     } catch (error) {
         feedback.textContent = 'Copie impossible : sélectionnez la commande.';
     }
 });
 </script>
-<small>Attention : le jeton intégré peut être conservé dans l'historique shell. Exécution distante désactivée avant approbation.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
+<small>Attention : le jeton intégré peut être conservé dans l'historique shell. Agent complet : approuver la machine une fois dans l’admin après installation. Aucun réglage par projet.</small><?php else: ?><p class="mb-0 mt-2">Certificat du serveur indisponible pour la préparation de l'installation.</p><?php endif; ?></div><?php endif; ?>
 
 <h2 class="h5">Derniers jobs</h2>
 <div class="table-responsive"><table class="table table-sm table-striped table-hover">
@@ -645,7 +669,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
 <?php endif; ?>
 <?php foreach ($machines as $machine): ?>
-<tr data-record-id="<?= e($machine['id']) ?>"><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending' && !empty($config['distributed_execution_approved'])): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
+<tr data-record-id="<?= e($machine['id']) ?>"><td><?= e($machine['name']) ?></td><td><?= e($machine['os_family']) ?></td><td><?= e($machine['architecture']) ?></td><td><?= e($machine['status']) ?></td><td><?php $seen = $machine['last_seen_at'] ?? null; $age = $seen ? time() - strtotime((string) $seen . ' UTC') : null; $online = $age !== null && $age >= -30 && $age <= 180; ?><span class="badge <?= $online ? 'bg-success' : 'bg-secondary' ?>"><?= $online ? 'En ligne' : 'Hors ligne' ?></span></td><td><?= e($machine['agent_version'] ?: 'Non renseignée') ?></td><td><?= e($seen ?: 'Jamais') ?></td><td><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="enrollment.issue"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-success" type="submit">Générer un jeton</button></form><?php endif; ?><?php if ($machine['status'] === 'pending'): ?><form method="post" action="/" class="mt-1"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="machine.approve"><input type="hidden" name="machine_id" value="<?= e($machine['id']) ?>"><button class="btn btn-sm btn-warning" type="submit">Approuver</button></form><?php endif; ?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div>
 </section>

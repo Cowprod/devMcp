@@ -30,9 +30,17 @@ if (!extension_loaded('curl')) {
     exit(1);
 }
 $handle = curl_init($server . '/v1/agent/ping');
+$hello = ['protocol_version' => 1];
+if (is_file('/etc/devmcp/agent-projects.php') && is_file('/opt/devmcp-agent/project-active/revision')) {
+    $projectPolicy = require '/etc/devmcp/agent-projects.php';
+    $projectRelease = trim((string) file_get_contents('/opt/devmcp-agent/project-active/revision'));
+    if (($projectPolicy['enabled'] ?? null) === true && preg_match('/^[a-f0-9]{40}$/D', $projectRelease) === 1) {
+        $hello['agent_version'] = 'projects-v1:' . $projectRelease;
+    }
+}
 curl_setopt_array($handle, [
     CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => '{"protocol_version":1}',
+    CURLOPT_POSTFIELDS => json_encode($hello, JSON_THROW_ON_ERROR),
     CURLOPT_HTTPHEADER => [
         'Content-Type: application/json',
         'Authorization: Bearer ' . $credential,
@@ -115,7 +123,10 @@ $post = static function (string $endpoint, string $body) use ($server, $headers,
         ));
         return null;
     }
-    $decoded = json_decode($response, true, 8);
+    if (strlen($response) > 8388608) {
+        throw new RuntimeException('Agent response exceeds its size limit');
+    }
+    $decoded = json_decode($response, true, 32);
     if (!is_array($decoded)) {
         fwrite(STDERR, sprintf("devMcp: remote %s response is not JSON object\n",
             str_starts_with($endpoint, '/v1/agent/hosting-') ? 'hosting' : 'read-only'));
@@ -171,6 +182,14 @@ if (($data['zerotier_address_supported'] ?? false) === true
             || ($addressReply['zerotier_address_saved'] ?? false) !== true) {
             fwrite(STDERR, "devMcp: ZeroTier peer IPv4 not verified by central server\n");
         }
+    }
+}
+if (is_file(__DIR__ . '/remote-project-queue.php')) {
+    require_once __DIR__ . '/remote-project-queue.php';
+    try {
+        remoteProjectPoll($post, $config);
+    } catch (Throwable $error) {
+        fwrite(STDERR, "devMcp: project queue unavailable\n");
     }
 }
 // Only an ACTIVE server-assigned project may request a TCP port. The agent

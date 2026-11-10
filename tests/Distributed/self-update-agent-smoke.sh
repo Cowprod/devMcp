@@ -16,6 +16,7 @@ printf '%s\n' "$target" > "$tmp/state/installed-revision"
 sed -e "s|/var/lib/devmcp-agent-update|$tmp/state|g" \
   -e "s|/opt/devmcp-agent/bin|$tmp/agent-bin|g" \
   -e "s|/etc/devmcp/agent.php|$tmp/etc/agent.php|g" \
+  -e "s|/etc/devmcp/agent-projects.php|$tmp/etc/agent-projects.php|g" \
   -e "s|/etc/devmcp/hosting-policy.json|$tmp/etc/hosting-policy.json|g" \
   -e "s|/run/lock/devmcp-agent-update.lock|$tmp/update.lock|g" \
   deploy/distributed/self-update-agent.sh > "$tmp/updater.sh"
@@ -45,7 +46,7 @@ cp bin/devmcp-hosting-root "$tmp/state/repository/bin/devmcp-hosting-root"
 cp bin/devmcp-hosting-gateway "$tmp/state/repository/bin/devmcp-hosting-gateway"
 for name in distributed-agent.php inspect-workspace.php agent-preview-port-probe.php \
   remote-readonly-actions.php remote-job-policy.php remote-local-policy.php \
-  hosting-queue-policy.php remote-hosting-queue.php; do
+  hosting-queue-policy.php remote-hosting-queue.php remote-project-queue.php; do
   printf '%s\n' '<?php return true;' > "$tmp/state/repository/bin/$name"
   cp "$tmp/state/repository/bin/$name" "$tmp/agent-bin/$name"
 done
@@ -106,6 +107,11 @@ export PATH="$tmp/fake:$PATH"
 # Simulate an already opted-in hosting lab with a pinned privileged gateway.
 # Even an old self-updater must not promote it to the newly checked-out SHA.
 printf '%s\n' '{"enabled":true}' > "$tmp/etc/hosting-policy.json"
+export PROJECT_INSTALLER_LOG="$tmp/project-installer.log"
+cat > "$tmp/state/repository/deploy/distributed/install-agent-projects.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$PROJECT_INSTALLER_LOG"
+STUB
 export HOSTING_INSTALLER_LOG="$tmp/hosting-installer.log"
 cat > "$tmp/state/repository/deploy/distributed/install-hosting-gateway.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -148,6 +154,7 @@ rm "$lock"
 # 1) Idempotent on complete matching SHA.
 bash "$tmp/updater.sh" > "$tmp/out1"
 grep -Fq "Agent already current: $target" "$tmp/out1"
+grep -Fq "$target" "$PROJECT_INSTALLER_LOG"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
 [[ -f "$lock" && ! -L "$lock" && "$(stat -c '%a:%h' "$lock")" == '600:1' ]]
 # A shared/excessively permissive inode cannot be treated as our lock.

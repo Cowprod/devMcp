@@ -39,6 +39,10 @@ foreach ([
     }
 }
 $log = strstr($transport, 'fwrite(STDERR, sprintf(');
+if (is_string($log)) {
+    $logEnd = strpos($log, "\n        ));");
+    $log = $logEnd === false ? false : substr($log, 0, $logEnd + 12);
+}
 if (!is_string($log) || !str_contains($log, 'http=%d; curl_errno=%d')
     || !str_contains($log, '$endpoint === \'/v1/agent/job-poll\'')
     || str_contains($log, '$credential') || str_contains($log, '$body')

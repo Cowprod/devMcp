@@ -33,7 +33,7 @@ final class ParameterDefinition
         $type = $data['type'] ?? null;
         if (!is_string($type) || !in_array(
             $type,
-            ['git_sha', 'android_serial', 'serial_device', 'relative_path', 'enum', 'integer'],
+            ['git_sha', 'android_serial', 'serial_device', 'relative_path', 'enum', 'integer', 'identifier', 'text'],
             true,
         )) {
             throw new InvalidArgumentException("Type de paramètre interdit : {$id}");
@@ -93,6 +93,11 @@ final class ParameterDefinition
     public function normalize(mixed $value): string|int
     {
         return match ($this->type) {
+            'identifier' => is_string($value) && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/D', $value) === 1
+                ? $value : throw new InvalidArgumentException('Identifiant invalide'),
+            'text' => is_string($value) && trim($value) !== '' && strlen($value) <= 255
+                && preg_match('/[\x00-\x1f\x7f]/', $value) !== 1
+                ? $value : throw new InvalidArgumentException('Texte invalide'),
             'git_sha' => $this->normalizeGitSha($value),
             'android_serial' => $this->normalizeAndroidSerial($value),
             'serial_device' => $this->normalizeSerialDevice($value),

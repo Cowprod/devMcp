@@ -36,6 +36,13 @@ jobs:
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261101_preview_port_reservation.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261102_project_runtime_catalog.sql
           mysql -h 127.0.0.1 -u devmcp_test devmcp_test < migrations/20261102_agent_zerotier_address.sql
+          mysql -h 127.0.0.1 -u devmcp_test devmcp_test < database/migrations/008_remote_projects.sql
+      - name: Automatic remote project creation and agent completion
+        env:
+          DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
+          DEVMCP_TEST_MYSQL_USER: devmcp_test
+          DEVMCP_TEST_MYSQL_PASSWORD: testpass
+        run: vendor/bin/phpunit tests/Distributed/RemoteProjectCreationMySqlTest.php
       - name: Hosting schema 006/007 migration, resumption and idempotency
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4

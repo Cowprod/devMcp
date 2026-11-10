@@ -14,7 +14,8 @@ try {
     }
     $body = file_get_contents('php://input', false, null, 0, 1025);
     $payload = json_decode((string) $body, true, 8, JSON_THROW_ON_ERROR);
-    if ($payload !== ['protocol_version' => 1]) {
+    $projectQueue = $payload === ['protocol_version' => 1, 'queue' => 'projects'];
+    if (!$projectQueue && $payload !== ['protocol_version' => 1]) {
         throw new RuntimeException('protocol');
     }
     $headers = [];
@@ -39,7 +40,12 @@ try {
     $state = $db->prepare("SELECT status FROM dm_machine WHERE id = ?");
     $state->execute([$machineId]);
     if ($state->fetchColumn() !== 'active') {
-        echo '{"protocol_version":1,"jobs":[]}';
+        echo $projectQueue ? '{"protocol_version":1,"project_jobs":[]}' : '{"protocol_version":1,"jobs":[]}';
+        exit;
+    }
+    if ($projectQueue) {
+        $job = (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db))->claim($machineId);
+        echo json_encode(['protocol_version' => 1, 'project_jobs' => $job === null ? [] : [$job]], JSON_THROW_ON_ERROR);
         exit;
     }
     // Atomic claim; only explicitly enabled deployments on active machines.

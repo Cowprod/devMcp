@@ -15,6 +15,10 @@ jobs:
           coverage: none
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist
+      - name: Real root project runtime creates and deploys three fresh workspaces
+        run: |
+          if [ ! -x /usr/bin/node ]; then sudo apt-get update && sudo apt-get install -y nodejs; fi
+          sudo env DEVMCP_RUN_ROOT_TESTS=1 php -d zend.assertions=1 -d assert.exception=1 tests/distributed/remote-project-runtime-smoke.php
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
