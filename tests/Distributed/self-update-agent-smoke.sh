@@ -126,14 +126,14 @@ grep -Fq -- '--root-approved' "$tmp/installer-denied"
 # Malicious lock entries must fail before even fetching source or staging
 # root-owned helpers; the victim is never opened or truncated.
 lock="$tmp/update.lock"
-printf 'preserve-me\\n' > "$tmp/lock-victim"
+printf '%s\n' 'preserve-me' > "$tmp/lock-victim"
 chmod 0600 "$tmp/lock-victim"
 ln -s "$tmp/lock-victim" "$lock"
 if bash "$tmp/updater.sh" > "$tmp/lock-symlink-error" 2>&1; then
   echo 'FAIL: linked privileged updater lock accepted' >&2; exit 1
 fi
 grep -Fq 'Untrusted agent updater lock file' "$tmp/lock-symlink-error"
-[[ "$(cat "$tmp/lock-victim")" == 'preserve-me\\n' ]] || {
+[[ "$(cat "$tmp/lock-victim")" == 'preserve-me' ]] || {
   echo 'FAIL: updater truncated linked lock victim' >&2; exit 1
 }
 rm "$lock"
