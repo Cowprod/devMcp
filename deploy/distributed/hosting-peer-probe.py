@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Bounded, read-only health probe executed FROM a different ZeroTier peer.
 
-Requires an independent Linux ZeroTier peer with iproute2 (/usr/sbin/ip).\nThis tool does not commit a deployment, supply local root authorization,
+Requires an independent Linux ZeroTier peer with iproute2 (/usr/sbin/ip).
+This tool does not commit a deployment, supply local root authorization,
 change routes, or run on caseRouter as part of its activation transaction.
 It prints a machine-readable observation that an operator can corroborate.
 """
@@ -120,7 +121,6 @@ def assert_zerotier_route(target, peer):
         and address.get("local") == peer for address in addresses
     ):
         raise RuntimeError("Peer source IPv4 is not assigned to the ZeroTier adapter")
-
 
 
 def probe(runtime, target, port, peer):
