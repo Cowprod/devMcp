@@ -26,6 +26,11 @@ return [
     // These actions are inert unless a local project explicitly opts in AND
     // a separate root-approved, caseRouter-only systemd socket is installed.
     // No direct SQL, shell, sudo or generic remote deployment argument.
+    'hosting.lab.inspect' => [
+        'description' => 'Lit les trois grants et les derniers jobs caseRouter sans commande distante ni mise en file.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit', 'inspect'],
+        'cwd' => '.', 'timeout' => 35, 'target' => 'local',
+    ],
     'hosting.lab.prepare' => [
         'description' => 'Enfile atomiquement les trois préparations caseRouter via le socket local explicitement autorisé.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-hosting-central-submit',
