@@ -1,0 +1,65 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Unprivileged operator client for an EXPLICITLY installed root socket.
+ * Intended as an opt-in project action; never sudo, SSH or direct SQL.
+ */
+try {
+    if ($argc !== 3 || !in_array($argv[1], ['prepare', 'activate'], true)
+        || preg_match('/^[a-f0-9]{40}$/D', $argv[2]) !== 1
+        || $argv[2] === str_repeat('0', 40)) {
+        throw new InvalidArgumentException('Invalid operator action or git revision');
+    }
+    $request = [
+        'version' => 1,
+        'phase' => $argv[1],
+        'machine_name' => 'caseRouter',
+        'revision' => $argv[2],
+        'approval' => $argv[1] === 'prepare'
+            ? 'PREPARE_CASE_HOSTING_LAB_BY_NAME'
+            : 'ACTIVATE_CASE_HOSTING_LAB_BY_NAME',
+    ];
+    $wire = json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+    $socket = @stream_socket_client(
+        'unix:///run/devmcp-hosting-central/operator.sock', $code, $message, 3
+    );
+    if (!is_resource($socket)) {
+        throw new RuntimeException('Central root operator socket unavailable');
+    }
+    try {
+        stream_set_timeout($socket, 30);
+        $length = strlen($wire);
+        for ($sent = 0; $sent < $length; $sent += $written) {
+            $written = fwrite($socket, substr($wire, $sent));
+            if (!is_int($written) || $written < 1) {
+                throw new RuntimeException('Central operator request write failed');
+            }
+        }
+        stream_socket_shutdown($socket, STREAM_SHUT_WR);
+        $raw = stream_get_contents($socket, 8193);
+        $meta = stream_get_meta_data($socket);
+        if (!is_string($raw) || strlen($raw) > 8192 || ($meta['timed_out'] ?? false)) {
+            throw new RuntimeException('Central operator receipt missing');
+        }
+        $response = json_decode(trim($raw), true, 12, JSON_THROW_ON_ERROR);
+        if (!is_array($response) || ($response['version'] ?? null) !== 1
+            || ($response['ok'] ?? null) !== true
+            || !is_array($response['result'] ?? null)
+            || ($response['result']['phase'] ?? null) !== $argv[1]
+            || ($response['result']['jobs_queued'] ?? null) !== 3
+            || ($response['result']['deployment_complete'] ?? null) !== false) {
+            throw new RuntimeException('Central operator rejected or incomplete');
+        }
+        echo json_encode($response['result'],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+    } finally {
+        fclose($socket);
+    }
+    exit(0);
+} catch (Throwable $error) {
+    fwrite(STDERR, "Hosting lab operator submission rejected: " . get_class($error) . "\n");
+    exit(1);
+}
