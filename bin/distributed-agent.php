@@ -77,6 +77,61 @@ if (!is_array($data) || ($data['protocol_version'] ?? null) !== 1 || ($data['ok'
 // Explicitly distinguish a successful authenticated central ping from later
 // local-policy and job-poll failures. Never log the response, token or URL.
 fwrite(STDOUT, "devMcp: central ping accepted (protocol=1)\n");
+// Privileged hosting tasks have a short claim deadline. Poll this separately
+// opted-in queue immediately after the authenticated ping, before optional
+// preview probing and workspace reports (each can block on HTTP timeouts).
+$headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
+    'X-DevMcp-Machine: ' . $config['machine_id']];
+$post = static function (string $endpoint, string $body) use ($server, $headers, $config): ?array {
+    $request = curl_init($server . $endpoint);
+    curl_setopt_array($request, [
+        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_CAINFO => $config['ca_file'], CURLOPT_FOLLOWLOCATION => false,
+    ]);
+    $response = curl_exec($request);
+    $code = (int) curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+    $curlErrno = curl_errno($request);
+    curl_close($request);
+    if (!is_string($response) || $code !== 200) {
+        // The ping can succeed while either remote queue endpoint
+        // fails. Log fixed labels and bounded numbers only; never the
+        // credential, request/response body, machine ID or remote URL.
+        $reason = match (true) {
+            $curlErrno !== 0 => 'transport_error',
+            $code === 400 => 'request_rejected',
+            $code === 401 || $code === 403 => 'authorization_rejected',
+            $code === 404 => 'endpoint_missing',
+            $code === 429 => 'rate_limited',
+            $code >= 500 && $code <= 599 => 'server_error',
+            default => 'unexpected_http_status',
+        };
+        fwrite(STDERR, sprintf(
+            "devMcp: remote %s %s unavailable (%s; http=%d; curl_errno=%d)\n",
+            str_starts_with($endpoint, '/v1/agent/hosting-') ? 'hosting' : 'read-only',
+            ($endpoint === '/v1/agent/job-poll' || $endpoint === '/v1/agent/hosting-poll') ? 'poll' : 'result',
+            $reason, $code, $curlErrno
+        ));
+        return null;
+    }
+    $decoded = json_decode($response, true, 8);
+    if (!is_array($decoded)) {
+        fwrite(STDERR, sprintf("devMcp: remote %s response is not JSON object\n",
+            str_starts_with($endpoint, '/v1/agent/hosting-') ? 'hosting' : 'read-only'));
+        return null;
+    }
+    return $decoded;
+};
+// The hosting queue is an independently opted-in surface. It never
+// inherits permissions from the read-only deployment policy.
+require_once __DIR__ . '/remote-hosting-queue.php';
+try {
+    remoteHostingPollOnce($post, $config['machine_id']);
+} catch (Throwable $error) {
+    fwrite(STDERR, "devMcp: optional hosting queue rejected response or local execution\n");
+}
+
 // Advertise the actual zt-interface IP only when the central server has
 // negotiated support. This keeps upgraded agents compatible with older cores.
 $probePath = __DIR__ . '/agent-preview-port-probe.php';
@@ -180,7 +235,7 @@ if ($previewRequests !== [] && is_file($probePath) && !is_link($probePath)) {
         fwrite(STDOUT, "devMcp: preview TCP port reserved (HTTP service not verified)\n");
     }
 }
-// No remote jobs: only bounded, read-only inspection of registered workspaces.
+// Optional bounded inspection of registered workspaces; no remote shell commands.
 require __DIR__ . '/inspect-workspace.php';
 $deployments = $data['deployments'] ?? [];
 if (!is_array($deployments) || count($deployments) > 32) {
@@ -224,55 +279,6 @@ $readonlyEnabled = is_array($policy) && ($policy['enabled'] ?? false) === true;
 require __DIR__ . '/remote-readonly-actions.php';
 require __DIR__ . '/remote-job-policy.php';
 require __DIR__ . '/remote-local-policy.php';
-$headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $credential,
-    'X-DevMcp-Machine: ' . $config['machine_id']];
-$post = static function (string $endpoint, string $body) use ($server, $headers, $config): ?array {
-    $request = curl_init($server . $endpoint);
-    curl_setopt_array($request, [
-        CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_CAINFO => $config['ca_file'], CURLOPT_FOLLOWLOCATION => false,
-    ]);
-    $response = curl_exec($request);
-    $code = (int) curl_getinfo($request, CURLINFO_RESPONSE_CODE);
-    $curlErrno = curl_errno($request);
-    curl_close($request);
-    if (!is_string($response) || $code !== 200) {
-        // The ping can succeed while the remote read-only queue endpoint
-        // fails. Log fixed labels and bounded numbers only; never the
-        // credential, request/response body, machine ID or remote URL.
-        $reason = match (true) {
-            $curlErrno !== 0 => 'transport_error',
-            $code === 400 => 'request_rejected',
-            $code === 401 || $code === 403 => 'authorization_rejected',
-            $code === 404 => 'endpoint_missing',
-            $code === 429 => 'rate_limited',
-            $code >= 500 && $code <= 599 => 'server_error',
-            default => 'unexpected_http_status',
-        };
-        fwrite(STDERR, sprintf(
-            "devMcp: remote read-only %s unavailable (%s; http=%d; curl_errno=%d)\n",
-            $endpoint === '/v1/agent/job-poll' ? 'poll' : 'result',
-            $reason, $code, $curlErrno
-        ));
-        return null;
-    }
-    $decoded = json_decode($response, true, 8);
-    if (!is_array($decoded)) {
-        fwrite(STDERR, "devMcp: remote read-only response is not JSON object\n");
-        return null;
-    }
-    return $decoded;
-};
-// The hosting queue is an independently opted-in surface. It never
-// inherits permissions from the read-only deployment policy.
-require_once __DIR__ . '/remote-hosting-queue.php';
-try {
-    remoteHostingPollOnce($post, $config['machine_id']);
-} catch (Throwable $error) {
-    fwrite(STDERR, "devMcp: optional hosting queue rejected request\\n");
-}
 if (!$readonlyEnabled) {
     fwrite(STDOUT, "devMcp: remote read-only actions disabled by local policy\\n");
     exit(0);
