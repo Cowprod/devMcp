@@ -29,7 +29,9 @@ final class RemoteHostingZeroTierMembership
         $kernel = RemoteHostingBindEvidence::inspect($plan);
         $cli = null;
         foreach (['/usr/sbin/zerotier-cli', '/usr/bin/zerotier-cli'] as $candidate) {
-            if (is_file($candidate) && !is_link($candidate) && is_executable($candidate)) {
+            // ZeroTier's Linux package links zerotier-cli to zerotier-one.
+            // Keep the CLI path: the executable selects its mode from argv[0].
+            if (is_file($candidate) && is_executable($candidate)) {
                 $cli = $candidate;
                 break;
             }
@@ -56,7 +58,7 @@ final class RemoteHostingZeroTierMembership
      * timeout enforces the five-second deadline even when the daemon hangs;
      * stdout is capped before any JSON parser sees it. No shell is involved.
      *
-     * Production chooses $cli only from the two absolute, non-symlink paths
+     * Production chooses $cli only from the two absolute system paths
      * above. This private seam is used with a temporary fake executable by
      * the unprivileged, vendor-free regression test.
      */
