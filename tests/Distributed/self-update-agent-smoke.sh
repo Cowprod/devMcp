@@ -85,11 +85,20 @@ STUB
 cat > "$tmp/fake/stat" <<'STUB'
 #!/usr/bin/env bash
 # The smoke sandbox simulates the root-owned metadata of the real installation.
-if [[ "${1:-}" == -c && "${2:-}" == %u ]]; then
-  echo 0
-else
-  exec /usr/bin/stat "$@"
+# Preserve real mode/link-count checks while simulating root ownership
+# for files inside this disposable non-root CI sandbox.
+if [[ "${1:-}" == -c ]]; then
+  case "${2:-}" in
+    %u) echo 0; exit 0 ;;
+    %u:%g) echo 0:0; exit 0 ;;
+    %u:%g:%a:%h)
+      value="$(/usr/bin/stat -c '%a:%h' "$3")" || exit
+      echo "0:0:$value"
+      exit 0
+      ;;
+  esac
 fi
+exec /usr/bin/stat "$@"
 STUB
 chmod +x "$tmp/fake/"*
 export PATH="$tmp/fake:$PATH"
@@ -114,10 +123,49 @@ if bash deploy/distributed/install-hosting-gateway.sh "$target" > "$tmp/installe
 fi
 grep -Fq -- '--root-approved' "$tmp/installer-denied"
 
+# Malicious lock entries must fail before even fetching source or staging
+# root-owned helpers; the victim is never opened or truncated.
+lock="$tmp/update.lock"
+printf 'preserve-me\\n' > "$tmp/lock-victim"
+chmod 0600 "$tmp/lock-victim"
+ln -s "$tmp/lock-victim" "$lock"
+if bash "$tmp/updater.sh" > "$tmp/lock-symlink-error" 2>&1; then
+  echo 'FAIL: linked privileged updater lock accepted' >&2; exit 1
+fi
+grep -Fq 'Untrusted agent updater lock file' "$tmp/lock-symlink-error"
+[[ "$(cat "$tmp/lock-victim")" == 'preserve-me\\n' ]] || {
+  echo 'FAIL: updater truncated linked lock victim' >&2; exit 1
+}
+rm "$lock"
+ln "$tmp/lock-victim" "$lock"
+if bash "$tmp/updater.sh" > "$tmp/lock-hardlink-error" 2>&1; then
+  echo 'FAIL: hard-linked privileged updater lock accepted' >&2; exit 1
+fi
+grep -Fq 'Untrusted agent updater lock file' "$tmp/lock-hardlink-error"
+rm "$lock"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+
 # 1) Idempotent on complete matching SHA.
 bash "$tmp/updater.sh" > "$tmp/out1"
 grep -Fq "Agent already current: $target" "$tmp/out1"
 [[ ! -s "$SYSTEMCTL_LOG" ]]
+[[ -f "$lock" && ! -L "$lock" && "$(stat -c '%a:%h' "$lock")" == '600:1' ]]
+# A shared/excessively permissive inode cannot be treated as our lock.
+chmod 0666 "$lock"
+if bash "$tmp/updater.sh" > "$tmp/lock-mode-error" 2>&1; then
+  echo 'FAIL: writable privileged updater lock accepted' >&2; exit 1
+fi
+grep -Fq 'Untrusted agent updater lock file' "$tmp/lock-mode-error"
+chmod 0600 "$lock"
+# The updater must not fetch, stage or touch services while another invocation
+# owns the lock. The lock inode is persistent (never truncated or replaced).
+exec 8<>"$lock"
+flock -n 8
+bash "$tmp/updater.sh" > "$tmp/out-locked"
+grep -Fxq 'Update already running' "$tmp/out-locked"
+[[ ! -s "$SYSTEMCTL_LOG" ]]
+flock -u 8
+exec 8>&-
 [[ ! -e "$HOSTING_INSTALLER_LOG" ]]
 [[ "$(readlink "$tmp/agent-bin/hosting-active")" == "hosting-bundles/$oldpin" ]]
 bundle="$tmp/agent-bin/hosting-bundles/$target"
