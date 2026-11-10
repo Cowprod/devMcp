@@ -297,6 +297,15 @@ final class RemoteHostingReleaseFilesystemEvidence
         if (!is_string($contents) || $contents === '' || strlen($contents) > 1048576) {
             throw new InvalidArgumentException('Mount table unavailable or oversized');
         }
+        self::checkMountinfo($contents);
+    }
+
+    /** Validate a locally collected mount table; no request may supply it. */
+    public static function checkMountinfo(string $contents): void
+    {
+        if ($contents === '' || strlen($contents) > 1048576) {
+            throw new InvalidArgumentException('Mount table unavailable or oversized');
+        }
         foreach (explode("\n", trim($contents)) as $line) {
             $fields = explode(' ', $line);
             if (count($fields) < 7 || !str_contains($line, ' - ')) {
@@ -308,7 +317,9 @@ final class RemoteHostingReleaseFilesystemEvidence
                 $fields[4]
             );
             $root = RemoteHostingReleasePlan::WORKSPACE_ROOT;
-            if ($mount === $root || str_starts_with($mount, $root . '/')) {
+            // systemd ReadWritePaths mounts the approved root into its namespace.
+            // A mount inside an individual workspace can still replace releases.
+            if (str_starts_with($mount, $root . '/')) {
                 throw new InvalidArgumentException('Mountpoint inside hosting workspace');
             }
         }
