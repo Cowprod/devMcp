@@ -49,6 +49,11 @@ final class HostingLabCentralInspection
                 'central_queue_write_fence_blockers' => [
                     count($matches) > 1 ? 'machine_name_ambiguous' : 'machine_not_found',
                 ],
+                'central_activation_ready' => false,
+                'central_activation_revision' => null,
+                'central_activation_blockers' => [
+                    count($matches) > 1 ? 'machine_name_ambiguous' : 'machine_not_found',
+                ],
                 'deployment_complete' => false,
             ];
         }
@@ -100,6 +105,16 @@ final class HostingLabCentralInspection
             . "AND action_name IN ('activate-initial', 'commit-initial') "
             . "AND state = 'succeeded' LIMIT 1"
         ) : null;
+        // Mirror the writer's latest-preparation gate as read-only evidence.
+        // This is an informational snapshot, never permission to activate:
+        // enqueue() repeats the check under the database transaction.
+        $latestPrepare = $schemaState === 'ready' ? $db->prepare(
+            "SELECT state, request_json FROM dm_remote_hosting_job "
+            . "WHERE deployment_id = ? AND action_name = 'prepare-all' "
+            . 'ORDER BY created_at DESC, id DESC LIMIT 1'
+        ) : null;
+        $preparedRevisions = [];
+        $activationBlockers = [];
         $writeFenceBlockers = [];
         $deployments = [];
         foreach (self::DEMOS as $runtime => $spec) {
@@ -162,7 +177,40 @@ final class HostingLabCentralInspection
                     $writeFenceBlockers[] = 'initial_activation_already_succeeded_' . $runtime;
                 }
             }
+            $preparedRevision = null;
+            if ($valid && $latestPrepare !== null) {
+                $latestPrepare->execute([$row['id']]);
+                $preparation = $latestPrepare->fetch(PDO::FETCH_ASSOC);
+                if (is_array($preparation) && ($preparation['state'] ?? null) === 'succeeded'
+                    && is_string($preparation['request_json'] ?? null)) {
+                    try {
+                        $prepared = json_decode($preparation['request_json'], true, 8, JSON_THROW_ON_ERROR);
+                    } catch (\JsonException) {
+                        // Malformed persisted evidence must not break inspection
+                        // or accidentally count as a successful preparation.
+                        $prepared = null;
+                    }
+                    $keys = is_array($prepared) ? array_keys($prepared) : [];
+                    sort($keys);
+                    if ($keys === ['deployment_id', 'machine_id', 'project_id', 'revision']
+                        && ($prepared['deployment_id'] ?? null) === $row['id']
+                        && ($prepared['machine_id'] ?? null) === $machineId
+                        && ($prepared['project_id'] ?? null) === $spec['project']
+                        && is_string($prepared['revision'] ?? null)
+                        && preg_match('/^[a-f0-9]{40}$/D', $prepared['revision']) === 1
+                        && $prepared['revision'] !== str_repeat('0', 40)) {
+                        $preparedRevision = $prepared['revision'];
+                    }
+                }
+            }
+            if ($preparedRevision === null) {
+                $activationBlockers[] = 'latest_preparation_unconfirmed_' . $runtime;
+            } else {
+                $preparedRevisions[$runtime] = $preparedRevision;
+            }
+
             $deployments[$runtime] = [
+                'latest_valid_preparation_revision' => $preparedRevision,
                 'project_id' => $spec['project'],
                 'deployment_id' => $valid ? $row['id'] : null,
                 'port' => $spec['port'],
@@ -173,6 +221,15 @@ final class HostingLabCentralInspection
                 'peer_health_verified' => false,
             ];
         }
+
+        $sameRevision = count($preparedRevisions) === count(self::DEMOS)
+            && count(array_unique(array_values($preparedRevisions))) === 1;
+        if (count($preparedRevisions) === count(self::DEMOS) && !$sameRevision) {
+            $activationBlockers[] = 'preparation_revisions_mismatch';
+        }
+        $activationBlockers = array_merge($blockers, $writeFenceBlockers, $activationBlockers);
+        $activationReady = $activationBlockers === [] && $sameRevision;
+        $activationRevision = $activationReady ? reset($preparedRevisions) : null;
 
         return [
             'machine_name' => $machine['name'],
@@ -187,6 +244,11 @@ final class HostingLabCentralInspection
             'central_queue_prerequisites_met' => $blockers === [],
             'central_queue_write_fences_clear' => $blockers === [] && $writeFenceBlockers === [],
             'central_queue_write_fence_blockers' => array_merge($blockers, $writeFenceBlockers),
+            // All three latest preparations must be confirmed for the same SHA.
+            // Even true is NOT authority to enqueue; the root writer rechecks.
+            'central_activation_ready' => $activationReady,
+            'central_activation_revision' => $activationRevision,
+            'central_activation_blockers' => $activationBlockers,
             'local_root_policy_verified' => false,
             'peer_health_verified' => false,
             'deployment_complete' => false,

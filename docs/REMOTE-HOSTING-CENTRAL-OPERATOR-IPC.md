@@ -35,6 +35,17 @@ transactions for the three named demos. It does not run any remote commands.
   queue entry is not treated as live, but an expired *claimed* entry
   remains blocking. Even a newer terminal job cannot hide older
   unresolved claimed work.
+  It also reports `central_activation_ready`,
+  `central_activation_revision` (the single 40-hex SHA only when ready)
+  and `central_activation_blockers`. Activation readiness requires the
+  **latest** `prepare-all` to have succeeded on each of the three valid
+  deployments, each persisted request to match the exact machine/deployment/
+  project identity, and all three prepared revisions to agree. A failed,
+  missing, mismatched or malformed preparation is not ready. Any outstanding
+  job or previous initial activation also prevents readiness.
+  The SHA is an **informational snapshot**: the root writer independently
+  checks all three latest preparations under its transaction; an operator
+  must never treat the inspection result as authority to enqueue.
   Its receipt always says `deployment_complete=false`; a SQL job state
   is not an independent HTTP/WebSocket health check. It reports missing
   enrollment as a blocker rather than attempting to create one.
