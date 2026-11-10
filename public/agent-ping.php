@@ -125,6 +125,11 @@ try {
         }
         try {
             $pending = $ports->pending($machineId);
+            // Managed projects allocate their live port on the target machine.
+            // Do not give them a second, unrelated legacy preview reservation.
+            $projectQueue = new \Cowprod\DevMcp\Project\RemoteProjectQueue($db);
+            $pending = array_values(array_filter($pending,
+                static fn(string $id): bool => $projectQueue->project($id) === null));
             $response['preview_port_requests'] = array_map(
                 static fn(string $id): array => ['project_id' => $id, 'min' => $min, 'max' => $max],
                 $pending,
