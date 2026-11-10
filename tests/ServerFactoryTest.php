@@ -12,7 +12,7 @@ use Cowprod\DevMcp\Execution\JobManager;
 use Cowprod\DevMcp\Mcp\ProjectTools;
 use Cowprod\DevMcp\Mcp\ServerFactory;
 use Cowprod\DevMcp\Project\ProjectRegistry;
-use Mcp\Server\Server;
+use Mcp\Server;
 use PHPUnit\Framework\TestCase;
 
 final class ServerFactoryTest extends TestCase
