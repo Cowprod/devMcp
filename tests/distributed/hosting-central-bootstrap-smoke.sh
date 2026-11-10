@@ -56,4 +56,36 @@ if positions != sorted(positions) or len(set(positions)) != len(positions):
 if 'sudo ' in source or 'systemctl' in source or 'nginx -s' in source:
     raise SystemExit('Wrapper must delegate all privileged mutations to approved installers')
 PY
+# A hostile PATH must not trigger a caller-supplied binary prior to root consent.
+spoof_dir="$(mktemp -d)"
+trap 'rm -rf -- "$spoof_dir"' EXIT
+cat > "$spoof_dir/id" <<'SH'
+#!/bin/sh
+: > "$DEVMCP_SPOOF_MARKER"
+exit 0
+SH
+chmod 0755 "$spoof_dir/id"
+for script in "$installer" "$operator" "$root/deploy/distributed/enable-hosting-central-routes.sh"; do
+  marker="$spoof_dir/$(basename "$script").seen"
+  if DEVMCP_SPOOF_MARKER="$marker" PATH="$spoof_dir:/usr/sbin:/usr/bin:/sbin:/bin" \
+       /usr/bin/bash "$script" --not-approved >/dev/null 2>&1; then
+    echo 'Root hosting installer accepted an unapproved invocation' >&2
+    exit 1
+  fi
+  if [[ -e "$marker" ]]; then
+    echo "Root hosting installer executed a caller-supplied PATH binary: $script" >&2
+    exit 1
+  fi
+done
+python3 - "$installer" "$operator" "$root/deploy/distributed/enable-hosting-central-routes.sh" <<'PY'
+import pathlib, sys
+for path in sys.argv[1:]:
+    source = pathlib.Path(path).read_text()
+    path_reset = "export PATH=/usr/sbin:/usr/bin:/sbin:/bin"
+    env_reset = "unset CDPATH ENV BASH_ENV PHPRC PHP_INI_SCAN_DIR LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT"
+    if path_reset not in source or env_reset not in source:
+        raise SystemExit("Missing root installer environment hygiene: " + path)
+    if source.index(path_reset) > source.index("id -u") or source.index(env_reset) > source.index("id -u"):
+        raise SystemExit("Root environment sanitation occurs after a subprocess: " + path)
+PY
 echo 'PASS: one-command TouchDeck bootstrap enforces separate root approvals and installer order'
