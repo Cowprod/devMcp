@@ -114,6 +114,69 @@ class PeerProbeContract(unittest.TestCase):
         with self.assertRaises((OSError, ValueError)):
             probe.read_signing_key(str(fifo))
 
+    def test_zerotier_route_is_required_for_signed_network_observation(self):
+        valid_route = [{"dev": "ztabcd1234", "prefsrc": PEER}]
+        valid_address = [{
+            "ifname": "ztabcd1234",
+            "addr_info": [{"family": "inet", "local": PEER}],
+        }]
+
+        def mocked_ip(route, address):
+            return [
+                mock.Mock(stdout=json.dumps(route)),
+                mock.Mock(stdout=json.dumps(address)),
+            ]
+
+        with mock.patch.object(
+            probe.subprocess, "run",
+            side_effect=mocked_ip(valid_route, valid_address),
+        ) as ip:
+            probe.assert_zerotier_route(TARGET, PEER)
+            self.assertEqual(2, ip.call_count)
+            self.assertEqual(
+                ["/usr/sbin/ip", "-j", "-4", "route", "get", TARGET, "from", PEER],
+                ip.call_args_list[0].args[0],
+            )
+            self.assertEqual(
+                ["/usr/sbin/ip", "-j", "-4", "addr", "show", "dev", "ztabcd1234"],
+                ip.call_args_list[1].args[0],
+            )
+            self.assertTrue(all(not call.kwargs.get("shell", False)
+                                for call in ip.call_args_list))
+
+        # Two private addresses on ordinary Ethernet do not prove ZeroTier.
+        with (mock.patch.object(probe.subprocess, "run",
+                                return_value=mock.Mock(
+                                    stdout=json.dumps([{"dev": "eth0"}]))) as ip,
+              self.assertRaises(RuntimeError)):
+            probe.assert_zerotier_route(TARGET, PEER)
+        ip.assert_called_once()
+
+        # A zt* route with a different address cannot impersonate this peer.
+        different_address = [{
+            "ifname": "ztabcd1234",
+            "addr_info": [{"family": "inet", "local": "192.168.194.187"}],
+        }]
+        with (mock.patch.object(probe.subprocess, "run",
+                                side_effect=mocked_ip(valid_route, different_address)),
+              self.assertRaises(RuntimeError)):
+            probe.assert_zerotier_route(TARGET, PEER)
+
+        # A missing iproute2 command must fail closed, not permit signing.
+        with (mock.patch.object(probe.subprocess, "run",
+                                side_effect=FileNotFoundError()),
+              self.assertRaises(RuntimeError)):
+            probe.assert_zerotier_route(TARGET, PEER)
+
+    def test_wrong_route_rejected_before_any_health_request(self):
+        with (mock.patch.object(probe, "assert_zerotier_route",
+                                side_effect=RuntimeError("LAN only")) as route,
+              mock.patch.object(probe.socket, "socket") as network,
+              self.assertRaises(RuntimeError)):
+            probe.probe("static", TARGET, 17601, PEER)
+        route.assert_called_once_with(TARGET, PEER)
+        network.assert_not_called()
+
     def test_python_signatures_are_accepted_by_real_php_for_each_lab(self):
         for runtime in probe.LAB_BINDINGS:
             with self.subTest(runtime=runtime):
