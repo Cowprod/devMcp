@@ -68,6 +68,7 @@ grep -Fq 'Untrusted central configuration file permissions' "$installer"
 # The renderer is PHP executed as root: a writable ancestor allows a
 # rename/replacement even when the leaf file is root-owned.
 grep -Fq 'for source_dir in /opt /opt/devmcp /opt/devmcp/deploy /opt/devmcp/deploy/distributed' "$installer"
+grep -Fq 'Untrusted central hosting installer location' "$installer"
 grep -Fq '! -L "$source_dir"' "$installer"
 grep -Fq '8#$source_mode & 0022' "$installer"
 grep -Fq 'for source_file in "$renderer" "$routes"' "$installer"
