@@ -1,0 +1,16 @@
+# One-time central root opt-in only. Never enabled by devMcp auto-update.
+[Unit]
+Description=devMcp central three-demo hosting operator socket (opt-in)
+
+[Socket]
+ListenStream=/run/devmcp-hosting-central/operator.sock
+SocketUser=root
+SocketGroup=devmcp
+SocketMode=0660
+DirectoryMode=0755
+Accept=yes
+RemoveOnStop=yes
+MaxConnections=2
+
+[Install]
+WantedBy=sockets.target
