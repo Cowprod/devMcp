@@ -51,4 +51,9 @@ grep -Fq 'remote_hosting_queue_enabled' "$installer"
 grep -Fq 'nginx -t' "$installer"
 grep -Fq 'systemctl reload nginx' "$installer"
 grep -Fq 'ip -o -4 addr show' "$installer"
+# The central privileged installer must not allow two overlapping writes or
+# silently discard a concurrent manual Nginx configuration edit.
+grep -Fq 'flock -n 9' "$installer"
+grep -Fq 'Untrusted central lock file' "$installer"
+grep -Fq 'cmp -s -- "$backup" "$conf"' "$installer"
 printf 'PASS: private hosting routes, idempotence, fail-closed layout and installer syntax\n'

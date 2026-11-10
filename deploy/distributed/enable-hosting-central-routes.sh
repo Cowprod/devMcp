@@ -13,6 +13,33 @@ config=/etc/devmcp-admin/distributed.php
 renderer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/render-hosting-central-routes.php"
 routes="$(dirname "$renderer")/nginx-hosting-routes.conf"
 
+# Serialize privileged vhost replacements. A permanent root-owned lock inode
+# survives atomic conf renames; kernel flock is released on crash/exit.
+# Never open an untrusted or symlinked lock path as root.
+lock_dir=/run/lock
+lock_path="$lock_dir/devmcp-hosting-central-nginx.lock"
+[[ -d "$lock_dir" && ! -L "$lock_dir" && "$(stat -c '%u:%g' "$lock_dir")" == '0:0' ]] || {
+  echo 'Untrusted central lock directory' >&2
+  exit 1
+}
+if [[ ! -e "$lock_path" && ! -L "$lock_path" ]]; then
+  ( set -C; : > "$lock_path" ) 2>/dev/null || {
+    echo 'Unable to create exclusive central lock file' >&2
+    exit 1
+  }
+fi
+[[ -f "$lock_path" && ! -L "$lock_path"
+   && "$(stat -c '%u:%g:%a:%h' "$lock_path")" == '0:0:600:1' ]] || {
+  echo 'Untrusted central lock file' >&2
+  exit 1
+}
+command -v flock >/dev/null
+exec 9<>"$lock_path"
+flock -n 9 || {
+  echo 'Another central hosting route installation is in progress' >&2
+  exit 1
+}
+
 # Do not follow symlinks, modify an unknown vhost, or change a foreign file.
 [[ -f "$conf" && ! -L "$conf" && "$(stat -c '%u:%g:%a:%h' "$conf")" == '0:0:644:1'
   && -f "$config" && ! -L "$config" && "$(stat -c %u "$config")" == 0
@@ -86,6 +113,13 @@ if cmp -s -- "$stage" "$conf"; then
   exit 0
 fi
 cp -p -- "$conf" "$backup"
+# A concurrent administrator edit must not be silently overwritten, even
+# though this installer holds its own lock. Operators editing Nginx manually
+# will not necessarily cooperate with the advisory lock.
+cmp -s -- "$backup" "$conf" || {
+  echo 'Central Nginx vhost changed during preparation; refusing overwrite' >&2
+  exit 1
+}
 chown root:root "$stage"
 chmod 0644 "$stage"
 mv -f -- "$stage" "$conf"
