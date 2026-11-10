@@ -3,6 +3,10 @@
 # No router, WAN/LAN, routes, NAT, firewall, agent policy or app units touched.
 set -euo pipefail
 umask 077
+# Never resolve privileged utilities or PHP from an inherited executable path.
+# Pre-start BASH_ENV evaluation still requires caller-side environment reset.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+unset CDPATH ENV BASH_ENV PHPRC PHP_INI_SCAN_DIR LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
 
 [[ "$(id -u)" == 0 && "$#" == 1 && "$1" == "--root-approved" ]] || {
   echo 'Usage (central TouchDeck root only): enable-hosting-central-routes.sh --root-approved' >&2
@@ -160,7 +164,8 @@ cleanup() {
     mv -f -- "$backup" "$conf" || true
     nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
   fi
-  rm -f -- "$stage" "$backup"\n  rm -rf -- "$snapshot"
+  rm -f -- "$stage" "$backup"
+  rm -rf -- "$snapshot"
   exit "$rc"
 }
 trap cleanup EXIT
