@@ -11,6 +11,12 @@ functions="$(sed -n '/^hosting_agent_policy_payload() {/,/^}/p; /^hosting_agent_
 eval "$functions"
 machine_id=41cdba74a97e72028a2601c3bac7e328
 hosting_agent_policy_payload "$machine_id" > "$tmp/current.php"
+php -r '
+require "src/Project/RemoteHostingLabBootstrap.php";
+$formatter = new ReflectionMethod(Cowprod\DevMcp\Project\RemoteHostingLabBootstrap::class, "agentPolicyBytes");
+echo $formatter->invoke(null, $argv[1]);
+' "$machine_id" > "$tmp/bootstrap.php"
+cmp "$tmp/current.php" "$tmp/bootstrap.php"
 hosting_agent_policy_legacy_payload "$machine_id" > "$tmp/legacy.php"
 php -l "$tmp/current.php" >/dev/null
 # The PHP tag must be parsed, return exact values, and produce zero output.
