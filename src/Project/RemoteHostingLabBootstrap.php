@@ -303,7 +303,8 @@ final class RemoteHostingLabBootstrap
         // initial workspace or root-only hosting grant.
         $zeroTierCliFound = false;
         foreach (['/usr/sbin/zerotier-cli', '/usr/bin/zerotier-cli'] as $cli) {
-            if (is_file($cli) && !is_link($cli) && is_executable($cli)) {
+            // The official Linux installation uses zerotier-cli -> zerotier-one.
+            if (is_file($cli) && is_executable($cli)) {
                 $zeroTierCliFound = true;
                 break;
             }
