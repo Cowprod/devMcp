@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Mcp;
 
-use Mcp\Server\Server;
+use Mcp\Server;
 use Mcp\Server\Session\SessionStoreInterface;
 
 final class ServerFactory
