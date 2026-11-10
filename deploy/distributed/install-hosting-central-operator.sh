@@ -66,6 +66,18 @@ grep -Fq 'location = /v1/agent/hosting-result {' "$vhost" || {
   echo 'Central HTTPS hosting routes must be installed first' >&2
   exit 1
 }
+# An anchor string in a comment or a partial location is not a valid route.
+# The existing pure renderer must consider the live vhost fully installed
+# and return byte-identical content; otherwise this socket stays disabled.
+renderer=/opt/devmcp/deploy/distributed/render-hosting-central-routes.php
+routes=/opt/devmcp/deploy/distributed/nginx-hosting-routes.conf
+trusted_file "$renderer" && trusted_file "$routes" || {
+  echo 'Untrusted central hosting route verifier' >&2; exit 1
+}
+php "$renderer" "$vhost" | cmp -s - "$vhost" || {
+  echo 'Central hosting locations are not the exact approved template' >&2
+  exit 1
+}
 nginx -t >/dev/null
 runtime=/run/devmcp-hosting-central
 if [[ -e "$runtime" || -L "$runtime" ]]; then
