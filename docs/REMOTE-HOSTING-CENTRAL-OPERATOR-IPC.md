@@ -19,6 +19,13 @@ transactions for the three named demos. It does not run any remote commands.
 - Root worker: `bin/devmcp-hosting-central-operator`, with fixed root-owned
   PHP source paths, no untrusted Composer autoload, exact request schema,
   and the existing central enrollment/grant, revision and transaction checks.
+- A separately granted `hosting.lab.inspect` action uses the same local
+  socket to read the existing `HostingLabCentralInspection` inventory:
+  exact machine identity, three deployment grants, latest SQL job per
+  runtime and delivery state. It sends no SHA or caller-controlled query.
+  Its receipt always says `deployment_complete=false`; a SQL job state
+  is not an independent HTTP/WebSocket health check. It reports missing
+  enrollment as a blocker rather than attempting to create one.
 - Allowlist: exactly `caseRouter`, `lab-static`/17601, `lab-php`/17602,
   `lab-node`/17603. The packet accepts only phase `prepare` or `activate`,
   a 40-hex revision, exact machine name, and phase-specific consent.
@@ -85,7 +92,7 @@ administratively rather than weakening these checks. It exposes a local Unix soc
 it does not enqueue jobs, restart a service, or deploy any app on caseRouter.
 
 To invoke from the devMcp connector, an administrator must **separately**
-include `hosting.lab.prepare` and `hosting.lab.activate` in the
+include `hosting.lab.inspect`, `hosting.lab.prepare` and `hosting.lab.activate` in the
 `shared_actions` array of an authorized *local* project in
 `/etc/devmcp/global.php` and reload its worker after reviewing that grant.
 The default shared action definitions alone do not expose the operations.
@@ -95,6 +102,7 @@ on arbitrary machines or runtimes.
 On systems with the explicit opt-in, the unprivileged CLI clients are:
 
 ```bash
+php /opt/devmcp/bin/devmcp-hosting-central-submit inspect
 php /opt/devmcp/bin/devmcp-hosting-central-submit prepare <40-hex-revision>
 php /opt/devmcp/bin/devmcp-hosting-central-submit activate <same-revision>
 ```
@@ -108,7 +116,7 @@ root reconciliation.
 
 Pure tests:
 `php tests/distributed/hosting-central-operator-contract.php`.
-The CI tests syntax, the strict protocol, separate consent, ownership
+The CI tests syntax, the strict protocol including inspect-only messages, separate consent, ownership
 contracts, denial when the executor is invoked without root, and systemd
 unit syntax. They do not attest live systemd installation or router execution.
 
