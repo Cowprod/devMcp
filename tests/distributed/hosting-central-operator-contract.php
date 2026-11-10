@@ -40,6 +40,12 @@ if ($inspected !== [
     throw new RuntimeException('Read-only hosting inspect contract missing');
 }
 expectOperatorDenied(operatorInspectWire(), 'CaseRouter');
+$verify = json_decode(operatorInspectWire(), true, 6, JSON_THROW_ON_ERROR);
+$verify['phase'] = 'verify';
+$verify['approval'] = 'VERIFY_CASE_HOSTING_LAB_BY_NAME';
+assert(HostingLabOperatorRequest::parse(json_encode($verify) . "\n", 'caseRouter')['phase'] === 'verify');
+expectOperatorDenied(json_encode(array_replace($verify, ['approval' => 'INSPECT_CASE_HOSTING_LAB_BY_NAME'])) . "\n");
+expectOperatorDenied(json_encode($verify + ['revision' => str_repeat('a', 40)]) . "\n");
 expectOperatorDenied(rtrim(operatorInspectWire(), "\n"));
 $inspection = json_decode(operatorInspectWire(), true, 6, JSON_THROW_ON_ERROR);
 foreach ([
@@ -115,7 +121,7 @@ foreach (['version', 'phase', 'machine_name', 'revision', 'approval'] as $field)
 // The opt-in socket must never be available through global shared actions
 // without a separate local project action grant.
 $actions = require dirname(__DIR__, 2) . '/config/shared-actions.php';
-foreach (['hosting.lab.inspect', 'hosting.lab.prepare', 'hosting.lab.activate'] as $name) {
+foreach (['hosting.lab.inspect', 'hosting.lab.prepare', 'hosting.lab.activate', 'hosting.lab.verify'] as $name) {
     if (!isset($actions[$name]) || ($actions[$name]['target'] ?? null) !== 'local'
         || ($actions[$name]['sync'] ?? false) !== false) {
         throw new RuntimeException('Central operator action not bounded and asynchronous');
