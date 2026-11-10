@@ -77,13 +77,17 @@ function hostingOperatorMain(): int
         (string) ($config['writer_username'] ?? ''),
         (string) ($config['writer_password'] ?? '')
     );
-    $machineId = HostingLabMachineResolver::resolve($db, $request['machine_name']);
+    // Inventory must report missing/revoked enrollment as a blocker,
+    // whereas writes still require the exact active machine resolver.
     $result = $request['phase'] === 'inspect'
         ? ['phase' => 'inspect'] + HostingLabCentralInspection::inspect(
             $db, $request['machine_name'], true
         )
         : HostingLabBatchEnqueue::enqueue(
-            $db, $machineId, $request['revision'], $request['phase']
+            $db,
+            HostingLabMachineResolver::resolve($db, $request['machine_name']),
+            $request['revision'],
+            $request['phase']
         );
     echo json_encode([
         'version' => 1, 'ok' => true, 'result' => $result,
