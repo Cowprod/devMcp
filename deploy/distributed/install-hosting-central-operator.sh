@@ -90,6 +90,15 @@ if [[ -e "$runtime" || -L "$runtime" ]]; then
 fi
 
 prefix=/opt/devmcp/deploy/distributed
+socket_unit=devmcp-hosting-central-operator.socket
+# Capture the independent runtime states BEFORE altering any unit files.
+# A socket can be enabled yet inactive (or active yet disabled); rollback
+# must preserve both bits rather than blindly disabling an existing service.
+was_active=0
+was_enabled=0
+if systemctl is-active --quiet "$socket_unit"; then was_active=1; fi
+if systemctl is-enabled --quiet "$socket_unit"; then was_enabled=1; fi
+
 for name in devmcp-hosting-central-operator.socket devmcp-hosting-central-operator@.service; do
   source="$prefix/$name"
   target="/etc/systemd/system/$name"
@@ -103,18 +112,83 @@ for name in devmcp-hosting-central-operator.socket devmcp-hosting-central-operat
     }
   fi
 done
+
+# The installation of TWO units and activation of the socket is one
+# operator-approved change. On a failure (including a socket ACL mismatch),
+# undo only files created by this invocation and restore the previous
+# enabled/active states. Never remove an already installed matching unit.
+installed_units=()
+staged_units=()
+mutation_started=0
+installation_committed=0
+rollback_operator_install() {
+  rc=$?
+  trap - EXIT
+  if [[ "$rc" -ne 0 && "$mutation_started" -eq 1 &&
+        "$installation_committed" -eq 0 ]]; then
+    if [[ "$was_active" -eq 0 ]]; then
+      systemctl stop "$socket_unit" >/dev/null 2>&1 ||
+        echo 'WARNING: central operator socket stop failed during rollback' >&2
+    fi
+    if [[ "$was_enabled" -eq 0 ]]; then
+      systemctl disable "$socket_unit" >/dev/null 2>&1 ||
+        echo 'WARNING: central operator socket disable failed during rollback' >&2
+    fi
+    for stage in "${staged_units[@]}"; do
+      rm -f -- "$stage" ||
+        echo 'WARNING: central operator unit staging cleanup failed' >&2
+    done
+    for name in "${installed_units[@]}"; do
+      target="/etc/systemd/system/$name"
+      # Do not delete a file which an independent administrator has modified.
+      if [[ -f "$target" && ! -L "$target" ]] &&
+         trusted_file "$target" && cmp -s "$prefix/$name" "$target"; then
+        rm -f -- "$target" ||
+          echo "WARNING: central operator unit cleanup failed: $name" >&2
+      else
+        echo "WARNING: central operator unit changed during rollback: $name" >&2
+      fi
+    done
+    if [[ "${#installed_units[@]}" -gt 0 ]]; then
+      systemctl daemon-reload ||
+        echo 'WARNING: central operator daemon-reload failed during rollback' >&2
+    fi
+    echo 'FAIL: central operator installation rejected; rollback attempted' >&2
+  fi
+  exit "$rc"
+}
+trap rollback_operator_install EXIT
+
 for name in devmcp-hosting-central-operator.socket devmcp-hosting-central-operator@.service; do
   target="/etc/systemd/system/$name"
-  [[ -e "$target" ]] ||
-    install -m 0644 -o root -g root "$prefix/$name" "$target"
+  if [[ ! -e "$target" ]]; then
+    mutation_started=1
+    # Stage in the same filesystem; never leave half-written systemd units.
+    stage="$(mktemp "/etc/systemd/system/.$name.XXXXXXXX")"
+    staged_units+=("$stage")
+    install -m 0644 -o root -g root "$prefix/$name" "$stage"
+    [[ ! -e "$target" && ! -L "$target" ]] || {
+      echo 'Central operator systemd unit appeared during installation' >&2
+      exit 1
+    }
+    mv -n -- "$stage" "$target"
+    [[ ! -e "$stage" && -f "$target" && ! -L "$target" ]] &&
+      cmp -s "$prefix/$name" "$target" || {
+      echo 'Central operator systemd unit changed during installation' >&2
+      exit 1
+    }
+    installed_units+=("$name")
+  fi
 done
+mutation_started=1
 systemctl daemon-reload
-systemctl enable --now devmcp-hosting-central-operator.socket
-systemctl is-active --quiet devmcp-hosting-central-operator.socket
+systemctl enable --now "$socket_unit"
+systemctl is-active --quiet "$socket_unit"
 socket="$runtime/operator.sock"
 [[ -S "$socket" && ! -L "$socket" &&
    "$(stat -c '%u:%g:%a:%h' "$socket")" == "0:$group_gid:660:1" ]] || {
   echo 'Central operator socket ACL check rejected' >&2
   exit 1
 }
+installation_committed=1
 echo 'PASS: root-approved central lab operator IPC installed; no job enqueued or application deployed'

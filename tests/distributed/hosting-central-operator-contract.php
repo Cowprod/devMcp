@@ -103,4 +103,33 @@ if (!is_string($socket) || !str_contains($socket, 'SocketGroup=devmcp')
     || !str_contains($installer, 'Central HTTPS hosting routes must be installed first')) {
     throw new RuntimeException('Untrusted central operator installation contract');
 }
-echo "PASS: central three-demo root socket protocol, consent and opt-in fencing\n";
+// The bootstrap must be reversible: protect pre-existing units and keep
+// separate enabled/active states. Contract-only: no privileged systemd call.
+foreach ([
+    'trap rollback_operator_install EXIT',
+    'was_active=0',
+    'was_enabled=0',
+    'systemctl is-active --quiet "$socket_unit"',
+    'systemctl is-enabled --quiet "$socket_unit"',
+    'installed_units=()',
+    'staged_units=()',
+    'stage="$(mktemp "/etc/systemd/system/.$name.XXXXXXXX")"',
+    'mv -n -- "$stage" "$target"',
+    'for name in "${installed_units[@]}"; do',
+    'systemctl stop "$socket_unit"',
+    'systemctl disable "$socket_unit"',
+    'systemctl daemon-reload',
+    'installation_committed=1',
+] as $required) {
+    if (!str_contains($installer, $required)) {
+        throw new RuntimeException('Central operator transactional bootstrap contract missing: ' . $required);
+    }
+}
+// Rollback must remove only newly installed units, never pre-existing copies.
+if (!str_contains($installer, 'trusted_file "$target" && cmp -s "$prefix/$name" "$target"')
+    || !str_contains($installer, 'if [[ "$rc" -ne 0 && "$mutation_started" -eq 1')
+    || !str_contains($installer, 'if [[ "$was_active" -eq 0 ]]')
+    || !str_contains($installer, 'if [[ "$was_enabled" -eq 0 ]]')) {
+    throw new RuntimeException('Central operator rollback could destroy existing units');
+}
+echo "PASS: central three-demo root socket protocol, consent, opt-in and rollback contracts\n";

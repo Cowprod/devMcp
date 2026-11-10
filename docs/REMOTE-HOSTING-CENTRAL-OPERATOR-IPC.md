@@ -63,6 +63,15 @@ The installer checks root-only approval, code/config owners and permissions,
 **the entire root-owned, non-group-writable `/opt/devmcp/deploy/distributed` source
 chain** (not only the two systemd leaf files), explicit flags, devmcp group,
 existing HTTPS routes, Nginx syntax and preexisting conflicting systemd units.
+It records whether the socket was already **enabled** and **active**
+independently. New unit files are staged on the same filesystem and moved
+into place only once complete. If the installation, daemon reload, socket
+start or ACL verification fails, the exit trap attempts to restore both
+original socket states and removes **only units created by that invocation**
+that still match the trusted templates. A pre-existing matching unit is
+never removed. Rollback errors are reported on stderr, not hidden; an
+administrator must reconcile any failed restoration before retrying. This
+does not replace actual privileged systemd verification.
 The separate HTTPS installer applies the same source-path protection before
 executing its PHP renderer as root; any writable/symlinked parent fails closed.
 If a preflight rejects the checkout, repair its ownership and permissions
