@@ -18,6 +18,7 @@ trusted_file() {
      $((8#$(stat -c '%a' "$1") & 0022)) == 0 ]]
 }
 for dir in /opt /opt/devmcp /opt/devmcp/bin /opt/devmcp/src \
+  /opt/devmcp/deploy /opt/devmcp/deploy/distributed \
   /opt/devmcp/src/Distributed /opt/devmcp/src/Distributed/Admin \
   /opt/devmcp/src/Distributed/Registry /etc /etc/devmcp-admin \
   /etc/systemd /etc/systemd/system; do

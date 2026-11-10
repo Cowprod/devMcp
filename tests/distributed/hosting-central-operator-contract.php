@@ -97,6 +97,8 @@ if (!is_string($socket) || !str_contains($socket, 'SocketGroup=devmcp')
     || !str_contains($service, 'StandardInput=socket')
     || !str_contains($service, 'ProtectSystem=strict')
     || !is_string($installer)
+    || !str_contains($installer, '/opt/devmcp/deploy /opt/devmcp/deploy/distributed')
+    || !str_contains($installer, 'trusted_dir "$dir"')
     || !str_contains($installer, 'hosting_lab_operator_socket_enabled')
     || !str_contains($installer, 'Central HTTPS hosting routes must be installed first')) {
     throw new RuntimeException('Untrusted central operator installation contract');
