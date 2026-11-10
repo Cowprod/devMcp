@@ -114,6 +114,7 @@ jobs:
           bash -n deploy/distributed/install-admin.sh
           bash -n deploy/distributed/install-hosting-gateway.sh
           bash tests/distributed/nginx-zerotier-startup-smoke.sh
+          bash tests/distributed/nginx-hosting-routes-smoke.sh
       - name: Smoke-test inert static hosting example (loopback only)
         run: python3 tests/distributed/remote-hosting-static-smoke.py
       - name: Smoke-test inert PHP hosting example (loopback only)
