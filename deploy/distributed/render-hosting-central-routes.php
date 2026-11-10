@@ -16,6 +16,7 @@ function renderHostingCentralRoutes(string $source, string $routes): string
         || preg_match('/^([0-9]{1,3}(?:\.[0-9]{1,3}){3}):443 ssl$/D',
             trim($listens[1][0]), $match) !== 1
         || filter_var($match[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+        || $match[1] === '0.0.0.0' || str_starts_with($match[1], '127.')
         || substr_count($source, 'root /opt/devmcp-admin/public;') !== 1
         || preg_match_all('/(?m)^[ \t]*location[ \t]*=[ \t]*\/v1\/agent\/ping[ \t]*\{/', $source) !== 1) {
         throw new RuntimeException('untrusted_central_vhost');
