@@ -89,6 +89,11 @@ namespaced systemd units:
 cd /opt/devmcp && sudo bash deploy/distributed/install-hosting-central-operator.sh --root-approved
 ```
 
+Pour installer les **deux** routes HTTPS et ce socket en une seule invocation
+root explicite, voir [bootstrap central unique](REMOTE-HOSTING-TOUCHDECK-ONE-SHOT.md).
+La commande unique exige les deux approbations déjà présentes avant toute
+modification et ne configure pas les actions devMcp automatiquement.
+
 The installer checks root-only approval, code/config owners and permissions,
 **the entire root-owned, non-group-writable `/opt/devmcp/deploy/distributed` source
 chain** (not only the two systemd leaf files), explicit flags, devmcp group,
