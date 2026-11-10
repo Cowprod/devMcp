@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded, read-only health probe executed FROM a different ZeroTier peer.
 
+Requires an independent Linux ZeroTier peer with iproute2 (/usr/sbin/ip).
 This tool does not commit a deployment, supply local root authorization,
 change routes, or run on caseRouter as part of its activation transaction.
 It prints a machine-readable observation that an operator can corroborate.
@@ -16,6 +17,7 @@ import socket
 import stat
 import time
 import re
+import subprocess
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MARKERS = {
@@ -82,6 +84,45 @@ def websocket_echo(sock, host, port):
         raise RuntimeError("WebSocket echo mismatch")
 
 
+
+def assert_zerotier_route(target, peer):
+    """Fail closed unless the independent Linux peer will use its zt* adapter.
+
+    Two distinct RFC1918 addresses are NOT sufficient evidence of ZeroTier:
+    a response from the ordinary LAN must never be HMAC-signed as a ZeroTier
+    peer observation. These iproute2 commands are read-only; no routes change.
+    """
+    def ip_json(*args):
+        try:
+            response = subprocess.run(
+                ["/usr/sbin/ip", "-j", "-4", *args], check=True,
+                text=True, capture_output=True, timeout=3,
+            )
+            decoded = json.loads(response.stdout)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            raise RuntimeError("ZeroTier route inspection unavailable") from exc
+        if not isinstance(decoded, list):
+            raise RuntimeError("Invalid ZeroTier route inspection response")
+        return decoded
+
+    routes = ip_json("route", "get", target, "from", peer)
+    if len(routes) != 1 or not isinstance(routes[0], dict):
+        raise RuntimeError("Ambiguous peer route")
+    interface = routes[0].get("dev")
+    if not isinstance(interface, str) or not re.fullmatch(r"zt[A-Za-z0-9]+", interface):
+        raise RuntimeError("Peer route is not a ZeroTier interface")
+
+    adapters = ip_json("addr", "show", "dev", interface)
+    if len(adapters) != 1 or adapters[0].get("ifname") != interface:
+        raise RuntimeError("ZeroTier adapter missing")
+    addresses = adapters[0].get("addr_info", [])
+    if not isinstance(addresses, list) or not any(
+        isinstance(address, dict) and address.get("family") == "inet"
+        and address.get("local") == peer for address in addresses
+    ):
+        raise RuntimeError("Peer source IPv4 is not assigned to the ZeroTier adapter")
+
+
 def probe(runtime, target, port, peer):
     target_ip = ipaddress.ip_address(target)
     peer_ip = ipaddress.ip_address(peer)
@@ -91,6 +132,8 @@ def probe(runtime, target, port, peer):
             or target_ip.is_link_local or peer_ip.is_link_local
             or target_ip == peer_ip):
         raise ValueError("Distinct private IPv4 ZeroTier addresses required")
+    # A private LAN route must never be accepted as signed ZeroTier evidence.
+    assert_zerotier_route(target, peer)
     # Bind to the explicit source address: the OS must actually own it.
     # This rejects a local loopback-only smoke test as a peer observation.
     source = (peer, 0)

@@ -83,6 +83,20 @@ préparations réussies ; les vérifications HTTP statique :17601, PHP
 Une mise à jour du checkout, les tests CI ou la présence du socket ne
 constituent **jamais** une preuve de déploiement.
 
+Pour éviter qu'une réponse HTTP provenant du LAN ordinaire soit signée
+comme preuve ZeroTier, `hosting-peer-probe.py` exige maintenant un **pair
+Linux indépendant équipé d'iproute2** (`/usr/sbin/ip`). Avant le premier
+appel réseau, il vérifie en lecture seule que la route vers l'adresse cible
+utilise une interface `zt*` et que l'adresse source du pair appartient
+réellement à cette interface. Toute commande `ip` absente, erreur de route
+ou incohérence d'adresse interdit la signature. Aucune route n'est modifiée.
+
+Cette contrainte exclut temporairement l'exécution de la sonde signée
+depuis un Mac : y utiliser les contrôles manuels HTTP/WebSocket sans les
+présenter comme attestation HMAC, ou employer un pair Linux ZeroTier
+approuvé. Le HMAC reçu reste soumis aux vérifications de release et au
+commit local indépendant ; la sonde ne déclenche jamais l'activation.
+
 ## Validation de code
 
 `tests/distributed/hosting-central-bootstrap-smoke.sh` vérifie le
