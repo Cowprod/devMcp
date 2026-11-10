@@ -54,6 +54,22 @@ L'activation des actions devMcp `hosting.lab.inspect`,
 administratif distinct**. Le script ne touche pas aux actions projet,
 à la base SQL ni aux applications.
 
+## Hygiène des processus privilégiés
+
+Les trois installateurs root utilisent un `PATH` système fixé avant leur
+première commande externe et effacent les variables héritées qui pourraient
+rediriger PHP ou charger une bibliothèque dynamique. Le test de non-régression
+injecte un faux exécutable `id` dans `PATH` et vérifie qu'il n'est jamais
+appelé, même en cas de refus d'approbation.
+
+La protection commence **après** le chargement initial de Bash : une variable
+`BASH_ENV` pourrait déjà avoir été évaluée. Conserver une politique `sudo`
+d'environnement réinitialisé (`env_reset`), sans `sudo -E`, et ne lancer
+que des scripts déjà approuvés par root. Le renderer PHP de Nginx doit en plus
+être exécuté exclusivement depuis son snapshot privé, après vérification
+de son empreinte Git. Ce snapshot doit être supprimé même si le rechargement
+Nginx échoue.
+
 ## Preuves requises avant déploiement
 
 Après installation autorisée, vérifier sur TouchDeck les routes actives,
