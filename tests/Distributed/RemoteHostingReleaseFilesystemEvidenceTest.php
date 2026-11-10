@@ -167,6 +167,22 @@ final class RemoteHostingReleaseFilesystemEvidenceTest extends TestCase
         $this->assertRejected($plan, $manifest, [$file, self::directory('public')]);
     }
 
+    public function testSystemdWritableRootMountDoesNotHideNestedMounts(): void
+    {
+        $rootMount = "31 20 8:1 /srv/devmcp-hosting /srv/devmcp-hosting rw - ext4 /dev/sda1 rw\n";
+        RemoteHostingReleaseFilesystemEvidence::checkMountinfo($rootMount);
+        foreach (['/srv/devmcp-hosting/lab-static', '/srv/devmcp-hosting/lab-static/releases/a/public'] as $mount) {
+            try {
+                RemoteHostingReleaseFilesystemEvidence::checkMountinfo(
+                    $rootMount . "32 31 8:1 /other $mount rw - ext4 /dev/sda1 rw\n"
+                );
+                self::fail('Nested hosting mount accepted');
+            } catch (InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     /** @param array<string,mixed> $plan @param list<array<string,mixed>> $manifest @param list<array<string,mixed>> $records */
     private function assertRejected(array $plan, array $manifest, array $records, int $device = 8): void
     {
