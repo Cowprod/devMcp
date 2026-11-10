@@ -13,6 +13,13 @@ config=/etc/devmcp-admin/distributed.php
 renderer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/render-hosting-central-routes.php"
 routes="$(dirname "$renderer")/nginx-hosting-routes.conf"
 
+# Do not trust a copied installer from a different checkout (e.g. /tmp)
+# merely because the canonical source tree happens to be protected.
+[[ "$renderer" == '/opt/devmcp/deploy/distributed/render-hosting-central-routes.php' ]] || {
+  echo 'Untrusted central hosting installer location' >&2
+  exit 1
+}
+
 # This installer executes the repository renderer as root. Verify the FULL
 # source path before running PHP: even a root-owned regular file can be swapped
 # if a parent directory is writable by another user.
