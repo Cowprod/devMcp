@@ -21,6 +21,10 @@ if [[ -f /etc/systemd/system/devmcp-agent.service && ! -e "/var/backups/devmcp-a
   cp -p /etc/systemd/system/devmcp-agent.service "/var/backups/devmcp-agent-projects/$revision.service"
 fi
 install -m0644 -o root -g root "$checkout/deploy/distributed/devmcp-agent.service" /etc/systemd/system/devmcp-agent.service
+if [[ -f /etc/systemd/system/devmcp-agent-update.service && ! -e "/var/backups/devmcp-agent-projects/$revision-update.service" ]]; then
+  cp -p /etc/systemd/system/devmcp-agent-update.service "/var/backups/devmcp-agent-projects/$revision-update.service"
+fi
+install -m0644 -o root -g root "$checkout/deploy/distributed/devmcp-agent-update.service" /etc/systemd/system/devmcp-agent-update.service
 install -d -m 0755 -o root -g root "$root/project-bundles" /srv/devmcp-projects
 bundle="$root/project-bundles/$revision"
 if [[ ! -e "$bundle" ]]; then
