@@ -12,7 +12,7 @@ use InvalidArgumentException;
  */
 final class HostingLabOperatorRequest
 {
-    /** @return array{phase:string,machine_name:string,revision:string} */
+    /** @return array{phase:string,machine_name:string,revision:?string} */
     public static function parse(string $raw, string $approvedMachine): array
     {
         if ($raw === '' || strlen($raw) > 512 || !str_ends_with($raw, "\n")
@@ -25,6 +25,22 @@ final class HostingLabOperatorRequest
         }
         $keys = array_keys($input);
         sort($keys);
+        // Inspection is read-only, with separate consent and NO Git SHA or
+        // caller-controlled query fields. It cannot enqueue any job.
+        if (($input['phase'] ?? null) === 'inspect') {
+            if ($keys !== ['approval', 'machine_name', 'phase', 'version']
+                || ($input['version'] ?? null) !== 1
+                || ($input['approval'] ?? null) !== 'INSPECT_CASE_HOSTING_LAB_BY_NAME'
+                || !is_string($input['machine_name'] ?? null)
+                || !hash_equals($approvedMachine, $input['machine_name'])) {
+                throw new InvalidArgumentException('Invalid central operator inspection');
+            }
+            return [
+                'phase' => 'inspect',
+                'machine_name' => $approvedMachine,
+                'revision' => null,
+            ];
+        }
         if ($keys !== ['approval', 'machine_name', 'phase', 'revision', 'version']
             || $input['version'] !== 1
             || !is_string($input['phase'])
