@@ -24,6 +24,43 @@ function operatorWire(string $phase = 'prepare', string $approval = 'PREPARE_CAS
         'revision' => str_repeat('a', 40), 'approval' => $approval,
     ], JSON_THROW_ON_ERROR) . "\n";
 }
+function operatorInspectWire(): string
+{
+    return json_encode([
+        'version' => 1,
+        'phase' => 'inspect',
+        'machine_name' => 'caseRouter',
+        'approval' => 'INSPECT_CASE_HOSTING_LAB_BY_NAME',
+    ], JSON_THROW_ON_ERROR) . "\n";
+}
+$inspected = HostingLabOperatorRequest::parse(operatorInspectWire(), 'caseRouter');
+if ($inspected !== [
+    'phase' => 'inspect', 'machine_name' => 'caseRouter', 'revision' => null,
+]) {
+    throw new RuntimeException('Read-only hosting inspect contract missing');
+}
+expectOperatorDenied(operatorInspectWire(), 'CaseRouter');
+expectOperatorDenied(rtrim(operatorInspectWire(), "\n"));
+$inspection = json_decode(operatorInspectWire(), true, 6, JSON_THROW_ON_ERROR);
+foreach ([
+    ['approval' => 'PREPARE_CASE_HOSTING_LAB_BY_NAME'],
+    ['approval' => ''],
+    ['version' => 2],
+    ['phase' => 'activate'],
+    ['machine_name' => 'case'],
+    ['revision' => str_repeat('a', 40)],
+    ['deployment_id' => str_repeat('a', 32)],
+    ['command' => 'reload nginx'],
+] as $change) {
+    expectOperatorDenied(json_encode(array_replace($inspection, $change),
+        JSON_THROW_ON_ERROR) . "\n");
+}
+foreach (['version', 'phase', 'machine_name', 'approval'] as $field) {
+    $missing = $inspection;
+    unset($missing[$field]);
+    expectOperatorDenied(json_encode($missing, JSON_THROW_ON_ERROR) . "\n");
+}
+
 $prepared = HostingLabOperatorRequest::parse(operatorWire(), 'caseRouter');
 if ($prepared !== [
     'phase' => 'prepare', 'machine_name' => 'caseRouter',
@@ -78,11 +115,23 @@ foreach (['version', 'phase', 'machine_name', 'revision', 'approval'] as $field)
 // The opt-in socket must never be available through global shared actions
 // without a separate local project action grant.
 $actions = require dirname(__DIR__, 2) . '/config/shared-actions.php';
-foreach (['hosting.lab.prepare', 'hosting.lab.activate'] as $name) {
+foreach (['hosting.lab.inspect', 'hosting.lab.prepare', 'hosting.lab.activate'] as $name) {
     if (!isset($actions[$name]) || ($actions[$name]['target'] ?? null) !== 'local'
         || ($actions[$name]['sync'] ?? false) !== false) {
         throw new RuntimeException('Central operator action not bounded and asynchronous');
     }
+}
+// This is a status-only SQL read; privileged writes must still go through
+// the existing exact machine resolver and three-demo transaction.
+$worker = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-central-operator');
+$client = file_get_contents(dirname(__DIR__, 2) . '/bin/devmcp-hosting-central-submit');
+if (!is_string($worker)
+    || !str_contains($worker, 'HostingLabCentralInspection::inspect(')
+    || !str_contains($worker, 'HostingLabMachineResolver::resolve(')
+    || !is_string($client)
+    || !str_contains($client, "\$argv[1] === 'inspect'")
+    || !str_contains($client, 'INSPECT_CASE_HOSTING_LAB_BY_NAME')) {
+    throw new RuntimeException('Operator inspection client or SQL boundary missing');
 }
 $socket = file_get_contents(dirname(__DIR__, 2)
     . '/deploy/distributed/devmcp-hosting-central-operator.socket');
@@ -161,4 +210,4 @@ if (!str_contains($installer, 'trusted_file "$target" && cmp -s "$prefix/$name" 
     || !str_contains($installer, 'if [[ "$was_enabled" -eq 0 ]]')) {
     throw new RuntimeException('Central operator rollback could destroy existing units');
 }
-echo "PASS: central three-demo root socket protocol, consent, opt-in and rollback contracts\n";
+echo "PASS: central three-demo root socket protocol, read-only inspection, consent, opt-in and rollback contracts\n";
