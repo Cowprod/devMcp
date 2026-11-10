@@ -9,7 +9,8 @@ declare(strict_types=1);
  */
 try {
     $inspect = $argc === 2 && $argv[1] === 'inspect';
-    if (!$inspect && ($argc !== 3
+    $verify = $argc === 2 && $argv[1] === 'verify';
+    if (!$inspect && !$verify && ($argc !== 3
         || !in_array($argv[1], ['prepare', 'activate'], true)
         || preg_match('/^[a-f0-9]{40}$/D', $argv[2] ?? '') !== 1
         || $argv[2] === str_repeat('0', 40))) {
@@ -19,12 +20,13 @@ try {
         'version' => 1,
         'phase' => $argv[1],
         'machine_name' => 'caseRouter',
-        'approval' => $inspect ? 'INSPECT_CASE_HOSTING_LAB_BY_NAME'
+        'approval' => $verify ? 'VERIFY_CASE_HOSTING_LAB_BY_NAME'
+            : ($inspect ? 'INSPECT_CASE_HOSTING_LAB_BY_NAME'
             : ($argv[1] === 'prepare'
                 ? 'PREPARE_CASE_HOSTING_LAB_BY_NAME'
-                : 'ACTIVATE_CASE_HOSTING_LAB_BY_NAME'),
+                : 'ACTIVATE_CASE_HOSTING_LAB_BY_NAME')),
     ];
-    if (!$inspect) {
+    if (!$inspect && !$verify) {
         $request['revision'] = $argv[2];
     }
     $wire = json_encode($request, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
@@ -54,12 +56,17 @@ try {
             || ($response['ok'] ?? null) !== true
             || !is_array($response['result'] ?? null)
             || ($response['result']['phase'] ?? null) !== $argv[1]
-            || ($response['result']['deployment_complete'] ?? null) !== false
+            || ($verify
+                ? !is_bool($response['result']['deployment_complete'] ?? null)
+                : ($response['result']['deployment_complete'] ?? null) !== false)
             || ($inspect
                 ? (($response['result']['machine_name'] ?? null) !== 'caseRouter'
                     || !is_bool($response['result']['machine_found'] ?? null)
                     || !is_array($response['result']['blockers'] ?? null))
-                : ($response['result']['jobs_queued'] ?? null) !== 3)) {
+                : ($verify
+                    ? (($response['result']['peer_health_verified'] ?? null) !== true
+                        || !is_array($response['result']['deployments'] ?? null))
+                    : ($response['result']['jobs_queued'] ?? null) !== 3))) {
             throw new RuntimeException('Central operator rejected or incomplete');
         }
         echo json_encode($response['result'],

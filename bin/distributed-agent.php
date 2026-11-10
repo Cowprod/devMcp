@@ -127,7 +127,13 @@ $post = static function (string $endpoint, string $body) use ($server, $headers,
 // inherits permissions from the read-only deployment policy.
 require_once __DIR__ . '/remote-hosting-queue.php';
 try {
-    remoteHostingPollOnce($post, $config['machine_id']);
+    // A three-demo commit batch expires after two minutes; one job per
+    // minute can never reliably consume all three before that deadline.
+    for ($hostingJob = 0; $hostingJob < 3; ++$hostingJob) {
+        if (!remoteHostingPollOnce($post, $config['machine_id'])) {
+            break;
+        }
+    }
 } catch (Throwable $error) {
     fwrite(STDERR, "devMcp: optional hosting queue rejected response or local execution\n");
 }

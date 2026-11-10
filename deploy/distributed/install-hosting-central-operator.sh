@@ -62,6 +62,8 @@ for file in /opt/devmcp/bin/devmcp-hosting-central-operator \
   /opt/devmcp/src/Distributed/Admin/HostingLabBatchConsent.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabBatchEnqueue.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabCentralInspection.php \
+  /opt/devmcp/src/Distributed/Admin/HostingLabCommitEnqueue.php \
+  /opt/devmcp/src/Distributed/Admin/HostingLabVerification.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabSchemaMigration.php \
   /opt/devmcp/src/Distributed/Admin/HostingLabMachineResolver.php \
   /opt/devmcp/src/Distributed/Registry/DatabaseConnection.php \

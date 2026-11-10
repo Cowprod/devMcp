@@ -77,6 +77,8 @@ jobs:
           php -l src/Distributed/Admin/HostingLabCommitEnqueue.php
           php -l tests/Distributed/HostingLabBatchEnqueueMySqlTest.php
           vendor/bin/phpunit tests/Distributed/HostingLabBatchEnqueueMySqlTest.php
+          php -l src/Distributed/Admin/HostingLabVerification.php
+          vendor/bin/phpunit tests/Distributed/HostingLabVerificationMySqlTest.php
 
       - name: SQL integration tests
         env:

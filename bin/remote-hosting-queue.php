@@ -159,14 +159,14 @@ function remoteHostingSocketCall(array $job): array
  * Callable from the enrolled agent only after a separate, root-owned opt-in.
  * $post is the existing mutually authenticated HTTPS request closure.
  */
-function remoteHostingPollOnce(callable $post, string $machineId): void
+function remoteHostingPollOnce(callable $post, string $machineId): bool
 {
     if (!remoteHostingOptIn($machineId)) {
-        return;
+        return false;
     }
     $poll = $post('/v1/agent/hosting-poll', '{"protocol_version":1}');
     if (!is_array($poll)) {
-        return;
+        return false;
     }
     $jobs = hostingQueuePollReply($poll, $machineId);
     if ($jobs === null) {
@@ -185,4 +185,5 @@ function remoteHostingPollOnce(callable $post, string $machineId): void
             'result' => $result], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
         $post('/v1/agent/hosting-result', $payload);
     }
+    return $jobs !== [];
 }
