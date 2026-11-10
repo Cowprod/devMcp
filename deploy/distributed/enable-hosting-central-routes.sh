@@ -13,6 +13,34 @@ config=/etc/devmcp-admin/distributed.php
 renderer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/render-hosting-central-routes.php"
 routes="$(dirname "$renderer")/nginx-hosting-routes.conf"
 
+# This installer executes the repository renderer as root. Verify the FULL
+# source path before running PHP: even a root-owned regular file can be swapped
+# if a parent directory is writable by another user.
+for source_dir in /opt /opt/devmcp /opt/devmcp/deploy /opt/devmcp/deploy/distributed; do
+  [[ -d "$source_dir" && ! -L "$source_dir" ]] || {
+    echo 'Untrusted central hosting source directory' >&2
+    exit 1
+  }
+  read -r source_owner source_mode < <(stat -c '%u %a' "$source_dir")
+  [[ "$source_owner" == 0 ]] && (( (8#$source_mode & 0022) == 0 )) || {
+    echo 'Untrusted central hosting source directory' >&2
+    exit 1
+  }
+done
+for source_file in "$renderer" "$routes"; do
+  [[ -f "$source_file" && ! -L "$source_file" ]] || {
+    echo 'Untrusted central hosting renderer or template' >&2
+    exit 1
+  }
+  read -r source_owner source_mode source_links source_size < <(stat -c '%u %a %h %s' "$source_file")
+  [[ "$source_owner" == 0 && "$source_links" == 1
+     && "$source_size" -ge 1 && "$source_size" -le 65536 ]] \
+    && (( (8#$source_mode & 0022) == 0 )) || {
+    echo 'Untrusted central hosting renderer or template' >&2
+    exit 1
+  }
+done
+
 # Serialize privileged vhost replacements. A permanent root-owned lock inode
 # survives atomic conf renames; kernel flock is released on crash/exit.
 # Never open an untrusted or symlinked lock path as root.
