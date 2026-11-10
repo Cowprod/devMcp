@@ -60,8 +60,13 @@ cd /opt/devmcp && sudo bash deploy/distributed/install-hosting-central-operator.
 ```
 
 The installer checks root-only approval, code/config owners and permissions,
-explicit flags, devmcp group, existing HTTPS routes, Nginx syntax and
-preexisting conflicting systemd units. It exposes a local Unix socket only;
+**the entire root-owned, non-group-writable `/opt/devmcp/deploy/distributed` source
+chain** (not only the two systemd leaf files), explicit flags, devmcp group,
+existing HTTPS routes, Nginx syntax and preexisting conflicting systemd units.
+The separate HTTPS installer applies the same source-path protection before
+executing its PHP renderer as root; any writable/symlinked parent fails closed.
+If a preflight rejects the checkout, repair its ownership and permissions
+administratively rather than weakening these checks. It exposes a local Unix socket only;
 it does not enqueue jobs, restart a service, or deploy any app on caseRouter.
 
 To invoke from the devMcp connector, an administrator must **separately**
