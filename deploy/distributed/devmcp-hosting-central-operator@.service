@@ -1,0 +1,23 @@
+# Limited central SQL enqueue; never executes a router command locally.
+[Unit]
+Description=devMcp central hosting lab root operator request
+RefuseManualStart=yes
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-hosting-central-operator
+TimeoutStartSec=35
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/etc/devmcp-admin
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
