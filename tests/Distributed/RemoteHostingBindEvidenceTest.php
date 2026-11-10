@@ -38,11 +38,11 @@ final class RemoteHostingBindEvidenceTest extends TestCase
     private static function interfaces(): array
     {
         return [
-            'enp1s0' => ['flags' => 1, 'unicast' => [
+            'enp1s0' => ['up' => true, 'unicast' => [
                 ['address' => '10.52.10.1'],
             ]],
-            'zt12345678' => ['flags' => 1, 'unicast' => [
-                ['address' => '192.168.194.189'],
+            'zt12345678' => ['up' => true, 'unicast' => [
+                ['flags' => 69699, 'family' => 2, 'address' => '192.168.194.189'],
             ]],
         ];
     }
@@ -61,11 +61,11 @@ final class RemoteHostingBindEvidenceTest extends TestCase
     {
         $base = self::interfaces();
         $cases = [
-            ['enp1s0' => ['flags' => 1, 'unicast' => [['address' => '192.168.194.189']]]],
-            ['zt12345678' => ['flags' => 0, 'unicast' => [['address' => '192.168.194.189']]]],
+            ['enp1s0' => ['up' => true, 'unicast' => [['address' => '192.168.194.189']]]],
+            ['zt12345678' => ['up' => false, 'unicast' => [['address' => '192.168.194.189']]]],
             ['zt12345678' => ['unicast' => [['address' => '192.168.194.189']]]],
-            array_replace($base, ['enp1s0' => ['flags' => 1, 'unicast' => [['address' => '192.168.194.189']]]]),
-            ['zt12345678' => ['flags' => 1, 'unicast' => [['address' => '192.168.194.188']]]],
+            array_replace($base, ['enp1s0' => ['up' => true, 'unicast' => [['address' => '192.168.194.189']]]]),
+            ['zt12345678' => ['up' => true, 'unicast' => [['address' => '192.168.194.188']]]],
             [],
         ];
         foreach ($cases as $snapshot) {
@@ -101,7 +101,7 @@ final class RemoteHostingBindEvidenceTest extends TestCase
         // Even a plausible zt device cannot authorize a public bind address.
         $publicPlan = array_replace(self::plan(), ['bind_ipv4' => '8.8.8.8']);
         $publicInterfaces = ['zt12345678' => [
-            'flags' => 1, 'unicast' => [['address' => '8.8.8.8']],
+            'up' => true, 'unicast' => [['address' => '8.8.8.8']],
         ]];
         $this->expectException(InvalidArgumentException::class);
         RemoteHostingBindEvidence::check($publicPlan, $publicInterfaces);
