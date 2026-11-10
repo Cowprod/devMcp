@@ -53,6 +53,8 @@ final class HostingInspectionFakePDO extends PDO
     public array $pending = [];
     /** @var array<string,bool> */
     public array $activated = [];
+    /** @var array<string,array{revision:string,state?:string,raw?:string}> */
+    public array $preparations = [];
     public int $writes = 0;
 
     public function __construct()
@@ -99,6 +101,12 @@ final class HostingInspectionFakePDO extends PDO
         }
         if (str_contains($query, 'FROM dm_deployment d')) {
             return new HostingInspectionFakeDeploymentStatement();
+        }
+        if (str_contains($query, "action_name = 'prepare-all'")) {
+            if (!str_contains($query, 'ORDER BY created_at DESC, id DESC LIMIT 1')) {
+                throw new RuntimeException('Activation inspection must use latest prepare');
+            }
+            return new HostingInspectionFakePrepareStatement($this);
         }
         if (str_contains($query, 'ORDER BY created_at DESC')) {
             // Deliberately report a completed latest job even when an older
@@ -179,6 +187,49 @@ final class HostingInspectionFakeFenceStatement extends PDOStatement
     }
 }
 
+final class HostingInspectionFakePrepareStatement extends PDOStatement
+{
+    private string $deploymentId = '';
+
+    public function __construct(private HostingInspectionFakePDO $db)
+    {
+    }
+
+    public function execute(?array $params = null): bool
+    {
+        $this->deploymentId = (string) ($params[0] ?? '');
+        return true;
+    }
+
+    public function fetch(
+        int $mode = PDO::FETCH_DEFAULT,
+        int $cursorOrientation = PDO::FETCH_ORI_NEXT,
+        int $cursorOffset = 0
+    ): mixed {
+        $record = $this->db->preparations[$this->deploymentId] ?? null;
+        if ($record === null) {
+            return false;
+        }
+        $project = match ($this->deploymentId) {
+            str_repeat('a', 32) => 'lab-static',
+            str_repeat('b', 32) => 'lab-php',
+            str_repeat('c', 32) => 'lab-node',
+            default => throw new RuntimeException('Unknown test deployment'),
+        };
+        $request = [
+            'deployment_id' => $this->deploymentId,
+            'machine_id' => str_repeat('f', 32),
+            'project_id' => $project,
+            'revision' => $record['revision'],
+        ];
+        return [
+            'state' => $record['state'] ?? 'succeeded',
+            'request_json' => $record['raw']
+                ?? json_encode($request, JSON_THROW_ON_ERROR),
+        ];
+    }
+}
+
 function hostingInspectionCheck(
     HostingInspectionFakePDO $db,
     bool $clear,
@@ -211,4 +262,43 @@ $db->pending[str_repeat('a', 32)] = true;
 hostingInspectionCheck($db, false, [
     'outstanding_central_job_static', 'initial_activation_already_succeeded_node',
 ]);
-echo "PASS: central lab inspection respects the root writer's outstanding and activated fences\n";
+
+function hostingActivationCheck(
+    HostingInspectionFakePDO $db, bool $expectedReady, ?string $revision, array $blockers
+): void {
+    $result = HostingLabCentralInspection::inspect($db, 'caseRouter', true);
+    if (($result['central_activation_ready'] ?? null) !== $expectedReady
+        || ($result['central_activation_revision'] ?? false) !== $revision
+        || ($result['central_activation_blockers'] ?? null) !== $blockers
+        || $db->writes !== 0 || $result['deployment_complete'] !== false) {
+        throw new RuntimeException('Read-only three-demo activation readiness mismatch');
+    }
+}
+
+$db->pending = [];
+$db->activated = [];
+hostingActivationCheck($db, false, null, [
+    'latest_preparation_unconfirmed_static',
+    'latest_preparation_unconfirmed_php',
+    'latest_preparation_unconfirmed_node',
+]);
+$sha = str_repeat('1', 40);
+foreach (['a', 'b', 'c'] as $id) {
+    $db->preparations[str_repeat($id, 32)] = ['revision' => $sha];
+}
+hostingActivationCheck($db, true, $sha, []);
+$db->preparations[str_repeat('b', 32)]['revision'] = str_repeat('2', 40);
+hostingActivationCheck($db, false, null, ['preparation_revisions_mismatch']);
+$db->preparations[str_repeat('b', 32)]['revision'] = $sha;
+$db->preparations[str_repeat('c', 32)]['state'] = 'failed';
+hostingActivationCheck($db, false, null, ['latest_preparation_unconfirmed_node']);
+$db->preparations[str_repeat('c', 32)]['state'] = 'succeeded';
+$db->preparations[str_repeat('a', 32)]['raw'] = '{"bad":';
+hostingActivationCheck($db, false, null, ['latest_preparation_unconfirmed_static']);
+unset($db->preparations[str_repeat('a', 32)]['raw']);
+$db->pending[str_repeat('b', 32)] = true;
+hostingActivationCheck($db, false, null, ['outstanding_central_job_php']);
+$db->pending = [];
+$db->activated[str_repeat('a', 32)] = true;
+hostingActivationCheck($db, false, null, ['initial_activation_already_succeeded_static']);
+echo "PASS: central lab inspection respects writer fences, revision-consistent activation readiness and invalid evidence\n";
