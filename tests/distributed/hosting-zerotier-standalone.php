@@ -13,6 +13,7 @@ if (!mkdir($directory, 0700)) {
     throw new RuntimeException('Cannot create isolated ZeroTier fixture directory');
 }
 $fakeCli = $directory . '/zerotier cli';
+$linkedCli = $directory . '/zerotier-cli';
 $method = new ReflectionMethod(RemoteHostingZeroTierMembership::class, 'readDaemonInventory');
 $write = static function (string $script) use ($fakeCli): void {
     if (file_put_contents($fakeCli, "#!/bin/sh\n" . $script) === false || !chmod($fakeCli, 0700)) {
@@ -33,6 +34,11 @@ try {
     $write("printf '%s|%s\\n' \"\$1\" \"\$2\"\n");
     assert($method->invoke(null, $fakeCli) === "-j|listnetworks\n");
 
+    // Match the Linux package's multicall executable and preserve CLI argv[0].
+    symlink(basename($fakeCli), $linkedCli);
+    $write("printf '%s|%s|%s\\n' \"\${0##*/}\" \"\$1\" \"\$2\"\n");
+    assert($method->invoke(null, $linkedCli) === "zerotier-cli|-j|listnetworks\n");
+
     // The process exit status is part of the evidence, not just stdout.
     $write("printf '%s' '[{}]'\nexit 7\n");
     $reject();
@@ -47,6 +53,7 @@ try {
 
     echo "PASS: vendor-free ZeroTier CLI argv, exit, output bound and empty-output rejection\n";
 } finally {
+    @unlink($linkedCli);
     @unlink($fakeCli);
     @rmdir($directory);
 }
