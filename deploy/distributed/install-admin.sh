@@ -59,6 +59,7 @@ else
   install -m 0644 -o root -g root "$RETRY_TEMPLATE" "$RETRY_DEST"
 fi
 systemctl daemon-reload
+/usr/bin/php "$SOURCE/bin/migrate-admin-form-auth.php" --execute MIGRATE_ADMIN_FORM_AUTH
 nginx -t
 systemctl reload nginx
 echo "HTTPS vhost configured with persistent ZeroTier bind retry. Database credentials and migrations must be configured separately."
