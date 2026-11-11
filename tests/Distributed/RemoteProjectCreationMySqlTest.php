@@ -85,8 +85,12 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $p=new Process(['/usr/bin/git',...$args],$cwd);$p->mustRun();
     }
 
-    public function testCreationUsesTheNormalApiAndBecomesActiveOnlyAfterTheAgentConfirmsItsWorkspace(): void
+    public static function platforms(): array { return [['linux'], ['macos']]; }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('platforms')]
+    public function testCreationUsesTheNormalApiAndBecomesActiveOnlyAfterTheAgentConfirmsItsWorkspace(string $os): void
     {
+        $this->db->prepare('UPDATE dm_machine SET os_family=? WHERE id=?')->execute([$os,$this->machine]);
         $token=$this->root.'/token';file_put_contents($token,str_repeat('x',32));chmod($token,0600);
         $requests=0;
         $creator=new PrivateRepositoryCreator('Cowprod',$token,function($url,$secret,$request)use(&$requests){
@@ -102,11 +106,13 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $queue=new RemoteProjectQueue($this->db);
         self::assertNull($queue->claim(str_repeat('f',32)));
         $job=$queue->claim($this->machine);self::assertSame('create',$job['operation']);
+        $workspace=$os==='linux'?'/srv/devmcp-projects/'.$this->project:'/Users/Shared/devmcp-projects-'.$this->machine.'/'.$this->project;
+        self::assertSame($workspace,$queue->project($this->project)['workspace_path']);
         self::assertSame('README.md',$job['package']['files'][0]['path']);
         self::assertSame('Created by the project API',base64_decode($job['package']['files'][0]['base64']));
         self::assertSame($job['package'],RemoteProjectPackage::validate($job['package']));
         $result=['ok'=>true,'data'=>['project_id'=>$this->project,'repository'=>'Cowprod/'.$this->project,
-            'workspace_path'=>RemoteProjectPackage::ROOT.'/'.$this->project,'workspace_created'=>true,
+            'workspace_path'=>$workspace,'workspace_created'=>true,
             'revision'=>$job['package']['revision'],'port'=>null,'runtime'=>null,'url'=>null]];
         $queue->finish($this->machine,$job['id'],$result);
         $queue->finish($this->machine,$job['id'],$result);

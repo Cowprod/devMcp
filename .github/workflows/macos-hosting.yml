@@ -1,0 +1,28 @@
+name: macOS project hosting
+on: [push, pull_request]
+jobs:
+  launchd:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, posix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint macOS agent and installer
+        run: |
+          php -l bin/distributed-agent-macos.php
+          php -l bin/update-agent-macos.php
+          php -l src/Project/MacProjectRuntime.php
+          bash -n deploy/distributed/install-agent-macos.sh
+          node --check bin/devmcp-static-server.mjs
+      - name: Deploy real LaunchAgents and verify PHP sessions and Node WebSocket
+        env:
+          DEVMCP_RUN_MAC_TESTS: '1'
+        run: |
+          export DEVMCP_TEST_NODE="$(command -v node)"
+          php -r 'file_put_contents("agent-settings.php","<?php return ".var_export(["php"=>PHP_BINARY,"node"=>getenv("DEVMCP_TEST_NODE")],true).";");'
+          php -d zend.assertions=1 -d assert.exception=1 tests/distributed/macos-project-runtime-smoke.php

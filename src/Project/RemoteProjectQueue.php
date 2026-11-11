@@ -48,10 +48,17 @@ final class RemoteProjectQueue
         return $row === false ? null : $row;
     }
 
+    public function workspacePath(string $project, string $machine): string
+    {
+        $platform = $this->db->prepare('SELECT os_family FROM dm_machine WHERE id=?');
+        $platform->execute([$machine]);
+        return RemoteProjectPackage::workspacePath($project, (string) $platform->fetchColumn(), $machine);
+    }
+
     public function register(string $project, string $repository, string $machine): void
     {
         $this->assertReady();
-        $workspace = RemoteProjectPackage::ROOT . '/' . RemoteProjectPackage::projectId($project);
+        $workspace = $this->workspacePath($project, $machine);
         $deployment = bin2hex(random_bytes(16));
         $this->db->beginTransaction();
         try {

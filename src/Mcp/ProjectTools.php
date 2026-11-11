@@ -255,7 +255,7 @@ final class ProjectTools
         $queue->assertMachineReady($destination['id']);
         $repository = $this->githubCreator->organization() . '/' . $project_id;
         $preview = $this->projectCreatePreview($project_id, $description, $repository, 'create',
-            'remote', $machine, \Cowprod\DevMcp\Project\RemoteProjectPackage::ROOT . '/' . $project_id);
+            'remote', $machine, $queue->workspacePath($project_id, $destination['id']));
         $this->provisioning->assertAvailableForCreate($project_id, $repository);
         $github = $this->githubRepositoryCreate($repository, 'CREATE_PRIVATE_REPOSITORY');
         $record = $this->provisioning->registerCentral(\Cowprod\DevMcp\Project\ProvisioningState::begin($preview));

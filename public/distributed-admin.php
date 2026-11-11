@@ -235,6 +235,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 break;
             case 'enrollment.issue':
                 $invitation = (new EnrollmentService($writer))->issue((string) ($_POST['machine_id'] ?? ''));
+                $platform = $writer->prepare('SELECT os_family FROM dm_machine WHERE id=?');
+                $platform->execute([(string) $_POST['machine_id']]);
+                $invitation['os_family'] = $platform->fetchColumn();
                 break;
             case 'machine.approve':
                 $editor->approveMachine((string) ($_POST['machine_id'] ?? ''));
@@ -617,7 +620,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 try {
     $installCommand = \Cowprod\DevMcp\Distributed\Admin\AgentInstallation::command(
         \Cowprod\DevMcp\Distributed\Admin\AgentInstallation::revision(dirname(__DIR__)),
-        $bootstrapServer, $bootstrapCertHash, $invitation['token']);
+        $bootstrapServer, $bootstrapCertHash, $invitation['token'], $invitation['os_family']);
 } catch (Throwable $installError) {
     $installCommand = null;
 }

@@ -7,8 +7,18 @@ namespace Cowprod\DevMcp\Project;
 use RuntimeException;
 
 /** Fixed project operations executed by the enrolled machine's root broker. */
-final class RemoteProjectRuntime
+class RemoteProjectRuntime
 {
+    protected static function workspaceRoot(array $policy): string
+    {
+        return RemoteProjectPackage::ROOT;
+    }
+
+    protected static function owner(): int
+    {
+        return 0;
+    }
+
     public static function run(array $job, array $policy): array
     {
         if (($policy['enabled'] ?? null) !== true || ($job['machine_id'] ?? null) !== ($policy['machine_id'] ?? null)
@@ -23,17 +33,17 @@ final class RemoteProjectRuntime
         if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
             RemoteProjectPackage::validate($job['package'] ?? []);
         }
-        $root = RemoteProjectPackage::ROOT;
-        self::directory($root);
+        $root = static::workspaceRoot($policy);
+        static::directory($root);
         $lock = fopen($root . '/.projects.lock', 'c+b');
         if (!is_resource($lock) || !flock($lock, LOCK_EX | LOCK_NB)) {
             throw new RuntimeException('Project runtime busy');
         }
         try {
             $resultPath = $root . '/.results/' . $job['id'] . '.json';
-            self::directory($root . '/.results');
+            static::directory($root . '/.results');
             if (is_file($resultPath)) {
-                return self::json($resultPath);
+                return static::json($resultPath);
             }
             $workspace = $root . '/' . $project;
             $metaPath = $workspace . '/.project.json';
@@ -43,31 +53,31 @@ final class RemoteProjectRuntime
                 }
                 mkdir($workspace, 0755);
                 chmod($workspace, 0755);
-                self::directory($workspace . '/releases');
+                static::directory($workspace . '/releases');
                 $meta = ['project_id' => $project, 'repository' => $job['package']['repository'] ?? '',
                     'workspace_path' => $workspace, 'revision' => null, 'active_revision' => null,
                     'port' => null, 'runtime' => null, 'url' => null];
-                self::writeJson($metaPath, $meta);
+                static::writeJson($metaPath, $meta);
             } else {
-                self::directory($workspace);
-                $meta = self::json($metaPath);
+                static::directory($workspace);
+                $meta = static::json($metaPath);
             }
             if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
                 $package = RemoteProjectPackage::validate($job['package'] ?? []);
                 if ($package['project_id'] !== $project || $package['repository'] !== $meta['repository']) {
                     throw new RuntimeException('Project repository cannot be changed by deployment');
                 }
-                self::stage($workspace, $package);
+                static::stage($workspace, $package);
                 $meta['revision'] = $package['revision'];
                 if ($operation === 'deploy') {
-                    $meta = self::deploy($workspace, $meta, $job['runtime'] ?? '', $policy['bind_ipv4'] ?? '');
+                    $meta = static::deploy($workspace, $meta, $job['runtime'] ?? '', $policy['bind_ipv4'] ?? '');
                 }
-                self::writeJson($metaPath, $meta);
+                static::writeJson($metaPath, $meta);
                 $result = $meta + ['workspace_created' => true, 'deployment_complete' => $operation === 'deploy'];
             } else {
-                $result = self::inspect($workspace, $meta, $operation, $job['arguments'] ?? []);
+                $result = static::inspect($workspace, $meta, $operation, $job['arguments'] ?? []);
             }
-            self::writeJson($resultPath, $result);
+            static::writeJson($resultPath, $result);
             return $result;
         } finally {
             flock($lock, LOCK_UN);
@@ -75,11 +85,11 @@ final class RemoteProjectRuntime
         }
     }
 
-    private static function stage(string $workspace, array $package): void
+    protected static function stage(string $workspace, array $package): void
     {
         $release = $workspace . '/releases/' . $package['revision'];
         if (file_exists($release)) {
-            self::directory($release);
+            static::directory($release);
             foreach ($package['files'] as $file) {
                 $path = $release . '/' . $file['path'];
                 $body = is_file($path) && !is_link($path) ? file_get_contents($path) : false;
@@ -117,7 +127,7 @@ final class RemoteProjectRuntime
         }
     }
 
-    private static function deploy(string $workspace, array $meta, string $runtime, string $ip): array
+    protected static function deploy(string $workspace, array $meta, string $runtime, string $ip): array
     {
         if (!in_array($runtime, ['static', 'php', 'node'], true) || !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
             throw new RuntimeException('Explicit static, php or node runtime and local IPv4 required');
@@ -133,7 +143,7 @@ final class RemoteProjectRuntime
                 throw new RuntimeException('This agent runtime requires a dependency-free Node server');
             }
         }
-        $port = $meta['port'] ?? self::port($ip, $meta['project_id']);
+        $port = $meta['port'] ?? static::port($ip, $meta['project_id'], dirname($workspace));
         $current = $workspace . '/current';
         $old = is_link($current) ? readlink($current) : null;
         if (file_exists($current) && !is_link($current)) {
@@ -157,11 +167,11 @@ final class RemoteProjectRuntime
             'node' => '/usr/bin/node ' . $current . '/server.js',
         };
         $unit = '# devMcp project ' . $meta['project_id'] . "\n[Unit]\nAfter=network-online.target zerotier-one.service\nWants=network-online.target\nStartLimitIntervalSec=0\n[Service]\nType=simple\nDynamicUser=yes\nStateDirectory=$state\nWorkingDirectory=$current\n{$prepare}ExecStart=$command\nEnvironment=HOST=$ip\nEnvironment=PORT=$port\nEnvironment=DATA_DIR=/var/lib/$state\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n";
-        self::write($unitPath, $unit, 0644);
+        static::write($unitPath, $unit, 0644);
         try {
-            self::command(['/usr/bin/systemctl', 'daemon-reload']);
-            self::command(['/usr/bin/systemctl', 'enable', $service]);
-            self::command(['/usr/bin/systemctl', 'restart', $service]);
+            static::command(['/usr/bin/systemctl', 'daemon-reload']);
+            static::command(['/usr/bin/systemctl', 'enable', $service]);
+            static::command(['/usr/bin/systemctl', 'restart', $service]);
             $ready = false;
             for ($attempt = 0; $attempt < 20; ++$attempt) {
                 $context = stream_context_create(['http' => ['timeout' => 1, 'ignore_errors' => true]]);
@@ -176,17 +186,17 @@ final class RemoteProjectRuntime
                 throw new RuntimeException('Project did not return HTTP 200 after startup');
             }
         } catch (\Throwable $error) {
-            self::command(['/usr/bin/systemctl', 'stop', $service], [0, 5]);
+            static::command(['/usr/bin/systemctl', 'stop', $service], [0, 5]);
             if ($old !== null && $previousUnit !== null) {
                 $restore = $workspace . '/.restore-' . bin2hex(random_bytes(6));
                 symlink($old, $restore);
                 rename($restore, $current);
-                self::write($unitPath, $previousUnit, 0644);
-                self::command(['/usr/bin/systemctl', 'daemon-reload']);
-                self::command(['/usr/bin/systemctl', 'start', $service]);
-                self::awaitHttp('http://' . $ip . ':' . $port . '/');
+                static::write($unitPath, $previousUnit, 0644);
+                static::command(['/usr/bin/systemctl', 'daemon-reload']);
+                static::command(['/usr/bin/systemctl', 'start', $service]);
+                static::awaitHttp('http://' . $ip . ':' . $port . '/');
             } elseif ($previousUnit === null) {
-                self::command(['/usr/bin/systemctl', 'disable', $service]);
+                static::command(['/usr/bin/systemctl', 'disable', $service]);
             }
             throw $error;
         }
@@ -194,7 +204,7 @@ final class RemoteProjectRuntime
             'url' => 'http://' . $ip . ':' . $port, 'active_revision' => $meta['revision']]);
     }
 
-    private static function awaitHttp(string $url): void
+    protected static function awaitHttp(string $url, string $failure = 'Previous project service could not be restored'): void
     {
         for ($attempt = 0; $attempt < 40; ++$attempt) {
             $context = stream_context_create(['http' => ['timeout' => 1, 'ignore_errors' => true]]);
@@ -202,14 +212,14 @@ final class RemoteProjectRuntime
             if (is_string($body) && preg_match('~^HTTP/\S+ 200\b~', $http_response_header[0] ?? '')) return;
             usleep(250000);
         }
-        throw new RuntimeException('Previous project service could not be restored');
+        throw new RuntimeException($failure);
     }
 
-    private static function port(string $ip, string $project): int
+    protected static function port(string $ip, string $project, string $root): int
     {
         $reserved = [];
-        foreach (glob(RemoteProjectPackage::ROOT . '/*/.project.json') as $file) {
-            $meta = self::json($file);
+        foreach (glob($root . '/*/.project.json') as $file) {
+            $meta = static::json($file);
             if (isset($meta['port'])) {
                 $reserved[] = $meta['port'];
             }
@@ -228,17 +238,17 @@ final class RemoteProjectRuntime
         throw new RuntimeException('No project preview port available');
     }
 
-    private static function inspect(string $workspace, array $meta, string $operation, array $args): array
+    protected static function inspect(string $workspace, array $meta, string $operation, array $args): array
     {
         if ($operation === 'head') {
             return ['commit' => $meta['revision'], 'active_commit' => $meta['active_revision']];
         }
         $service = 'devmcp-app-' . $meta['project_id'] . '.service';
         if ($operation === 'status') {
-            return $meta + ['service_state' => trim(self::command(['/usr/bin/systemctl', 'is-active', $service], [0, 3, 4]))];
+            return $meta + ['service_state' => trim(static::command(['/usr/bin/systemctl', 'is-active', $service], [0, 3, 4]))];
         }
         if ($operation === 'logs') {
-            return ['content' => self::command(['/usr/bin/journalctl', '--no-pager', '-o', 'cat', '-n', '40', '-u', $service])];
+            return ['content' => static::command(['/usr/bin/journalctl', '--no-pager', '-o', 'cat', '-n', '40', '-u', $service])];
         }
         $base = $workspace . '/releases/' . $meta['revision'];
         $relative = $args['path'] ?? '.';
@@ -250,13 +260,13 @@ final class RemoteProjectRuntime
         return match ($operation) {
             'list' => ['entries' => array_values(array_diff(scandir($resolved), ['.', '..']))],
             'stat' => ['path' => $relative, 'type' => is_dir($resolved) ? 'directory' : 'file', 'size' => filesize($resolved)],
-            'read' => self::read($resolved, $relative),
-            'find' => ['files' => self::find($resolved, $base)],
+            'read' => static::read($resolved, $relative),
+            'find' => ['files' => static::find($resolved, $base)],
             default => throw new RuntimeException('Unknown inspection'),
         };
     }
 
-    private static function read(string $path, string $relative): array
+    protected static function read(string $path, string $relative): array
     {
         if (!is_file($path)) {
             throw new RuntimeException('A regular file is required');
@@ -270,7 +280,7 @@ final class RemoteProjectRuntime
             'content' => $text ? $body : base64_encode($body), 'truncated' => filesize($path) > strlen($body)];
     }
 
-    private static function find(string $directory, string $base): array
+    protected static function find(string $directory, string $base): array
     {
         $files = [];
         $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS));
@@ -285,7 +295,7 @@ final class RemoteProjectRuntime
         return $files;
     }
 
-    private static function directory(string $path): void
+    protected static function directory(string $path): void
     {
         if (!file_exists($path)) {
             if (!mkdir($path, 0755)) {
@@ -294,25 +304,25 @@ final class RemoteProjectRuntime
             chmod($path, 0755);
         }
         $stat = lstat($path);
-        if (is_link($path) || !is_dir($path) || $stat['uid'] !== 0 || ($stat['mode'] & 0022) !== 0) {
+        if (is_link($path) || !is_dir($path) || $stat['uid'] !== static::owner() || ($stat['mode'] & 0022) !== 0) {
             throw new RuntimeException('Untrusted project directory');
         }
     }
 
-    private static function json(string $path): array
+    protected static function json(string $path): array
     {
-        if (is_link($path) || !is_file($path) || fileowner($path) !== 0) {
+        if (is_link($path) || !is_file($path) || fileowner($path) !== static::owner()) {
             throw new RuntimeException('Project state unavailable');
         }
         return json_decode(file_get_contents($path), true, 32, JSON_THROW_ON_ERROR);
     }
 
-    private static function writeJson(string $path, array $data): void
+    protected static function writeJson(string $path, array $data): void
     {
-        self::write($path, json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), 0600);
+        static::write($path, json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), 0600);
     }
 
-    private static function write(string $path, string $body, int $mode): void
+    protected static function write(string $path, string $body, int $mode): void
     {
         if (is_link($path)) {
             throw new RuntimeException('Linked state path rejected');
@@ -329,7 +339,7 @@ final class RemoteProjectRuntime
         rename($temporary, $path);
     }
 
-    private static function command(array $argv, array $allowed = [0]): string
+    protected static function command(array $argv, array $allowed = [0]): string
     {
         $process = proc_open(['/usr/bin/timeout', '20s', ...$argv], [0 => ['file', '/dev/null', 'r'],
             1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, '/', ['PATH' => '/usr/sbin:/usr/bin:/sbin:/bin']);

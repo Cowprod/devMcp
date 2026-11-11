@@ -9,6 +9,13 @@ use PHPUnit\Framework\TestCase;
 
 final class RemoteProjectPackageTest extends TestCase
 {
+    public function testWorkspacePathsAreExplicitForTheTargetPlatform(): void
+    {
+        self::assertSame('/srv/devmcp-projects/demo',RemoteProjectPackage::workspacePath('demo','linux',str_repeat('a',32)));
+        self::assertSame('/Users/Shared/devmcp-projects-'.str_repeat('a',32).'/demo',RemoteProjectPackage::workspacePath('demo','macos',str_repeat('a',32)));
+        $this->expectException(InvalidArgumentException::class);
+        RemoteProjectPackage::workspacePath('demo','windows',str_repeat('a',32));
+    }
     private function package(): array
     {
         $body='hello';
