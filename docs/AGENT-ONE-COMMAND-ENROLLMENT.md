@@ -53,6 +53,13 @@ sans dépendances npm. Les sources sont limitées à 4 Mio et 1 000 fichiers
 réguliers ; liens Git et sous-modules sont refusés. Les identifiants GitHub
 restent sur le central, qui transmet les blobs Git à l’agent.
 
+PHP reçoit automatiquement `session.save_path` dans un sous-répertoire privé
+`.php-sessions` de son stockage systemd persistant. `session_start()` fonctionne
+sans configuration applicative et les sessions survivent au redémarrage ou au
+redéploiement. Le moteur local utilise aussi un stockage de sessions par projet.
+La mise à jour de l’agent fournit ce comportement aux prochains déploiements ;
+un service existant doit être redéployé pour recevoir la nouvelle commande PHP.
+
 L’agent choisit un port disponible dans 12000–19999, crée un service systemd et
 vérifie HTTP. Le central vérifie à son tour l’URL via ZeroTier avant de valider
 le déploiement. `project_describe` retourne l’URL et la révision active.
