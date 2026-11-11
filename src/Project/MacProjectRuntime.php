@@ -76,7 +76,7 @@ final class MacProjectRuntime extends RemoteProjectRuntime
             static::write($plist,$body,0600);
             static::command(['/usr/bin/plutil','-lint',$plist]);
             static::command(['/bin/launchctl','bootstrap','gui/'.posix_geteuid(),$plist]);
-            static::awaitHttp('http://'.$ip.':'.$port.'/');
+            static::awaitHttp('http://'.$ip.':'.$port.'/', 'Project did not return HTTP 200 after startup');
         }catch(\Throwable $error){
             if(self::loaded($meta))static::command(['/bin/launchctl','bootout',self::target($meta)]);
             if($old!==null&&$oldPlist!==null){

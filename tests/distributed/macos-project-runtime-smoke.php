@@ -43,6 +43,12 @@ try{
    fwrite($socket,"\x81".chr(128+strlen($text)).$mask.$masked);$reply='';while(strlen($reply)<2+strlen($text)){$reply.=fread($socket,2+strlen($text)-strlen($reply));if(feof($socket))break;}
    assert($reply==="\x81".chr(strlen($text)).$text);fclose($socket);
    echo "PASS: macOS Node WebSocket upgrade and echo\n";
+   $failed=$job;$failed['id']=bin2hex(random_bytes(16));$bad='process.exit(1);';
+   $failed['package']['revision']=sha1($bad);$failed['package']['files']=[['path'=>'server.js','mode'=>'100644','object'=>sha1('blob '.strlen($bad)."\0".$bad),'base64'=>base64_encode($bad)]];
+   try{MacProjectRuntime::run($failed,$policy);throw new RuntimeException('Broken Node deployment accepted');}
+   catch(RuntimeException $error){assert($error->getMessage()==='Project did not return HTTP 200 after startup');}
+   assert(str_contains(file_get_contents($live['url'].'/'),'devMcp'));
+   echo "PASS: failed macOS deployment restores the previous working LaunchAgent\n";
   }
  }
 }finally{

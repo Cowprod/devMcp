@@ -204,7 +204,7 @@ class RemoteProjectRuntime
             'url' => 'http://' . $ip . ':' . $port, 'active_revision' => $meta['revision']]);
     }
 
-    protected static function awaitHttp(string $url): void
+    protected static function awaitHttp(string $url, string $failure = 'Previous project service could not be restored'): void
     {
         for ($attempt = 0; $attempt < 40; ++$attempt) {
             $context = stream_context_create(['http' => ['timeout' => 1, 'ignore_errors' => true]]);
@@ -212,7 +212,7 @@ class RemoteProjectRuntime
             if (is_string($body) && preg_match('~^HTTP/\S+ 200\b~', $http_response_header[0] ?? '')) return;
             usleep(250000);
         }
-        throw new RuntimeException('Previous project service could not be restored');
+        throw new RuntimeException($failure);
     }
 
     protected static function port(string $ip, string $project, string $root): int
