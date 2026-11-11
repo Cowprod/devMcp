@@ -6,7 +6,9 @@ transport MCP ni un port public Internet.
 
 ## Attribution automatique (TouchDeck)
 
-La création MCP `project_create` / `project_register` conserve son interface.
+La création MCP `project_create` conserve sa création locale complète.
+`project_register` enregistre uniquement une intention : aucun workspace ni port
+n’est créé avant les étapes explicites de confirmation et d’affectation.
 L'attribution est désormais **automatique par défaut** lorsque
 `project_provisioning.enabled=true`. La clé facultative
 `preview_ports.enabled=false` permet de la désactiver explicitement.

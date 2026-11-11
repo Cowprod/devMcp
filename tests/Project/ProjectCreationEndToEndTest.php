@@ -53,7 +53,7 @@ final class ProjectCreationEndToEndTest extends TestCase
             self::markTestSkipped('git executable not available');
         }
 
-        $this->sandbox = sys_get_temp_dir() . '/devmcp-create-e2e-' . bin2hex(random_bytes(8));
+        $this->sandbox = realpath(sys_get_temp_dir()) . '/devmcp-create-e2e-' . bin2hex(random_bytes(8));
         mkdir($this->sandbox, 0700);
         mkdir($this->sandbox . '/upstream', 0700);
         mkdir($this->sandbox . '/workspaces', 0700);
@@ -170,6 +170,75 @@ final class ProjectCreationEndToEndTest extends TestCase
             }
             rmdir($this->sandbox);
         }
+    }
+
+    private function callMcp(string $name, array $arguments, string $protocol = '2026-07-28'): array
+    {
+        return $protocol === 'http'
+            ? \Cowprod\DevMcp\Tests\Support\McpWireClient::callHttp($this->tools, $name, $arguments)
+            : \Cowprod\DevMcp\Tests\Support\McpWireClient::call($this->tools, $name, $arguments, $protocol);
+    }
+
+    public static function mcpProtocols(): array { return [['2026-07-28'], ['2025-03-26'], ['http']]; }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('mcpProtocols')]
+    public function testRegisterReturnsExplicitMcpSuccessWithoutCloningOrRequiringARepository(string $protocol): void
+    {
+        // No upstream exists. Registration must not attempt an unrelated local clone.
+        $args = ['project_id' => 'register-wire-e2e', 'description' => 'Enregistrement français éè',
+            'github_repository' => 'Cowprod/register-wire-e2e', 'repository_mode' => 'create',
+            'confirmation' => 'REGISTER_PROJECT'];
+        $response = $this->callMcp('project_register', $args, $protocol);
+        self::assertArrayNotHasKey('error', $response, json_encode($response));
+        self::assertFalse($response['result']['isError'] ?? false);
+        $result = $response['result']['structuredContent'];
+        self::assertTrue($result['registration_succeeded']);
+        self::assertSame('registered', $result['state']);
+        self::assertSame(1, $result['revision']);
+        self::assertSame('Enregistrement français éè', $result['description']);
+        self::assertSame($result, json_decode($response['result']['content'][0]['text'], true, 512, JSON_THROW_ON_ERROR));
+        self::assertSame('registered', $this->store->get('register-wire-e2e')['state']);
+        self::assertDirectoryDoesNotExist($this->sandbox . '/workspaces/register-wire-e2e');
+        self::assertSame(0, $this->githubCalls);
+        self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM dm_deployment')->fetchColumn());
+    }
+
+    public function testRegistrationRetryIsIdempotentAndConflictingPayloadsStayErrors(): void
+    {
+        $args = ['project_id' => 'register-retry-e2e', 'description' => 'Original registration',
+            'github_repository' => 'Cowprod/register-retry-e2e', 'repository_mode' => 'create',
+            'confirmation' => 'REGISTER_PROJECT'];
+        $first = $this->callMcp('project_register', $args)['result']['structuredContent'];
+        self::assertFalse($first['already_registered']);
+        $retry = $this->callMcp('project_register', $args)['result']['structuredContent'];
+        self::assertTrue($retry['already_registered']);
+        self::assertTrue($retry['registration_succeeded']);
+        self::assertSame(1, $retry['revision']);
+        foreach ([['description' => 'Changed'], ['repository_mode' => 'attach'],
+            ['github_repository' => 'Cowprod/another-repository'], ['project_id' => 'another-id']] as $change) {
+            $response = $this->callMcp('project_register', array_replace($args, $change));
+            self::assertArrayNotHasKey('error', $response);
+            self::assertTrue($response['result']['isError']);
+            self::assertStringContainsString('Conflit', $response['result']['content'][0]['text']);
+        }
+        self::assertSame(1, (int) $this->db->query('SELECT COUNT(*) FROM dm_project')->fetchColumn());
+        self::assertSame(1, (int) $this->db->query('SELECT COUNT(*) FROM dm_project_provisioning')->fetchColumn());
+        $advanced = $this->store->advance('register-retry-e2e', 1, 'repository_ready');
+        $retry = $this->callMcp('project_register', $args)['result']['structuredContent'];
+        self::assertTrue($retry['already_registered']);
+        self::assertSame('repository_ready', $retry['state']);
+        self::assertSame($advanced['revision'], $retry['revision']);
+    }
+
+    public function testProvisioningAuditCanBeReadBeforeTheProjectHasAnyWorkspace(): void
+    {
+        $args = ['project_id' => 'register-audit-e2e', 'description' => 'Audit registration',
+            'github_repository' => 'Cowprod/register-audit-e2e', 'repository_mode' => 'create',
+            'confirmation' => 'REGISTER_PROJECT'];
+        $this->callMcp('project_register', $args);
+        $response = $this->callMcp('audit_tail', ['project' => '_provisioning', 'limit' => 10]);
+        self::assertArrayNotHasKey('error', $response);
+        self::assertSame('register-audit-e2e', $response['result']['structuredContent']['records'][0]['project_id']);
     }
 
     public function testCreatesPrivateRepositoryIntentAndWorkspaceVisibleInBothCatalogues(): void

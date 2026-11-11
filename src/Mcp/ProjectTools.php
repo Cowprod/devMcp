@@ -91,11 +91,54 @@ final class ProjectTools
         ];
     }
 
+    /** Register metadata only; repository confirmation and provisioning are separate tools. */
+    public function projectRegister(
+        string $project_id,
+        string $description,
+        string $github_repository,
+        string $repository_mode,
+        string $confirmation,
+    ): array {
+        try {
+            if ($confirmation !== 'REGISTER_PROJECT' || $this->provisioning === null || $this->remoteTools === null) {
+                throw new InvalidArgumentException('Enregistrement indisponible ou non confirme');
+            }
+            $record = ProvisioningState::begin(ProjectCreationPreview::prepare(
+                $project_id, $description, $github_repository, $repository_mode,
+                'local', 'local', '/srv/devmcp/workspaces/' . $project_id
+            ));
+            $existing = $this->provisioning->matchingRegistration($record);
+            if ($existing !== null) {
+                return $existing + ['registration_succeeded' => true, 'already_registered' => true];
+            }
+            // All fallible filesystem work happens before the SQL registration.
+            // Never clone locally as a side effect of an unassigned intent.
+            $this->audit->append([
+                'project' => '_provisioning', 'action' => 'project.register',
+                'project_id' => $project_id, 'outcome' => 'requested',
+            ]);
+            try {
+                $created = $this->provisioning->registerCentral($record);
+            } catch (\PDOException $error) {
+                // A simultaneous identical request may have won the unique key.
+                // Other SQL failures are never interpreted as success.
+                if (!str_starts_with((string) $error->getCode(), '23')) throw $error;
+                $existing = $this->provisioning->matchingRegistration($record);
+                if ($existing === null) throw $error;
+                return $existing + ['registration_succeeded' => true, 'already_registered' => true];
+            }
+            return $created + ['registration_succeeded' => true, 'already_registered' => false];
+        } catch (InvalidArgumentException $error) {
+            // Expected conflicts belong to the MCP tool result, not JSON-RPC -32603.
+            throw new \Mcp\Exception\ToolCallException($error->getMessage(), previous: $error);
+        }
+    }
+
     /**
      * Register a project and clone its existing GitHub repository.
      * Standard SQL actions are granted atomically on activation.
      */
-    public function projectRegister(
+    private function registerAndProvisionLocal(
         string $project_id,
         string $description,
         string $github_repository,
@@ -198,7 +241,7 @@ final class ProjectTools
         ]);
         $github = $this->githubRepositoryCreate($repository, 'CREATE_PRIVATE_REPOSITORY');
         try {
-            $project = $this->projectRegister(
+            $project = $this->registerAndProvisionLocal(
                 $project_id, $description, $repository, 'create', 'REGISTER_PROJECT'
             );
         } catch (\Throwable $error) {
@@ -257,6 +300,8 @@ final class ProjectTools
         $preview = $this->projectCreatePreview($project_id, $description, $repository, 'create',
             'remote', $machine, $queue->workspacePath($project_id, $destination['id']));
         $this->provisioning->assertAvailableForCreate($project_id, $repository);
+        $this->audit->append(['project' => $project_id, 'action' => 'project.create.remote',
+            'machine_id' => $destination['id'], 'outcome' => 'requested']);
         $github = $this->githubRepositoryCreate($repository, 'CREATE_PRIVATE_REPOSITORY');
         $record = $this->provisioning->registerCentral(\Cowprod\DevMcp\Project\ProvisioningState::begin($preview));
         $record = $this->provisioning->advance($project_id, $record['revision'], 'repository_ready');
@@ -270,8 +315,6 @@ final class ProjectTools
                 'failure' => ['stage' => 'remote_source_snapshot', 'message' => $error->getMessage()],
                 'recovery_action' => 'project.provision'];
         }
-        $this->audit->append(['project' => $project_id, 'action' => 'project.create.remote',
-            'machine_id' => $destination['id'], 'outcome' => 'queued']);
         return ['project' => $record, 'github' => $github, 'job' => $job,
             'state' => 'provisioning', 'workspace_created' => false, 'actions_authorized' => false];
     }
@@ -314,12 +357,11 @@ final class ProjectTools
         if ($current['repository'] !== $repository) {
             throw new InvalidArgumentException('Depot different de celui du projet');
         }
-        $updated = $this->provisioning->advance($project_id, $revision, 'repository_ready');
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.repository.confirm',
-            'project_id' => $project_id, 'repository' => $repository, 'outcome' => 'recorded',
+            'project_id' => $project_id, 'repository' => $repository, 'outcome' => 'requested',
         ]);
-        return $updated;
+        return $this->provisioning->advance($project_id, $revision, 'repository_ready');
     }
 
     public function projectAssignMachine(string $project_id, string $machine, int $revision, string $confirmation): array
@@ -335,27 +377,25 @@ final class ProjectTools
             if (!is_string($hostname) || $hostname === '') {
                 throw new InvalidArgumentException('Hostname local indisponible');
             }
-            $updated = $this->provisioning->advance(
-                $project_id, $revision, 'machine_assigned', ['machine' => $hostname]
-            );
             $this->audit->append([
                 'project' => '_provisioning', 'action' => 'project.machine.assign',
-                'project_id' => $project_id, 'machine_id' => $hostname, 'outcome' => 'assigned',
+                'project_id' => $project_id, 'machine_id' => $hostname, 'outcome' => 'requested',
             ]);
-            return $updated;
+            return $this->provisioning->advance(
+                $project_id, $revision, 'machine_assigned', ['machine' => $hostname]
+            );
         }
         $resolved = $this->remoteTools->machineForProvisioningPreview($machine);
         if ($resolved['status'] !== 'active') {
             throw new InvalidArgumentException('Machine non active');
         }
-        $updated = $this->provisioning->advance(
-            $project_id, $revision, 'machine_assigned', ['machine' => $resolved['id']]
-        );
         $this->audit->append([
             'project' => '_provisioning', 'action' => 'project.machine.assign',
-            'project_id' => $project_id, 'machine_id' => $resolved['id'], 'outcome' => 'assigned',
+            'project_id' => $project_id, 'machine_id' => $resolved['id'], 'outcome' => 'requested',
         ]);
-        return $updated;
+        return $this->provisioning->advance(
+            $project_id, $revision, 'machine_assigned', ['machine' => $resolved['id']]
+        );
     }
 
     public function projectProvisionRemote(string $project_id, int $revision, string $confirmation): array
@@ -373,15 +413,26 @@ final class ProjectTools
         $queue = $this->remoteTools->projectQueue();
         $queue->assertReady();
         $queue->assertMachineReady($machine['id']);
+        $this->audit->append(['project' => $project_id, 'action' => 'project.provision.remote',
+            'machine_id' => $machine['id'], 'outcome' => 'requested']);
         $managed = $queue->project($project_id);
         if ($managed === null) {
             $queue->register($project_id, $record['repository'], $machine['id']);
         } elseif ($managed['machine_id'] !== $machine['id'] || $managed['repository'] !== $record['repository']) {
             throw new InvalidArgumentException('Affectation distante differente du projet deja gere');
         }
-        $job = $this->remoteTools->createRemoteWorkspace($project_id);
-        $this->audit->append(['project' => $project_id, 'action' => 'project.provision.remote',
-            'machine_id' => $machine['id'], 'outcome' => 'queued']);
+        try {
+            $job = $this->remoteTools->createRemoteWorkspace($project_id);
+        } catch (\Throwable $error) {
+            // The remote deployment binding may already be durable. Report it
+            // explicitly; a later call reuses this binding rather than duplicating it.
+            return ['project' => $record, 'state' => 'partial_failure',
+                'workspace_created' => false, 'actions_authorized' => false,
+                'failure' => ['stage' => 'remote_workspace_enqueue',
+                    'code' => $error instanceof LocalWorkspaceProvisioningException
+                        ? $error->reason : 'remote_workspace_enqueue_failed'],
+                'recovery_action' => 'project.provision'];
+        }
         return ['project' => $record, 'job' => $job, 'state' => 'provisioning',
             'workspace_created' => false, 'actions_authorized' => false];
     }
@@ -739,6 +790,11 @@ final class ProjectTools
     {
         if ($limit < 1 || $limit > 100) {
             throw new InvalidArgumentException('limit doit être compris entre 1 et 100');
+        }
+
+        // Provisioning has an audit stream before a project owns any local actions.
+        if ($project === '_provisioning' && $this->provisioning !== null) {
+            return ['project' => $project, 'records' => $this->audit->tail($project, $limit)];
         }
 
         if ($this->remoteTools !== null

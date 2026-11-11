@@ -31,6 +31,12 @@ réglage par projet ne doit être préparé à la main sur la machine cible.
 Le même parcours est accessible via l’action `project.create.remote` du projet
 `devmcp-admin`, avec `project_id`, `machine` et `description`.
 
+`project_register` retourne `registration_succeeded=true`, `state=registered` et
+`revision=1` après l’écriture centrale, sans cloner sur TouchDeck. Un appel
+identique retourne l’état courant avec `already_registered=true` sans augmenter
+la révision ; un changement de description, dépôt ou mode est un conflit explicite.
+Le journal de ces étapes est consultable par `audit_tail(project="_provisioning")`.
+
 Si le dépôt existe déjà et que le parcours `project_register` / confirmation du
 dépôt / `project_assign_machine` a laissé le projet `machine_assigned`, utiliser
 `project_provision_remote` avec la révision du journal et la confirmation
