@@ -67,7 +67,9 @@ final class MacProjectRuntime extends RemoteProjectRuntime
             'php'=>[$config['php'],'-d','session.save_path='.$sessions,'-S',$ip.':'.$port,'-t',$current.'/public'],
             'node'=>[$config['node'],$current.'/server.js'],
         };
-        $definition=['Label'=>self::label($meta),'ProgramArguments'=>$args,'WorkingDirectory'=>$current,
+        if(!is_executable($config['launcher']??''))throw new RuntimeException('Named devMcp launcher is unavailable; update the agent');
+        $args=[$config['launcher'],...$args];
+        $definition=['Label'=>self::label($meta),'AssociatedBundleIdentifiers'=>['net.cowprod.devmcp'],'ProgramArguments'=>$args,'WorkingDirectory'=>$current,
             'EnvironmentVariables'=>['HOST'=>$ip,'PORT'=>(string)$port,'DATA_DIR'=>$data],
             'RunAtLoad'=>true,'KeepAlive'=>true,'ThrottleInterval'=>5,'Umask'=>63,
             'StandardOutPath'=>$workspace.'/stdout.log','StandardErrorPath'=>$workspace.'/stderr.log'];

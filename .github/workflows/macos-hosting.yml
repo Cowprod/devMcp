@@ -16,6 +16,7 @@ jobs:
         run: |
           php -l bin/distributed-agent-macos.php
           php -l bin/update-agent-macos.php
+          php -l bin/configure-macos-launcher.php
           php -l src/Project/MacProjectRuntime.php
           bash -n deploy/distributed/install-agent-macos.sh
           node --check bin/devmcp-static-server.mjs
@@ -24,5 +25,7 @@ jobs:
           DEVMCP_RUN_MAC_TESTS: '1'
         run: |
           export DEVMCP_TEST_NODE="$(command -v node)"
-          php -r 'file_put_contents("agent-settings.php","<?php return ".var_export(["php"=>PHP_BINARY,"node"=>getenv("DEVMCP_TEST_NODE")],true).";");'
+          export DEVMCP_TEST_BASE="$RUNNER_TEMP/devmcp-launcher-test"
+          php bin/configure-macos-launcher.php "$DEVMCP_TEST_BASE" --prepare
+          php -r 'file_put_contents("agent-settings.php","<?php return ".var_export(["php"=>PHP_BINARY,"node"=>getenv("DEVMCP_TEST_NODE"),"launcher"=>getenv("DEVMCP_TEST_BASE")."/devMcp.app/Contents/MacOS/devmcp-launcher"],true).";");'
           php -d zend.assertions=1 -d assert.exception=1 tests/distributed/macos-project-runtime-smoke.php
