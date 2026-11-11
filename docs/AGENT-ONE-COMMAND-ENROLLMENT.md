@@ -31,6 +31,15 @@ réglage par projet ne doit être préparé à la main sur la machine cible.
 Le même parcours est accessible via l’action `project.create.remote` du projet
 `devmcp-admin`, avec `project_id`, `machine` et `description`.
 
+Si le dépôt existe déjà et que le parcours `project_register` / confirmation du
+dépôt / `project_assign_machine` a laissé le projet `machine_assigned`, utiliser
+`project_provision_remote` avec la révision du journal et la confirmation
+`PROVISION_REMOTE_WORKSPACE`. L’action `project.provision.remote` du projet
+`devmcp-admin` expose aussi cette reprise avec le seul argument `project_id`.
+Elle conserve le dépôt existant et attend la confirmation de création de l’agent.
+`project_provision_local` est réservé à l’hôte central ; il indique explicitement
+la reprise distante lorsqu’un projet est affecté à une autre machine.
+
 Écrire le code dans le dépôt créé, puis appeler `action_start` :
 
 ```json

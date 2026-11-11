@@ -3,6 +3,12 @@
 declare(strict_types=1);
 
 return [
+    'project.provision.remote' => [
+        'description' => 'Termine la creation du workspace d’un projet deja affecte a un agent distant, avec son depot existant.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-provision-remote', ['param' => 'project_id']],
+        'cwd' => '.', 'timeout' => 240, 'target' => 'local',
+        'parameters' => ['project_id' => ['type' => 'identifier', 'description' => 'Identifiant du projet distant machine_assigned.']],
+    ],
     'project.create.remote' => [
         'description' => 'Crée un dépôt GitHub privé et demande la création réelle du workspace sur une machine équipée de l’agent projets.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-create-remote',

@@ -55,6 +55,13 @@ final class RemoteProjectQueue
         $deployment = bin2hex(random_bytes(16));
         $this->db->beginTransaction();
         try {
+            $intent = $this->db->prepare('SELECT repository,machine,state FROM dm_project_provisioning WHERE project_id=? FOR UPDATE');
+            $intent->execute([$project]);
+            $binding = $intent->fetch(PDO::FETCH_ASSOC);
+            if ($binding === false || $binding['state'] !== 'machine_assigned'
+                || $binding['repository'] !== $repository || $binding['machine'] !== $machine) {
+                throw new RuntimeException('Remote project assignment changed before registration');
+            }
             $this->db->prepare('INSERT INTO dm_deployment (id,machine_id,project_id,workspace_path,enabled) VALUES (?,?,?,?,1)')
                 ->execute([$deployment, $machine, $project, $workspace]);
             $this->db->prepare('INSERT INTO dm_remote_project (project_id,deployment_id,machine_id,repository,workspace_path) VALUES (?,?,?,?,?)')

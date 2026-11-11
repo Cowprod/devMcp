@@ -17,6 +17,10 @@ use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\ProvisioningStore;
 use Cowprod\DevMcp\Project\RemoteProjectPackage;
 use Cowprod\DevMcp\Project\RemoteProjectQueue;
+use Cowprod\DevMcp\Project\ProjectCreationPreview;
+use Cowprod\DevMcp\Project\ProvisioningState;
+use Cowprod\DevMcp\Project\LocalWorkspaceProvisioner;
+use InvalidArgumentException;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -118,5 +122,43 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $this->db->prepare('UPDATE dm_machine SET agent_version=NULL WHERE id=?')->execute([$this->machine]);
         $this->expectException(RuntimeException::class);
         (new RemoteProjectQueue($this->db))->assertMachineReady($this->machine);
+    }
+
+    public function testRegisteredAndAssignedRemoteProjectCanBeProvisionedWithoutRecreatingTheRepository(): void
+    {
+        $store=new ProvisioningStore($this->db);
+        $preview=ProjectCreationPreview::prepare($this->project,'Existing private application','Cowprod/'.$this->project,
+            'attach','remote','agent-'.$this->machine,RemoteProjectPackage::ROOT.'/'.$this->project);
+        $record=$store->registerCentral(ProvisioningState::begin($preview));
+        $record=$store->advance($this->project,$record['revision'],'repository_ready');
+        $record=$store->advance($this->project,$record['revision'],'machine_assigned',['machine'=>$this->machine]);
+        $registry=ProjectRegistry::fromConfig(['projects'=>[]]);$audit=new AuditLogger($this->root.'/audit');
+        $jobs=new JobManager($registry,new FileJobStore($this->root.'/jobs'),new ArtifactService(),$audit);
+        $remote=new RemoteTools($this->db,$this->root.'/sources');
+        $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),$remote,null,$store,
+            new LocalWorkspaceProvisioner($this->root.'/work'));
+        $wrong=$tools->projectProvisionLocal($this->project,$record['revision'],'PROVISION_LOCAL_WORKSPACE');
+        self::assertSame('project_provision_remote',$wrong['next_tool']);
+        self::assertFalse($wrong['provisioning_succeeded']);
+        try {
+            $tools->projectProvisionRemote($this->project,$record['revision']-1,'PROVISION_REMOTE_WORKSPACE');
+            self::fail('Stale provisioning intent accepted');
+        } catch (InvalidArgumentException) {
+            self::assertNull($remote->projectQueue()->project($this->project));
+        }
+        $queued=$tools->projectProvisionRemote($this->project,$record['revision'],'PROVISION_REMOTE_WORKSPACE');
+        self::assertSame('provisioning',$queued['state']);self::assertFalse($queued['workspace_created']);
+        self::assertSame('machine_assigned',$store->get($this->project)['state']);
+        $queue=$remote->projectQueue();$job=$queue->claim($this->machine);
+        self::assertSame($queued['job']['job_id'],$job['id']);
+        $result=['ok'=>true,'data'=>['project_id'=>$this->project,'repository'=>'Cowprod/'.$this->project,
+            'workspace_path'=>RemoteProjectPackage::ROOT.'/'.$this->project,'workspace_created'=>true,
+            'revision'=>$job['package']['revision'],'port'=>null,'runtime'=>null,'url'=>null]];
+        $queue->finish($this->machine,$job['id'],$result);
+        self::assertSame('active',$store->get($this->project)['state']);
+        self::assertTrue($store->get($this->project)['actions_enabled']);
+        self::assertContains('project.deploy',array_column($tools->actionList($this->project)['actions'],'id'));
+        $q=$this->db->prepare('SELECT COUNT(*) FROM dm_deployment WHERE project_id=?');$q->execute([$this->project]);
+        self::assertSame(1,(int)$q->fetchColumn());
     }
 }
