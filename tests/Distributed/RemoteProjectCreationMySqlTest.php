@@ -44,7 +44,7 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $this->machine=bin2hex(random_bytes(16));$this->project='auto-'.bin2hex(random_bytes(6));
         $this->db->prepare("INSERT INTO dm_machine (id,name,os_family,architecture,status,agent_version) VALUES (?,?,'linux','x86_64','active',?)")
             ->execute([$this->machine,'agent-'.$this->machine,'projects-v1:'.str_repeat('a',40)]);
-        $this->root=sys_get_temp_dir().'/devmcp-remote-'.bin2hex(random_bytes(8));mkdir($this->root,0700);
+        $this->root=realpath(sys_get_temp_dir()).'/devmcp-remote-'.bin2hex(random_bytes(8));mkdir($this->root,0700);
         mkdir($this->root.'/work');mkdir($this->root.'/fake');
         $this->git(['init','-b','main'],$this->root.'/work');
         $this->git(['config','user.name','Fixture'],$this->root.'/work');
@@ -100,7 +100,12 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $jobs=new JobManager($registry,new FileJobStore($this->root.'/jobs'),new ArtifactService(),$audit);
         $remote=new RemoteTools($this->db,$this->root.'/sources');$store=new ProvisioningStore($this->db);
         $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),$remote,$creator,$store);
-        $created=$tools->projectCreate($this->project,'Automatic remote project','CREATE_PROJECT','agent-'.$this->machine);
+        $response=\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,'project_create',[
+            'project_id'=>$this->project,'description'=>'Automatic remote project',
+            'confirmation'=>'CREATE_PROJECT','machine'=>'agent-'.$this->machine]);
+        self::assertArrayNotHasKey('error',$response,json_encode($response));
+        self::assertFalse($response['result']['isError']??false);
+        $created=$response['result']['structuredContent'];
         self::assertSame('provisioning',$created['state'],json_encode($created));self::assertSame(1,$requests);
         self::assertFalse($created['workspace_created']);self::assertFalse($store->get($this->project)['actions_enabled']);
         $queue=new RemoteProjectQueue($this->db);
@@ -133,16 +138,27 @@ final class RemoteProjectCreationMySqlTest extends TestCase
     public function testRegisteredAndAssignedRemoteProjectCanBeProvisionedWithoutRecreatingTheRepository(): void
     {
         $store=new ProvisioningStore($this->db);
-        $preview=ProjectCreationPreview::prepare($this->project,'Existing private application','Cowprod/'.$this->project,
-            'attach','remote','agent-'.$this->machine,RemoteProjectPackage::ROOT.'/'.$this->project);
-        $record=$store->registerCentral(ProvisioningState::begin($preview));
-        $record=$store->advance($this->project,$record['revision'],'repository_ready');
-        $record=$store->advance($this->project,$record['revision'],'machine_assigned',['machine'=>$this->machine]);
         $registry=ProjectRegistry::fromConfig(['projects'=>[]]);$audit=new AuditLogger($this->root.'/audit');
         $jobs=new JobManager($registry,new FileJobStore($this->root.'/jobs'),new ArtifactService(),$audit);
         $remote=new RemoteTools($this->db,$this->root.'/sources');
         $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),$remote,null,$store,
             new LocalWorkspaceProvisioner($this->root.'/work'));
+        $call=static function(string $name,array $args)use($tools):array {
+            $response=\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,$name,$args,'2025-03-26');
+            self::assertArrayNotHasKey('error',$response,json_encode($response));
+            self::assertFalse($response['result']['isError']??false,json_encode($response));
+            return $response['result']['structuredContent'];
+        };
+        $args=['project_id'=>$this->project,'description'=>'Existing private application',
+            'github_repository'=>'Cowprod/'.$this->project,'repository_mode'=>'attach','confirmation'=>'REGISTER_PROJECT'];
+        $record=$call('project_register',$args);
+        self::assertTrue($record['registration_succeeded']);
+        self::assertSame('registered',$record['state']);
+        self::assertTrue($call('project_register',$args)['already_registered']);
+        $record=$call('project_repository_confirm',['project_id'=>$this->project,'repository'=>'Cowprod/'.$this->project,
+            'revision'=>$record['revision'],'confirmation'=>'CONFIRM_REPOSITORY_READY']);
+        $record=$call('project_assign_machine',['project_id'=>$this->project,'machine'=>'agent-'.$this->machine,
+            'revision'=>$record['revision'],'confirmation'=>'ASSIGN_MACHINE']);
         $wrong=$tools->projectProvisionLocal($this->project,$record['revision'],'PROVISION_LOCAL_WORKSPACE');
         self::assertSame('project_provision_remote',$wrong['next_tool']);
         self::assertFalse($wrong['provisioning_succeeded']);
@@ -152,7 +168,22 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         } catch (InvalidArgumentException) {
             self::assertNull($remote->projectQueue()->project($this->project));
         }
-        $queued=$tools->projectProvisionRemote($this->project,$record['revision'],'PROVISION_REMOTE_WORKSPACE');
+        // Force an actual Git failure after the deployment binding was committed.
+        rename($this->root.'/remote.git',$this->root.'/saved-remote.git');
+        try {
+            $partial=$call('project_provision_remote',['project_id'=>$this->project,'revision'=>$record['revision'],
+                'confirmation'=>'PROVISION_REMOTE_WORKSPACE']);
+            self::assertSame('partial_failure',$partial['state']);
+            self::assertSame('remote_workspace_enqueue',$partial['failure']['stage']);
+            self::assertFalse($partial['workspace_created']);
+            self::assertSame('machine_assigned',$store->get($this->project)['state']);
+        } finally {
+            rename($this->root.'/saved-remote.git',$this->root.'/remote.git');
+        }
+        $count=$this->db->prepare('SELECT COUNT(*) FROM dm_deployment WHERE project_id=?');
+        $count->execute([$this->project]);self::assertSame(1,(int)$count->fetchColumn());
+        $queued=$call('project_provision_remote',['project_id'=>$this->project,'revision'=>$record['revision'],
+            'confirmation'=>'PROVISION_REMOTE_WORKSPACE']);
         self::assertSame('provisioning',$queued['state']);self::assertFalse($queued['workspace_created']);
         self::assertSame('machine_assigned',$store->get($this->project)['state']);
         $queue=$remote->projectQueue();$job=$queue->claim($this->machine);

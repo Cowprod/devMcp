@@ -149,7 +149,7 @@ final class ServerFactory
             )
             ->addTool(
                 [$tools, 'projectRegister'], 'project_register',
-                description: 'Enregistre le projet, clone le depot existant, active le workspace local et ses actions standard SQL.',
+                description: 'Enregistre une intention de projet sans clonage ni affectation. Retourne registration_succeeded et la revision; une repetition identique ne cree aucun doublon.',
                 inputSchema: $projectRegisterSchema,
             )
             ->addTool(

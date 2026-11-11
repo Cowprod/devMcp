@@ -79,12 +79,48 @@ final class ProvisioningStore
                 $record['project_id'], $record['description'],
                 $record['repository'], $record['repository_mode'],
             ]);
+            $created = $this->get($record['project_id']);
             $this->db->commit();
         } catch (\Throwable $error) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) $this->db->rollBack();
             throw $error;
         }
-        return $this->get($record['project_id']);
+        return $created;
+    }
+
+    /** Return only an identical durable registration; never conceal an ID/repository conflict. */
+    public function matchingRegistration(array $record): ?array
+    {
+        $query = $this->db->prepare(
+            'SELECT project_id FROM dm_project_provisioning WHERE project_id = ? OR repository = ?'
+        );
+        $query->execute([$record['project_id'], $record['repository']]);
+        $ids = $query->fetchAll(PDO::FETCH_COLUMN);
+        if ($ids === []) {
+            $query = $this->db->prepare('SELECT id FROM dm_project WHERE id = ?');
+            $query->execute([$record['project_id']]);
+            if ($query->fetchColumn() !== false) {
+                throw new \InvalidArgumentException('Conflit: identifiant deja enregistre hors du journal');
+            }
+            return null;
+        }
+        if (count($ids) !== 1 || $ids[0] !== $record['project_id']) {
+            throw new \InvalidArgumentException('Conflit: projet ou depot deja reserve');
+        }
+        $existing = $this->get($ids[0]);
+        foreach (['description', 'repository', 'repository_mode'] as $field) {
+            if ($existing[$field] !== $record[$field]) {
+                throw new \InvalidArgumentException('Conflit: enregistrement different pour ce projet');
+            }
+        }
+        $query = $this->db->prepare('SELECT description, repository_url FROM dm_project WHERE id = ?');
+        $query->execute([$record['project_id']]);
+        $project = $query->fetch(PDO::FETCH_ASSOC);
+        if ($project === false || $project['description'] !== $record['description']
+            || $project['repository_url'] !== 'https://github.com/' . $record['repository']) {
+            throw new \InvalidArgumentException('Conflit: metadonnees centrales differentes du journal');
+        }
+        return $existing;
     }
 
     /**
