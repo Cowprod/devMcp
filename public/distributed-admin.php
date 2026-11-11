@@ -21,12 +21,14 @@ if (!is_string($configPath) || !is_file($configPath)) {
     exit('Distributed admin unavailable');
 }
 $config = require $configPath;
-// Authentication must be enforced by the reverse proxy. Never accept a
-// client-supplied identity header without trusted upstream validation.
-if (($_SERVER['HTTPS'] ?? '') !== 'on'
-    || ($_SERVER['REMOTE_USER'] ?? '') === '') {
-    http_response_code(403);
-    exit('Access denied');
+try {
+    $adminUser = (new \Cowprod\DevMcp\Distributed\Admin\AdminSession(
+        '/etc/devmcp-admin/web-auth.php', '/var/lib/devmcp-admin-auth'
+    ))->requireLogin();
+} catch (Throwable $authError) {
+    error_log('devmcp-admin authentication unavailable: ' . get_class($authError));
+    http_response_code(503);
+    exit('Connexion administrateur indisponible');
 }
 // Screenshots are served only to authenticated HTTPS administrators, by serial.
 if (isset($_GET['adb_image'])) {
@@ -67,9 +69,8 @@ if (isset($_GET['adb_log'])) {
     readfile($file);
     exit;
 }
-session_start(['cookie_httponly' => true, 'cookie_secure' => true, 'cookie_samesite' => 'Strict', 'use_strict_mode' => true]);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
-// Same trusted HTTPS and REMOTE_USER boundary as the administration page.
+// Same HTTPS session boundary as the administration page.
 // The Web process invokes only the existing local MCP action, never systemctl.
 if (isset($_GET['project_service_api'])) {
     header('Content-Type: application/json; charset=utf-8');
@@ -603,6 +604,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <a class="td-tab" href="#projects" data-td-view="projects"><i class="fa-solid fa-folder-tree me-1" aria-hidden="true"></i> Projets</a>
 <a class="td-tab" href="#deployments" data-td-view="deployments"><i class="fa-solid fa-diagram-project me-1" aria-hidden="true"></i> Affectations</a>
 <a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
+<form method="post" action="/?logout=1" class="ms-auto"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><button type="submit" class="btn btn-sm btn-outline-light">Déconnexion</button></form>
 </div></nav>
 <main class="container-fluid py-3" id="admin-main"><?php if ($error !== null): ?><div class="alert alert-danger" role="alert"><?= e($error) ?></div><?php endif; ?>
 <?php if (isset($_GET['created'])): ?><div class="alert alert-success" role="status">Enregistrement effectué.</div><?php endif; ?>

@@ -39,7 +39,7 @@ $db=DatabaseConnection::connect($runtime['dsn'],$runtime['writer_username'],$run
 $actions=require dirname(__DIR__).'/config/shared-actions.php';
 $db->beginTransaction();
 try {
-    foreach (['project.create.remote', 'project.provision.remote'] as $id) {
+    foreach (['project.create.remote', 'project.provision.remote', 'admin.password.bootstrap'] as $id) {
     $db->prepare('INSERT INTO dm_shared_action_config (action_id,config_json) VALUES (?,?) ON DUPLICATE KEY UPDATE config_json=VALUES(config_json)')
         ->execute([$id,json_encode($actions[$id],JSON_THROW_ON_ERROR)]);
     $q=$db->prepare('SELECT config_json FROM dm_local_project_config WHERE project_id=? FOR UPDATE');$q->execute(['devmcp-admin']);

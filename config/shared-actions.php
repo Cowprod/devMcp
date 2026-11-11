@@ -3,6 +3,11 @@
 declare(strict_types=1);
 
 return [
+    'admin.password.bootstrap' => [
+        'description' => 'Lit le nouveau mot de passe admin genere lors de la migration vers le formulaire HTML.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-admin-password-bootstrap'],
+        'cwd' => '.', 'timeout' => 10, 'target' => 'local',
+    ],
     'project.provision.remote' => [
         'description' => 'Termine la creation du workspace d’un projet deja affecte a un agent distant, avec son depot existant.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-project-provision-remote', ['param' => 'project_id']],

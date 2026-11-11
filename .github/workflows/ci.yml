@@ -21,6 +21,10 @@ jobs:
           sudo env DEVMCP_RUN_ROOT_TESTS=1 php -d zend.assertions=1 -d assert.exception=1 tests/distributed/remote-project-runtime-smoke.php
       - name: Install project broker and exercise real updater mount sandbox
         run: sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/Distributed/project-installer-smoke.sh
+      - name: Migrate nginx admin login and verify generated credentials
+        run: |
+          sudo apt-get update && sudo apt-get install -y nginx
+          sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/distributed/admin-form-auth-migration.sh
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
