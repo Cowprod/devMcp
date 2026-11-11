@@ -38,24 +38,27 @@ final class RemoteTools
         }
         $operation = match ($action) {
             'project.provision' => 'create', 'workspace.sync' => 'sync', 'project.deploy' => 'deploy',
+            'ios.capabilities' => 'ios_capabilities', 'ios.build' => 'ios_build',
             'project.status' => 'status', 'project.logs' => 'logs', 'git.head' => 'head',
             'workspace.list' => 'list', 'workspace.read' => 'read', 'workspace.stat' => 'stat', 'workspace.find' => 'find',
             default => throw new InvalidArgumentException('Unknown managed remote action'),
         };
+        if(str_starts_with($operation,'ios_')&&$record['os_family']!=='macos')throw new InvalidArgumentException('iOS builds require a macOS agent');
         if ((int) $record['ready'] !== 1 && $operation !== 'create') {
             throw new RuntimeException('Wait for the workspace creation job before using this project');
         }
         $allowed = match ($operation) {
             'deploy' => ['runtime', 'commit'], 'sync' => ['commit'],
+            'ios_build' => ['target','team_id','method','commit'],
             'list', 'read', 'stat', 'find' => ['path'], default => [],
         };
         if (array_diff(array_keys($arguments), $allowed)) {
             throw new InvalidArgumentException('Unknown remote project argument');
         }
         $details = [];
-        if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
+        if (in_array($operation, ['create', 'sync', 'deploy', 'ios_build'], true)) {
             $commit = $arguments['commit'] ?? null;
-            if (($operation === 'sync' && $commit === null)
+            if ((in_array($operation,['sync','ios_build'],true) && $commit === null)
                 || ($commit !== null && (!is_string($commit) || preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1))) {
                 throw new InvalidArgumentException('Exact Git commit required');
             }
@@ -64,6 +67,10 @@ final class RemoteTools
                     throw new InvalidArgumentException('Explicit static, php or node runtime required');
                 }
                 $details['runtime'] = $arguments['runtime'];
+            }
+            if($operation==='ios_build'){
+                $details['arguments']=array_diff_key($arguments,['commit'=>true]);
+                \Cowprod\DevMcp\Project\MacIosRuntime::arguments($details['arguments']);
             }
             $details['package'] = (new \Cowprod\DevMcp\Project\RemoteProjectSource($this->sourceRoot))
                 ->snapshot($project, $record['repository'], $commit);
@@ -227,8 +234,14 @@ final class RemoteTools
         $this->describe($project);
         if ($this->projectQueue()->project($project) !== null) {
             $actions = [];
-            foreach (self::MANAGED_ACTIONS as $id) {
+            $managed=$this->projectQueue()->project($project);
+            $names=self::MANAGED_ACTIONS;
+            if($managed['os_family']==='macos')$names=[...$names,'ios.capabilities','ios.build'];
+            foreach ($names as $id) {
                 $parameters = match ($id) {
+                    'ios.build' => [['id'=>'target','type'=>'enum','values'=>['simulator','device'],'required'=>true],
+                        ['id'=>'commit','type'=>'git_sha','required'=>true],['id'=>'team_id','type'=>'string','required'=>false],
+                        ['id'=>'method','type'=>'enum','values'=>['debugging','release-testing'],'required'=>false]],
                     'project.deploy' => [['id' => 'runtime', 'type' => 'enum', 'values' => ['static', 'php', 'node'], 'required' => true],
                         ['id' => 'commit', 'type' => 'git_sha', 'required' => false]],
                     'workspace.sync' => [['id' => 'commit', 'type' => 'git_sha', 'required' => true]],

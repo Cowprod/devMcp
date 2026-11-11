@@ -16,12 +16,14 @@ try {
         throw new RuntimeException('size');
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
+    $iosHeartbeat = is_array($payload) && ($payload['queue'] ?? null) === 'ios-heartbeat';
+    $iosUpload = is_array($payload) && ($payload['queue'] ?? null) === 'ios-artifact';
     $projectQueue = is_array($payload) && ($payload['queue'] ?? null) === 'projects';
-    if (!is_array($payload) || array_keys($payload) !== ($projectQueue
-        ? ['protocol_version','queue','job_id','result'] : ['protocol_version','job_id','result'])
+    if (!is_array($payload) || array_keys($payload) !== ($iosUpload ? ['protocol_version','queue','job_id','artifact','offset','data'] : (($projectQueue||$iosHeartbeat)
+        ? ['protocol_version','queue','job_id','result'] : ['protocol_version','job_id','result']))
         || $payload['protocol_version'] !== 1
         || !is_string($payload['job_id']) || !preg_match('/^[a-f0-9]{32}$/D', $payload['job_id'])
-        || !is_array($payload['result'])) {
+        || (!$iosUpload && !is_array($payload['result']))) {
         throw new RuntimeException('payload');
     }
     $headers = [];
@@ -42,6 +44,22 @@ try {
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
         (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $matches[1], true);
+    if($iosHeartbeat){
+        (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
+        if($payload['result']!==['running'=>true])throw new RuntimeException('Invalid iOS heartbeat');
+        $query=$db->prepare("UPDATE dm_remote_project_job SET claimed_at=UTC_TIMESTAMP(6),expires_at=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE) WHERE id=? AND machine_id=? AND state='claimed' AND operation='ios_build'");
+        $query->execute([$payload['job_id'],$machineId]);
+        if($query->rowCount()!==1)throw new RuntimeException('iOS build lease lost');
+        echo '{"protocol_version":1,"ok":true}';exit;
+    }
+    if($iosUpload){
+        (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
+        $query=$db->prepare("SELECT j.project_id FROM dm_remote_project_job j JOIN dm_machine m ON m.id=j.machine_id JOIN dm_remote_project p ON p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation='ios_build' AND m.os_family='macos' AND p.machine_id=j.machine_id");
+        $query->execute([$payload['job_id'],$machineId]);$project=$query->fetchColumn();
+        if(!is_string($project))throw new RuntimeException('Unknown iOS build job');
+        $upload=(new \Cowprod\DevMcp\Project\IosArtifactStore())->receive($machineId,$project,$payload);
+        echo json_encode(['protocol_version'=>1,'ok'=>true,'upload'=>$upload],JSON_THROW_ON_ERROR);exit;
+    }
     if ($projectQueue) {
         (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db))->finish($machineId, $payload['job_id'], $payload['result']);
         echo '{"protocol_version":1,"ok":true}';

@@ -42,7 +42,7 @@ final class RemoteProjectQueue
         if (!$this->hasSchema()) {
             return null;
         }
-        $q = $this->db->prepare('SELECT p.*,m.name AS machine FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=?');
+        $q = $this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=?');
         $q->execute([$project]);
         $row = $q->fetch(PDO::FETCH_ASSOC);
         return $row === false ? null : $row;

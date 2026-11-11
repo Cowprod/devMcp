@@ -1,0 +1,136 @@
+<?php
+declare(strict_types=1);
+namespace Cowprod\DevMcp\Project;
+use RuntimeException;
+
+/** Xcode builds run as the enrolled macOS user, never as root. */
+final class MacIosRuntime
+{
+    private static ?\Closure $heartbeat=null;
+    public static function capabilities(): array
+    {
+        $developer = trim(self::capture(['/usr/bin/xcode-select','-p'],[0,2]));
+        $full = is_file($developer.'/usr/bin/xcodebuild');
+        return ['platform'=>'macos','architecture'=>php_uname('m'),'developer_directory'=>$developer,
+            'full_xcode'=>$full,'xcode_version'=>$full?trim(self::capture(['/usr/bin/xcodebuild','-version'])):null,
+            'sdks'=>$full?trim(self::capture(['/usr/bin/xcodebuild','-showsdks'])):null,
+            'signing_identities'=>trim(self::capture(['/usr/bin/security','find-identity','-v','-p','codesigning'])),
+            'setup_required'=>$full?[]:['Install full Xcode, select it with xcode-select, and complete its first launch']];
+    }
+
+    public static function build(string $workspace, array $job, ?callable $heartbeat=null): array
+    {
+        self::$heartbeat=$heartbeat===null?null:\Closure::fromCallable($heartbeat);
+        $args=$job['arguments']??[];
+        self::arguments($args);
+        $revision=$job['package']['revision'];
+        $source=$workspace.'/releases/'.$revision;
+        $configFile=$source.'/.devmcp/ios.json';
+        if(!is_file($configFile)||is_link($configFile))throw new RuntimeException('Missing .devmcp/ios.json build configuration');
+        $config=self::configuration(json_decode(file_get_contents($configFile),true,16,JSON_THROW_ON_ERROR));
+        $container=$source.'/'.$config['path'];
+        if(!is_dir($container)||is_link($container)||realpath($container)!==$container)throw new RuntimeException('Xcode container unavailable');
+        $id=$job['id'];$output=$workspace.'/ios-builds/'.$id;
+        if(!is_dir($workspace.'/ios-builds'))mkdir($workspace.'/ios-builds',0700);
+        $lock=fopen($workspace.'/ios-builds/.build.lock','c+b');
+        if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('An iOS build is already running for this project');
+        try {
+            $resultFile=$output.'/result.json';
+            if(is_file($resultFile))return json_decode(file_get_contents($resultFile),true,16,JSON_THROW_ON_ERROR);
+            if(file_exists($output))throw new RuntimeException('Previous build incomplete; inspect its log and start a new job');
+            mkdir($output,0700);
+            $log=$output.'/build.log';
+            $caps=self::capabilities();
+            if(!$caps['full_xcode'])throw new RuntimeException('Full Xcode is required; install it and complete first launch');
+            $target=$args['target'];
+            $common=['/usr/bin/xcodebuild',$config['kind']==='workspace'?'-workspace':'-project',$container,
+                '-scheme',$config['scheme'],'-configuration',$config['configuration'],'-derivedDataPath',$output.'/DerivedData',
+                '-clonedSourcePackagesDirPath',$workspace.'/ios-builds/SourcePackages'];
+            if($target==='simulator') {
+                self::command([...$common,'-destination','generic/platform=iOS Simulator','CODE_SIGNING_ALLOWED=NO','build'],$source,$log);
+                $apps=glob($output.'/DerivedData/Build/Products/'.$config['configuration'].'-iphonesimulator/*.app')?:[];
+                if(count($apps)!==1)throw new RuntimeException('Expected exactly one simulator application');
+                self::command(['/usr/bin/ditto','-c','-k','--sequesterRsrc','--keepParent',$apps[0],$output.'/simulator.zip'],$source,$log);
+                $artifact=$output.'/simulator.zip';
+                $signed=false;
+            } else {
+                if(!preg_match('/[1-9][0-9]* valid identities found/',$caps['signing_identities']))throw new RuntimeException('No valid Apple signing identity; configure Xcode Accounts and Manage Certificates');
+                $team=$args['team_id']??$config['team_id'];
+                if(!is_string($team)||!preg_match('/^[A-Z0-9]{10}$/D',$team))throw new RuntimeException('An explicit Apple developer team_id is required');
+                $archive=$output.'/App.xcarchive';
+                self::command([...$common,'-destination','generic/platform=iOS','-archivePath',$archive,
+                    '-allowProvisioningUpdates','DEVELOPMENT_TEAM='.$team,'CODE_SIGN_STYLE=Automatic','archive'],$source,$log);
+                $options=['method'=>$args['method']??'debugging','teamID'=>$team,'signingStyle'=>'automatic','destination'=>'export',
+                    'manageAppVersionAndBuildNumber'=>false];
+                $optionsFile=$output.'/ExportOptions.plist';
+                file_put_contents($optionsFile,json_encode($options,JSON_THROW_ON_ERROR));
+                self::command(['/usr/bin/plutil','-convert','xml1',$optionsFile],$source,$log);
+                self::command(['/usr/bin/xcodebuild','-exportArchive','-archivePath',$archive,'-exportOptionsPlist',$optionsFile,
+                    '-exportPath',$output.'/Export','-allowProvisioningUpdates'],$source,$log);
+                $files=glob($output.'/Export/*.ipa')?:[];
+                if(count($files)!==1)throw new RuntimeException('Expected exactly one exported IPA');
+                $artifact=$files[0];$signed=true;
+            }
+            $info=$target==='simulator'?$apps[0].'/Info.plist':$archive.'/Products/Applications/'.basename((glob($archive.'/Products/Applications/*.app')?:[''])[0]).'/Info.plist';
+            $metadata=json_decode(self::capture(['/usr/bin/plutil','-convert','json','-o','-',$info]),true,32,JSON_THROW_ON_ERROR);
+            $result=['project_id'=>$job['project_id'],'revision'=>$revision,'build_id'=>$id,'target'=>$target,
+                'signed'=>$signed,'artifact_local'=>$artifact,'size'=>filesize($artifact),'sha256'=>hash_file('sha256',$artifact),
+                'bundle_id'=>$metadata['CFBundleIdentifier'],'version'=>(string)$metadata['CFBundleVersion'],
+                'title'=>$metadata['CFBundleDisplayName']??$metadata['CFBundleName'],'log_tail'=>self::tail($log)];
+            if($result['size']>268435456)throw new RuntimeException('Build artifact exceeds the 256 MiB delivery limit');
+            file_put_contents($resultFile,json_encode($result,JSON_THROW_ON_ERROR));
+            return $result;
+        } catch(\Throwable $error) {
+            throw new RuntimeException($error->getMessage().(isset($log)?"\n".self::tail($log):''),previous:$error);
+        } finally {self::$heartbeat=null;flock($lock,LOCK_UN);fclose($lock);}
+    }
+
+    public static function arguments(array $args): void
+    {
+        if(array_diff(array_keys($args),['target','team_id','method']))throw new RuntimeException('Unknown iOS build argument');
+        if(!in_array($args['target']??null,['simulator','device'],true))throw new RuntimeException('Explicit simulator or device target required');
+        if(isset($args['team_id'])&&(!is_string($args['team_id'])||!preg_match('/^[A-Z0-9]{10}$/D',$args['team_id'])))throw new RuntimeException('Invalid Apple developer team_id');
+        if(isset($args['method'])&&!in_array($args['method'],['debugging','release-testing'],true))throw new RuntimeException('Explicit debugging or release-testing export method required');
+        if($args['target']==='simulator'&&(isset($args['team_id'])||isset($args['method'])))throw new RuntimeException('Simulator build does not accept signing arguments');
+    }
+
+    public static function configuration(mixed $config): array
+    {
+        if(!is_array($config)||array_diff(array_keys($config),['kind','path','scheme','configuration','team_id']))throw new RuntimeException('Invalid iOS build configuration');
+        if(!in_array($config['kind']??null,['project','workspace'],true))throw new RuntimeException('Explicit Xcode project or workspace required');
+        RemoteProjectPackage::path($config['path']??'');
+        if(!str_ends_with($config['path'],$config['kind']==='project'?'.xcodeproj':'.xcworkspace'))throw new RuntimeException('Xcode container extension mismatch');
+        foreach(['scheme','configuration'] as $key)if(!is_string($config[$key]??null)||!preg_match('/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/D',$config[$key]))throw new RuntimeException('Invalid Xcode '.$key);
+        if(isset($config['team_id'])&&(!is_string($config['team_id'])||!preg_match('/^[A-Z0-9]{10}$/D',$config['team_id'])))throw new RuntimeException('Invalid configured Apple team');
+        return $config+['team_id'=>null];
+    }
+
+    private static function capture(array $argv,array $allowed=[0]): string
+    {
+        $p=proc_open($argv,[0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['file','/dev/null','w']],$pipes);
+        if(!is_resource($p))throw new RuntimeException('Xcode diagnostic unavailable');
+        $body=stream_get_contents($pipes[1]);fclose($pipes[1]);
+        $code=proc_close($p);
+        if(!in_array($code,$allowed,true))throw new RuntimeException('Xcode diagnostic failed: '.$argv[0]);
+        return $body;
+    }
+    private static function tail(string $path): string {return is_file($path)?(string)file_get_contents($path,false,null,max(0,filesize($path)-12000)):'';}
+    private static function command(array $argv,string $cwd,string $log): void
+    {
+        $p=proc_open($argv,[0=>['file','/dev/null','r'],1=>['file',$log,'a'],2=>['file',$log,'a']],$pipes,$cwd);
+        if(!is_resource($p))throw new RuntimeException('Xcode build process unavailable');
+        $start=microtime(true);$lastHeartbeat=0.0;
+        do {
+            if(self::$heartbeat!==null&&microtime(true)-$lastHeartbeat>20){
+                try{(self::$heartbeat)();$lastHeartbeat=microtime(true);}
+                catch(\Throwable $error){proc_terminate($p);proc_close($p);throw $error;}
+            }
+            $status=proc_get_status($p);
+            if(!$status['running'])break;
+            if(microtime(true)-$start>1800||is_file($log)&&filesize($log)>33554432){proc_terminate($p);proc_close($p);throw new RuntimeException('Xcode build exceeded its time or log limit');}
+            usleep(200000);clearstatcache(true,$log);
+        }while(true);
+        proc_close($p);
+        if($status['exitcode']!==0)throw new RuntimeException('Xcode command failed ('.$status['exitcode'].'): '.$argv[0]);
+    }
+}

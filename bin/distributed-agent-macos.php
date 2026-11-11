@@ -5,6 +5,7 @@ use Cowprod\DevMcp\Project\MacProjectRuntime;
 require dirname(__DIR__).'/src/Project/RemoteProjectPackage.php';
 require dirname(__DIR__).'/src/Project/RemoteProjectRuntime.php';
 require dirname(__DIR__).'/src/Project/MacProjectRuntime.php';
+require dirname(__DIR__).'/src/Project/MacIosArtifactUpload.php';
 
 try {
     if(PHP_OS_FAMILY!=='Darwin'||posix_geteuid()===0||$argc!==2)throw new RuntimeException('macOS user agent configuration required');
@@ -51,7 +52,15 @@ try {
         if($reply['project_jobs']===[])break;
         $job=$reply['project_jobs'][0];
         if(($job['machine_id']??null)!==$config['machine_id']||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Project job identity mismatch');
-        try{$result=['ok'=>true,'data'=>MacProjectRuntime::run($job,['enabled'=>true,'machine_id'=>$config['machine_id'],'bind_ipv4'=>$config['bind_ipv4']])];}
+        try{
+            $heartbeat=static function()use($post,$job,$revision):void{
+                $post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
+                $post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>'ios-heartbeat','job_id'=>$job['id'],'result'=>['running'=>true]]);
+            };
+            $data=MacProjectRuntime::run($job,['enabled'=>true,'machine_id'=>$config['machine_id'],'bind_ipv4'=>$config['bind_ipv4'],'heartbeat'=>$heartbeat]);
+            if($job['operation']==='ios_build')$data=\Cowprod\DevMcp\Project\MacIosArtifactUpload::publish($data,$job,$post,$config['central_url']);
+            $result=['ok'=>true,'data'=>$data];
+        }
         catch(Throwable $error){$result=['ok'=>false,'error'=>$error->getMessage()];}
         $body=['protocol_version'=>1,'queue'=>'projects','job_id'=>$job['id'],'result'=>$result];
         $json=json_encode($body,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);

@@ -6,6 +6,24 @@ use RuntimeException;
 /** User LaunchAgents implement the same verified project operations on macOS. */
 final class MacProjectRuntime extends RemoteProjectRuntime
 {
+    public static function run(array $job, array $policy): array
+    {
+        if(!in_array($job['operation']??'', ['ios_capabilities','ios_build'],true))return parent::run($job,$policy);
+        if(($policy['enabled']??false)!==true||($job['machine_id']??null)!==($policy['machine_id']??null)
+            ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Invalid iOS agent identity');
+        require_once __DIR__.'/MacIosRuntime.php';
+        $project=RemoteProjectPackage::projectId($job['project_id']??'');
+        $workspace=static::workspaceRoot($policy).'/'.$project;
+        static::directory($workspace);
+        $meta=static::json($workspace.'/.project.json');
+        if(($meta['project_id']??null)!==$project)throw new RuntimeException('iOS project identity mismatch');
+        if($job['operation']==='ios_capabilities')return MacIosRuntime::capabilities();
+        $package=RemoteProjectPackage::validate($job['package']??[]);
+        if($package['project_id']!==$project||$package['repository']!==$meta['repository'])throw new RuntimeException('iOS build source repository mismatch');
+        static::stage($workspace,$package);
+        return MacIosRuntime::build($workspace,$job,$policy['heartbeat']??null);
+    }
+
     protected static function owner(): int { return posix_geteuid(); }
     protected static function workspaceRoot(array $policy): string
     {
