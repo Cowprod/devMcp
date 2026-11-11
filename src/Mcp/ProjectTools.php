@@ -358,6 +358,34 @@ final class ProjectTools
         return $updated;
     }
 
+    public function projectProvisionRemote(string $project_id, int $revision, string $confirmation): array
+    {
+        if ($confirmation !== 'PROVISION_REMOTE_WORKSPACE' || $this->provisioning === null || $this->remoteTools === null) {
+            throw new InvalidArgumentException('Provisionnement distant indisponible ou non confirme');
+        }
+        \Cowprod\DevMcp\Project\RemoteProjectPackage::projectId($project_id);
+        $record = $this->provisioning->get($project_id);
+        if ($record['revision'] !== $revision || $record['state'] !== 'machine_assigned'
+            || $record['repository_confirmed'] !== true || $record['machine'] === gethostname()) {
+            throw new InvalidArgumentException('Projet non affecte a un agent distant ou revision obsolete');
+        }
+        $machine = $this->remoteTools->machineForProvisioningPreview($record['machine']);
+        $queue = $this->remoteTools->projectQueue();
+        $queue->assertReady();
+        $queue->assertMachineReady($machine['id']);
+        $managed = $queue->project($project_id);
+        if ($managed === null) {
+            $queue->register($project_id, $record['repository'], $machine['id']);
+        } elseif ($managed['machine_id'] !== $machine['id'] || $managed['repository'] !== $record['repository']) {
+            throw new InvalidArgumentException('Affectation distante differente du projet deja gere');
+        }
+        $job = $this->remoteTools->createRemoteWorkspace($project_id);
+        $this->audit->append(['project' => $project_id, 'action' => 'project.provision.remote',
+            'machine_id' => $machine['id'], 'outcome' => 'queued']);
+        return ['project' => $record, 'job' => $job, 'state' => 'provisioning',
+            'workspace_created' => false, 'actions_authorized' => false];
+    }
+
     public function projectProvisionLocal(string $project_id, int $revision, string $confirmation): array
     {
         if ($confirmation !== 'PROVISION_LOCAL_WORKSPACE'
@@ -365,8 +393,13 @@ final class ProjectTools
             throw new InvalidArgumentException('Provisionnement local indisponible ou non confirme');
         }
         $record = $this->provisioning->get($project_id);
-        if ($record['revision'] !== $revision || $record['state'] !== 'machine_assigned'
-            || $record['machine'] !== gethostname()) {
+        if ($record['machine'] !== gethostname()) {
+            return ['project' => $record, 'state' => $record['state'], 'provisioning_succeeded' => false,
+                'failure' => ['stage' => 'target_selection', 'code' => 'remote_machine_requires_remote_provisioning'],
+                'next_tool' => 'project_provision_remote', 'next_action' => 'project.provision.remote',
+                'action_project' => 'devmcp-admin'];
+        }
+        if ($record['revision'] !== $revision || $record['state'] !== 'machine_assigned') {
             throw new InvalidArgumentException('Projet non affecte a cet hote ou revision obsolete');
         }
         $this->provisioning->assertLocalProjectCreationReady();

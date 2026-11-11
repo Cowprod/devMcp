@@ -1,0 +1,18 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+try {
+    if ($argc !== 2) throw new InvalidArgumentException('Usage: devmcp-project-provision-remote PROJECT');
+    $config = require (getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php');
+    $runtime = \Cowprod\DevMcp\Runtime\RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
+    $matches = array_values(array_filter($runtime->tools->projectProvisioningList()['projects'],
+        static fn(array $row): bool => $row['project_id'] === $argv[1]));
+    if (count($matches) !== 1) throw new InvalidArgumentException('Projet de provisionnement introuvable');
+    $result = $runtime->tools->projectProvisionRemote($argv[1], $matches[0]['revision'], 'PROVISION_REMOTE_WORKSPACE');
+    echo json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), "\n";
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Remote provisioning failed: ' . $error->getMessage() . "\n");
+    exit(1);
+}

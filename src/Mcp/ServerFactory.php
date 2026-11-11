@@ -125,6 +125,9 @@ final class ServerFactory
             'additionalProperties' => false,
         ];
 
+        $remoteProvisionSchema = $localProvisionSchema;
+        $remoteProvisionSchema['properties']['confirmation']['enum'] = ['PROVISION_REMOTE_WORKSPACE'];
+
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -160,13 +163,18 @@ final class ServerFactory
             )
             ->addTool(
                 [$tools, 'projectAssignMachine'], 'project_assign_machine',
-                description: 'Affecte un projet a une machine active du registre, sans deployer ni activer les actions.',
+                description: 'Affecte un projet a une machine active. Ensuite appeler project_provision_remote pour un agent distant, project_provision_local pour cet hote.',
                 inputSchema: $machineAssignSchema,
             )
             ->addTool(
                 [$tools, 'projectProvisionLocal'], 'project_provision_local',
-                description: 'Clone le depot dans un workspace local sous la racine autorisee, puis active le projet et ses actions standard SQL.',
+                description: 'Clone sur cet hote uniquement. Pour RTX ou un autre agent distant, utiliser project_provision_remote.',
                 inputSchema: $localProvisionSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisionRemote'], 'project_provision_remote',
+                description: 'Termine un projet machine_assigned sur un agent distant (RTX, caseRouter). Utilise le depot existant et retourne un job de creation a attendre avant project.deploy.',
+                inputSchema: $remoteProvisionSchema,
             )
             ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
             ->addTool(
