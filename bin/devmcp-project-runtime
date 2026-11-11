@@ -70,6 +70,12 @@ try {
     }
     fclose($probe);
     $plan = ProjectServiceLaunchPlan::build($record, $root, $ip);
+    if ($plan['php_session_path'] !== null) {
+        $sessions = $plan['php_session_path'];
+        if (is_link($sessions) || (!is_dir($sessions) && !mkdir($sessions, 0700)) || !is_writable($sessions)) {
+            throw new RuntimeException('Persistent PHP session directory unavailable');
+        }
+    }
     echo 'devMcp service: ', $argv[1], ' ', $plan['runtime'], ' ',
         $ip, ':', $plan['port'], "\n";
     $process = new Process($plan['argv'], $plan['cwd'], $plan['env'], null, null);

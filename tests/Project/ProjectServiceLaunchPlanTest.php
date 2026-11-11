@@ -16,7 +16,7 @@ final class ProjectServiceLaunchPlanTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->root = sys_get_temp_dir() . '/devmcp-app-' . bin2hex(random_bytes(6));
+        $this->root = realpath(sys_get_temp_dir()) . '/devmcp-app-' . bin2hex(random_bytes(6));
         $this->workspace = $this->root . '/fixture';
         mkdir($this->workspace . '/public', 0700, true);
         file_put_contents($this->workspace . '/server.js', 'console.log("ok")');
@@ -58,7 +58,7 @@ final class ProjectServiceLaunchPlanTest extends TestCase
         $plan = ProjectServiceLaunchPlan::build(
             $this->row(['runtime_type' => 'php']), $this->root, '127.0.0.1',
         );
-        self::assertSame(['/usr/bin/php', '-S', '0.0.0.0:17591',
+        self::assertSame(['/usr/bin/php', '-d', 'session.save_path=/var/lib/devmcp-project-fixture/.php-sessions', '-S', '0.0.0.0:17591',
             '-t', $this->workspace . '/public'], $plan['argv']);
     }
 

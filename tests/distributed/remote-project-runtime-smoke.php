@@ -21,7 +21,7 @@ try {
         $marker='created-by-agent-'.$runtime;
         [$path,$body]=match($runtime){
             'static'=>['public/index.html','<!doctype html><h1>'.$marker.'</h1>'],
-            'php'=>['public/index.php','<?php echo '.var_export($marker,true).';'],
+            'php'=>['public/index.php','<?php if (!session_start()) { http_response_code(500); exit; } $_SESSION["counter"]=($_SESSION["counter"]??0)+1; echo '.var_export($marker,true).'."|session=".$_SESSION["counter"];'],
             'node'=>['server.js','require("node:http").createServer((q,r)=>r.end('.json_encode($marker).')).listen(Number(process.env.PORT),process.env.HOST);'],
         };
         $package=['project_id'=>$project,'repository'=>'Cowprod/'.$project,'revision'=>sha1($body),
@@ -37,6 +37,19 @@ try {
         assert($live['deployment_complete']===true);
         assert(str_contains(file_get_contents($live['url'].'/'),$marker));
         echo "PASS: $runtime created from an absent workspace, deployed through the agent runtime, HTTP verified\n";
+        if($runtime==='php'){
+            $first=file_get_contents($live['url'].'/');
+            assert(str_ends_with($first,'|session=1'));
+            $cookie=null;
+            foreach($http_response_header as $header)if(preg_match('/^Set-Cookie: (PHPSESSID=[^;]+)/i',$header,$m))$cookie=$m[1];
+            assert(is_string($cookie));
+            $context=stream_context_create(['http'=>['header'=>'Cookie: '.$cookie."\r\n"]]);
+            assert(str_ends_with(file_get_contents($live['url'].'/',false,$context),'|session=2'));
+            $again=$job;$again['id']=bin2hex(random_bytes(16));
+            RemoteProjectRuntime::run($again,$policy);$results[]=$again['id'];
+            assert(str_ends_with(file_get_contents($live['url'].'/',false,$context),'|session=3'));
+            echo "PASS: unmodified PHP session_start persists across HTTP requests and service redeployment\n";
+        }
         if($runtime==='node'){
             $failed=$job;$failed['id']=bin2hex(random_bytes(16));
             $bad='process.exit(1);';$failed['package']['revision']=sha1($bad);

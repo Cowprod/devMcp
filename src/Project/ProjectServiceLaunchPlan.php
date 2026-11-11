@@ -15,7 +15,7 @@ final class ProjectServiceLaunchPlan
 {
     /**
      * @param array<string, mixed> $record
-     * @return array{argv:list<string>,cwd:string,env:array<string,string>,runtime:string,port:int,bind_ip:string}
+     * @return array{argv:list<string>,cwd:string,env:array<string,string>,runtime:string,port:int,bind_ip:string,php_session_path:?string}
      */
     public static function build(array $record, string $workspaceRoot, string $advertisedIpv4): array
     {
@@ -48,12 +48,13 @@ final class ProjectServiceLaunchPlan
         $bind = $bindIp . ':' . $port;
         $docroot = $record['document_root'] ?? null;
         $entrypoint = $record['entrypoint'] ?? null;
+        $sessionPath = $runtime === 'php' ? '/var/lib/devmcp-project-' . $projectId . '/.php-sessions' : null;
         if ($runtime === 'static' || $runtime === 'php') {
             $default = 'public';
             $directory = self::path($workspace, $docroot ?? $default, true);
             $argv = $runtime === 'static'
                 ? ['/usr/bin/python3', '-m', 'http.server', (string) $port, '--bind', $bindIp, '--directory', $directory]
-                : ['/usr/bin/php', '-S', $bind, '-t', $directory];
+                : ['/usr/bin/php', '-d', 'session.save_path=' . $sessionPath, '-S', $bind, '-t', $directory];
         } elseif ($runtime === 'node') {
             $file = self::path($workspace, $entrypoint ?? 'server.js', false);
             if (!str_ends_with($file, '.js') && !str_ends_with($file, '.mjs')
@@ -69,6 +70,7 @@ final class ProjectServiceLaunchPlan
         return [
             'argv' => $argv, 'cwd' => $workspace, 'runtime' => $runtime,
             'port' => $port, 'bind_ip' => $bindIp,
+            'php_session_path' => $sessionPath,
             'env' => [
                 'PORT' => (string) $port,
                 'HOST' => $bindIp,

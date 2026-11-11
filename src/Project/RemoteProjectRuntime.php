@@ -148,13 +148,15 @@ final class RemoteProjectRuntime
         $link = $workspace . '/.current-' . bin2hex(random_bytes(6));
         symlink('releases/' . $meta['revision'], $link);
         rename($link, $current);
+        $state = 'devmcp-app-' . $meta['project_id'];
+        $sessionPath = '/var/lib/' . $state . '/.php-sessions';
+        $prepare = $runtime === 'php' ? 'ExecStartPre=/usr/bin/mkdir -m 0700 -p ' . $sessionPath . "\n" : '';
         $command = match ($runtime) {
             'static' => '/usr/bin/python3 -m http.server ' . $port . ' --bind ' . $ip . ' --directory ' . $current . '/public',
-            'php' => '/usr/bin/php -S ' . $ip . ':' . $port . ' -t ' . $current . '/public',
+            'php' => '/usr/bin/php -d session.save_path=' . $sessionPath . ' -S ' . $ip . ':' . $port . ' -t ' . $current . '/public',
             'node' => '/usr/bin/node ' . $current . '/server.js',
         };
-        $state = 'devmcp-app-' . $meta['project_id'];
-        $unit = '# devMcp project ' . $meta['project_id'] . "\n[Unit]\nAfter=network-online.target zerotier-one.service\nWants=network-online.target\nStartLimitIntervalSec=0\n[Service]\nType=simple\nDynamicUser=yes\nStateDirectory=$state\nWorkingDirectory=$current\nExecStart=$command\nEnvironment=HOST=$ip\nEnvironment=PORT=$port\nEnvironment=DATA_DIR=/var/lib/$state\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n";
+        $unit = '# devMcp project ' . $meta['project_id'] . "\n[Unit]\nAfter=network-online.target zerotier-one.service\nWants=network-online.target\nStartLimitIntervalSec=0\n[Service]\nType=simple\nDynamicUser=yes\nStateDirectory=$state\nWorkingDirectory=$current\n{$prepare}ExecStart=$command\nEnvironment=HOST=$ip\nEnvironment=PORT=$port\nEnvironment=DATA_DIR=/var/lib/$state\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n";
         self::write($unitPath, $unit, 0644);
         try {
             self::command(['/usr/bin/systemctl', 'daemon-reload']);
