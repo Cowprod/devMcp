@@ -21,14 +21,20 @@ try {
             CURLOPT_HTTPHEADER=>['Content-Type: application/json','Authorization: Bearer '.$credential,'X-DevMcp-Machine: '.$config['machine_id']],
             CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_CAINFO=>$config['ca_file'],
             CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_FOLLOWLOCATION=>false]);
-        $body=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);curl_close($ch);
-        if(!is_string($body)||$status!==200||strlen($body)>8388608)throw new RuntimeException('Central request failed (HTTP '.(int)$status.')');
+        for($attempt=0;$attempt<15;++$attempt){
+            $body=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$errno=curl_errno($ch);
+            if($errno!==CURLE_COULDNT_CONNECT)break;
+            // Keep the responsible app alive while macOS presents Local Network consent.
+            if($attempt<14)sleep(2);
+        }
+        if(!is_string($body)||$status!==200||strlen($body)>8388608)throw new RuntimeException('Central request failed (HTTP '.(int)$status.'; curl_errno='.(int)$errno.')');
         $reply=json_decode($body,true,32,JSON_THROW_ON_ERROR);
         if(!is_array($reply)||($reply['protocol_version']??null)!==1)throw new RuntimeException('Invalid central reply');
         return $reply;
     };
     $hello=$post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
     if(($hello['ok']??false)!==true)throw new RuntimeException('Central ping rejected');
+    if(($hello['machine_status']??null)==='pending'){echo "devMcp macOS: awaiting machine approval in admin\n";exit(0);}
     if(($hello['zerotier_address_supported']??false)===true){
         $reply=$post('/v1/agent/ping',['protocol_version'=>1,'zerotier_ipv4'=>$config['bind_ipv4']]);
         if(($reply['zerotier_address_saved']??false)!==true)throw new RuntimeException('Central did not verify agent IPv4');

@@ -62,6 +62,7 @@ for file in bin/distributed-agent-macos.php src/Project/RemoteProjectPackage.php
 for occupied in "$base/active" "$base/bundles/$release" "$account_home/Library/LaunchAgents/net.cowprod.devmcp.agent.plist" "$account_home/Library/LaunchAgents/net.cowprod.devmcp.update.plist"; do
   [[ ! -e "$occupied" && ! -L "$occupied" ]] || { echo 'Installation path occupied; enrollment token not consumed' >&2;exit 1; }
 done
+"$php" "$staging/source/bin/configure-macos-launcher.php" "$base" --prepare
 IFS= read -r token || true
 [[ "$token" =~ ^[a-f0-9]{64}$ ]] || { echo 'Invalid enrollment token' >&2;exit 2; }
 printf '{"token":"%s"}' "$token" > "$staging/request.json";unset token
@@ -85,17 +86,8 @@ file_put_contents($bundle."/agent-settings.php","<?php return ".var_export(["php
 ' "$staging/identity.json"
 cp "$staging/ca.pem" "$base/ca.pem"
 ln -s "bundles/$release" "$base/active"
-# plutil converts JSON to a native launchd property list without interpolation of paths.
 export DEVMCP_MAC_PHP="$php"
-"$php" -r '
-$b=getenv("DEVMCP_MAC_BASE");$p=["Label"=>"net.cowprod.devmcp.agent","ProgramArguments"=>[getenv("DEVMCP_MAC_PHP"),$b."/active/bin/distributed-agent-macos.php",$b."/config.php"],"RunAtLoad"=>true,"StartInterval"=>60,"ProcessType"=>"Background","StandardOutPath"=>$b."/state/agent.log","StandardErrorPath"=>$b."/state/agent-error.log"];
-echo json_encode($p,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
-' > "$staging/agent.plist"
-/usr/bin/plutil -convert xml1 "$staging/agent.plist"
-plist="$account_home/Library/LaunchAgents/net.cowprod.devmcp.agent.plist"
-[[ ! -e "$plist" && ! -L "$plist" ]] || { echo 'LaunchAgent path occupied' >&2;exit 1; }
-cp "$staging/agent.plist" "$plist"
-/bin/launchctl bootstrap "gui/$uid" "$plist"
+"$php" "$bundle/bin/configure-macos-launcher.php" "$base" --configure
 "$php" -r '
 $b=getenv("DEVMCP_MAC_BASE");$p=["Label"=>"net.cowprod.devmcp.update","ProgramArguments"=>[getenv("DEVMCP_MAC_PHP"),$b."/active/bin/update-agent-macos.php",$b."/config.php"],"StartInterval"=>21600,"ProcessType"=>"Background","StandardOutPath"=>$b."/state/update.log","StandardErrorPath"=>$b."/state/update-error.log"];
 echo json_encode($p,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);

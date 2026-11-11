@@ -95,3 +95,11 @@ et jetons sont stockés dans `~/Library/Application Support/devMcp`. Un deuxièm
 LaunchAgent vérifie les mises à jour toutes les six heures et conserve les
 anciens bundles utilisés par les services existants. Xcode et la génération
 d’IPA ne font pas partie de cette première implémentation d’hébergement.
+
+Sur macOS 15 et suivants, le service en arrière-plan doit recevoir l’autorisation
+**Réseau local**. L’installateur prépare une application native nommée **devMcp**
+et l’associe aux LaunchAgents, pour présenter cette demande sous un nom explicite.
+Autoriser devMcp une fois dans Réglages Système → Confidentialité et sécurité →
+Réseau local. Le lanceur natif reste stable entre les mises à jour de l’agent.
+L’installateur le prépare avant de consommer le jeton. Aucun réglage de confidentialité
+global du Mac n’est désactivé.

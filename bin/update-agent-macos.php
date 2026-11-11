@@ -17,7 +17,7 @@ try{
  $run(['/usr/bin/git','-C',$source,'-c','core.hooksPath=/dev/null','fetch','--quiet','--no-tags','origin','main']);
  $sha=$run(['/usr/bin/git','-C',$source,'rev-parse','refs/remotes/origin/main']);
  if(!preg_match('/^[a-f0-9]{40}$/D',$sha))throw new RuntimeException('Invalid update revision');
- $current=trim(file_get_contents($base.'/active/revision'));if($sha===$current){echo "macOS agent already current\n";exit(0);}
+ $current=trim(file_get_contents($base.'/active/revision'));if($sha===$current){$run(['/opt/homebrew/bin/php',$base.'/active/bin/configure-macos-launcher.php',$base,'--configure']);echo "macOS agent already current\n";exit(0);}
  $run(['/usr/bin/git','-C',$source,'merge-base','--is-ancestor',$current,$sha]);
  $bundle=$base.'/bundles/'.$sha;
  if(file_exists($bundle)||is_link($bundle))throw new RuntimeException('Update bundle path occupied');
@@ -28,5 +28,6 @@ try{
  $run(['/opt/homebrew/bin/node','--check',$stage.'/bin/devmcp-static-server.mjs']);
  copy($base.'/active/agent-settings.php',$stage.'/agent-settings.php');file_put_contents($stage.'/revision',$sha."\n");
  rename($stage,$bundle);$next=$base.'/.active-'.bin2hex(random_bytes(6));symlink('bundles/'.$sha,$next);rename($next,$base.'/active');
+ $run(['/opt/homebrew/bin/php',$base.'/active/bin/configure-macos-launcher.php',$base,'--configure']);
  echo "PASS: macOS agent updated to $sha; project services preserved\n";
 }catch(Throwable $error){fwrite(STDERR,'devMcp macOS update: '.$error->getMessage()."\n");exit(1);}

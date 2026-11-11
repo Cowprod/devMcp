@@ -90,7 +90,9 @@ try {
     if (isset($payload['agent_version'])) {
         $db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$payload['agent_version'], $machineId]);
     }
-    $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments];
+    $machineState = $db->prepare('SELECT status FROM dm_machine WHERE id=?');
+    $machineState->execute([$machineId]);
+    $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments, 'machine_status' => $machineState->fetchColumn()];
     // Capability is advertised only after the migration is readable.
     $response['zerotier_address_supported'] = false;
     try {
