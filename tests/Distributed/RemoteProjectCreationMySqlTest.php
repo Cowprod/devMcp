@@ -126,6 +126,28 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         self::assertSame('succeeded',$tools->jobStatus($job['id'])['status']);
         self::assertContains('project.deploy',array_column($tools->actionList($this->project)['actions'],'id'));
         self::assertSame('remote',$tools->projectDescribe($this->project)['target']);
+        $actions=array_column($tools->actionList($this->project)['actions'],'id');
+        if($os==='macos'){
+            self::assertContains('ios.capabilities',$actions);self::assertContains('ios.build',$actions);
+            $call=$tools->actionStart($this->project,'ios.capabilities');
+            $probe=$queue->claim($this->machine);self::assertSame('ios_capabilities',$probe['operation']);
+            $queue->finish($this->machine,$probe['id'],['ok'=>true,'data'=>['full_xcode'=>true]]);
+            self::assertSame('succeeded',$tools->jobStatus($call['job_id'])['status']);
+            $before=$queue->project($this->project)['metadata_json'];
+            $call=$tools->actionStart($this->project,'ios.build',['target'=>'simulator','commit'=>$job['package']['revision']]);
+            $build=$queue->claim($this->machine);self::assertSame('ios_build',$build['operation']);
+            self::assertSame(['target'=>'simulator'],$build['arguments']);
+            self::assertSame($job['package']['revision'],$build['package']['revision']);
+            $queue->finish($this->machine,$build['id'],['ok'=>true,'data'=>['target'=>'simulator','signed'=>false]]);
+            self::assertSame('succeeded',$tools->jobStatus($call['job_id'])['status']);
+            self::assertSame($before,$queue->project($this->project)['metadata_json']);
+        }else{
+            self::assertNotContains('ios.build',$actions);
+            try{$tools->actionStart($this->project,'ios.build',['target'=>'simulator','commit'=>$job['package']['revision']]);self::fail('Linux accepted iOS build');}
+            catch(InvalidArgumentException $error){self::assertStringContainsString('macOS',$error->getMessage());}
+            self::assertNull($queue->claim($this->machine));
+        }
+
     }
 
     public function testOldEnrollmentOnlyAgentIsRejectedBeforeAnyRepositoryCreation(): void

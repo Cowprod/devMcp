@@ -18,6 +18,8 @@ jobs:
           php -l bin/update-agent-macos.php
           php -l bin/configure-macos-launcher.php
           php -l src/Project/MacProjectRuntime.php
+          php -l src/Project/MacIosRuntime.php
+          php -l src/Project/MacIosArtifactUpload.php
           bash -n deploy/distributed/install-agent-macos.sh
           node --check bin/devmcp-static-server.mjs
       - name: Deploy real LaunchAgents and verify PHP sessions and Node WebSocket
@@ -29,3 +31,7 @@ jobs:
           php bin/configure-macos-launcher.php "$DEVMCP_TEST_BASE" --prepare
           php -r 'file_put_contents("agent-settings.php","<?php return ".var_export(["php"=>PHP_BINARY,"node"=>getenv("DEVMCP_TEST_NODE"),"launcher"=>getenv("DEVMCP_TEST_BASE")."/devMcp.app/Contents/MacOS/devmcp-launcher"],true).";");'
           php -d zend.assertions=1 -d assert.exception=1 tests/distributed/macos-project-runtime-smoke.php
+      - name: Build a real iOS simulator app and export its ZIP
+        env:
+          DEVMCP_RUN_MAC_TESTS: '1'
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/distributed/macos-ios-build-smoke.php

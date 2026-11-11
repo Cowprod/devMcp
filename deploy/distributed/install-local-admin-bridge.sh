@@ -7,10 +7,11 @@ getent group www-data >/dev/null || { echo "Groupe www-data absent" >&2; exit 1;
 [[ -f /opt/devmcp/bin/devmcp-admin-projects-export ]] || { echo "Mise à jour /opt/devmcp requise" >&2; exit 1; }
 [[ -f /opt/devmcp/bin/devmcp-admin-android ]] || { echo "Worker Android absent" >&2; exit 1; }
 [[ -f /opt/devmcp-admin/src/Distributed/Admin/AndroidSnapshot.php ]] || { echo "Mise à jour /opt/devmcp-admin requise" >&2; exit 1; }
-for path in /var/lib/devmcp-admin-bridge /var/lib/devmcp-admin-bridge/requests /var/lib/devmcp-admin-bridge/screenshots /var/lib/devmcp-admin-bridge/labels /var/lib/devmcp-admin-bridge/logs; do
+for path in /var/lib/devmcp-ios-artifacts /var/lib/devmcp-admin-bridge /var/lib/devmcp-admin-bridge/requests /var/lib/devmcp-admin-bridge/screenshots /var/lib/devmcp-admin-bridge/labels /var/lib/devmcp-admin-bridge/logs; do
     [[ ! -L "$path" ]] || { echo "Lien symbolique interdit : $path" >&2; exit 1; }
 done
 
+install -d -o www-data -g www-data -m 0700 /var/lib/devmcp-ios-artifacts
 install -d -o devmcp -g www-data -m 2750 /var/lib/devmcp-admin-bridge
 install -d -o devmcp -g www-data -m 2770 /var/lib/devmcp-admin-bridge/requests
 install -d -o devmcp -g www-data -m 2750 /var/lib/devmcp-admin-bridge/screenshots
