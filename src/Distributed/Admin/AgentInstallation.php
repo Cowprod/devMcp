@@ -35,13 +35,22 @@ final class AgentInstallation
         return $head;
     }
 
-    public static function command(string $revision, string $server, string $certificateHash, string $token): string
+    public static function command(string $revision, string $server, string $certificateHash, string $token, string $os = 'linux'): string
     {
         if (preg_match('/^[a-f0-9]{40}$/D', $revision) !== 1
             || preg_match('/^[a-f0-9]{64}$/D', $certificateHash) !== 1
             || preg_match('/^[a-f0-9]{64}$/D', $token) !== 1
             || preg_match('~^https://(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?::[0-9]+)?$~D', $server) !== 1) {
             throw new RuntimeException('Agent install command inputs are invalid');
+        }
+        if (!in_array($os, ['linux', 'macos'], true)) throw new RuntimeException('Agent installation is unavailable for this OS');
+        if ($os === 'macos') {
+            $url = 'https://raw.githubusercontent.com/Cowprod/devMcp/' . $revision . '/deploy/distributed/install-agent-macos.sh';
+            return '{ tmp=$(mktemp) && curl --proto \'=https\' --tlsv1.2 --fail --silent --show-error --location '
+                . escapeshellarg($url) . ' -o "$tmp" && { printf \'%s\\n\' ' . escapeshellarg($token)
+                . ' | bash "$tmp" --server ' . escapeshellarg($server)
+                . ' --cert-sha256 ' . escapeshellarg($certificateHash) . ' --release ' . escapeshellarg($revision)
+                . ' --token-stdin; }; rc=$?; rm -f "$tmp"; test "$rc" -eq 0; }';
         }
         $url = 'https://raw.githubusercontent.com/Cowprod/devMcp/' . $revision . '/deploy/distributed/install-agent.sh';
         return 'sudo -v && { tmp=$(mktemp) && curl --proto \'=https\' --tlsv1.2 --fail --silent --show-error --location '

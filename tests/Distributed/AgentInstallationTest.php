@@ -37,4 +37,13 @@ final class AgentInstallationTest extends TestCase
             rmdir($root.'/.git');rmdir($root);
         }
     }
+
+    public function testMacCommandSelectsUserInstallerAndPinsRelease(): void
+    {
+        $sha=str_repeat('a',40);
+        $command=AgentInstallation::command($sha,'https://192.168.194.189',str_repeat('c',64),str_repeat('b',64),'macos');
+        self::assertStringContainsString('/'.$sha.'/deploy/distributed/install-agent-macos.sh',$command);
+        self::assertStringNotContainsString('sudo -n bash',$command);
+        self::assertStringContainsString("--release '$sha'",$command);
+    }
 }

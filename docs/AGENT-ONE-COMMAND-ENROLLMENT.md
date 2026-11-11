@@ -70,3 +70,28 @@ dont le dépôt existe mais dont la préparation des sources a échoué.
 Le moteur générique crée ses propres projets sous `/srv/devmcp-projects` et ne
 convertit pas les anciens projets en lecture seule. Une installation neuve sur
 RTX reste à vérifier sur cette machine réelle.
+
+## Hébergement sur macOS Apple Silicon
+
+Créer la machine avec OS `macos` et architecture `aarch64` dans l’admin. La
+commande générée sélectionne l’installateur macOS, exécuté sous le compte local.
+Il détecte Homebrew, PHP et Node et installe les éléments manquants. Homebrew
+peut demander un mot de passe administrateur lors de sa première installation.
+Un réseau ZeroTier déjà connecté au central et une session utilisateur macOS
+ouverte sont nécessaires. Aucun outil Homebrew n’est supposé présent dans le PATH.
+
+Les applications et le poller sont des LaunchAgents. Ils redémarrent après
+ouverture de session et les applications sont relancées par launchd en cas
+ d’arrêt. Ce mode ne promet pas un démarrage avant la connexion de l’utilisateur.
+Les sources sont sous `/Users/Shared/devmcp-projects-<machine-id>/<projet>` ;
+`DATA_DIR` désigne leur sous-répertoire `data`, conservé entre les déploiements.
+PHP reçoit automatiquement son chemin de sessions persistant. Les actions
+`project.deploy`, `project.status`, `project.logs`, les lectures et la
+synchronisation utilisent la même file centrale que Linux. Le serveur statique
+utilise un serveur Node fourni par l’agent, sans dépendance Python.
+
+L’agent vérifie les TLS avec le certificat central épinglé. Les certificats
+et jetons sont stockés dans `~/Library/Application Support/devMcp`. Un deuxième
+LaunchAgent vérifie les mises à jour toutes les six heures et conserve les
+anciens bundles utilisés par les services existants. Xcode et la génération
+d’IPA ne font pas partie de cette première implémentation d’hébergement.

@@ -20,6 +20,16 @@ final class RemoteProjectPackage
         return $id;
     }
 
+    public static function workspacePath(string $project, string $os, string $machine): string
+    {
+        self::projectId($project);
+        if ($os === 'linux') return self::ROOT . '/' . $project;
+        if ($os !== 'macos' || preg_match('/^[a-f0-9]{32}$/D', $machine) !== 1) {
+            throw new InvalidArgumentException('Unsupported hosting platform');
+        }
+        return '/Users/Shared/devmcp-projects-' . $machine . '/' . $project;
+    }
+
     public static function path(string $path): string
     {
         if ($path === '' || strlen($path) > 512 || str_starts_with($path, '/')
