@@ -18,7 +18,11 @@ jobs:
       - name: Real root project runtime creates and deploys three fresh workspaces
         run: |
           if [ ! -x /usr/bin/node ]; then sudo apt-get update && sudo apt-get install -y nodejs; fi
-          sudo env DEVMCP_RUN_ROOT_TESTS=1 php -d zend.assertions=1 -d assert.exception=1 tests/distributed/remote-project-runtime-smoke.php
+          if ! sudo timeout --kill-after=10s 180s env DEVMCP_RUN_ROOT_TESTS=1 php -d zend.assertions=1 -d assert.exception=1 tests/distributed/remote-project-runtime-smoke.php; then
+            sudo timeout 15s systemctl list-jobs --no-pager || true
+            sudo timeout 15s journalctl -u 'devmcp-app-ci-auto-*' --since '-10 minutes' --no-pager -n 120 || true
+            exit 1
+          fi
       - name: Install project broker and exercise real updater mount sandbox
         run: sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/Distributed/project-installer-smoke.sh
       - name: Migrate nginx admin login and verify generated credentials
