@@ -44,6 +44,7 @@ done
 /usr/bin/php -l /opt/devmcp/bin/devmcp-admin-android
 bash /opt/devmcp/deploy/distributed/install-local-admin-bridge.sh
 /usr/bin/php /opt/devmcp/bin/migrate-admin-form-auth.php --execute MIGRATE_ADMIN_FORM_AUTH
+/usr/bin/php /opt/devmcp/bin/migrate-admin-tls.php --execute MIGRATE_ADMIN_TLS
 
 if systemctl is-active --quiet php8.3-fpm.service; then
     systemctl reload php8.3-fpm.service

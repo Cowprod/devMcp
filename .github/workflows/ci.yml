@@ -29,6 +29,8 @@ jobs:
         run: |
           sudo timeout --kill-after=10s 90s apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update && sudo timeout --kill-after=10s 90s apt-get install -y nginx
           sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/distributed/admin-form-auth-migration.sh
+          php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/admin-tls-certificates-smoke.php
+          sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/Distributed/admin-tls-migration-smoke.sh
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp

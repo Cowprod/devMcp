@@ -35,3 +35,5 @@ jobs:
         env:
           DEVMCP_RUN_MAC_TESTS: '1'
         run: php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/macos-ios-build-smoke.php
+      - name: Verify server certificate with the native Apple SSL trust policy
+        run: php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/admin-tls-certificates-smoke.php

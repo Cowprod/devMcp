@@ -28,7 +28,9 @@ if [ ! -f /etc/devmcp-admin/tls/admin.crt ]; then
     -keyout /etc/devmcp-admin/tls/admin.key \
     -out /etc/devmcp-admin/tls/admin.crt \
     -subj "/CN=$DEVMCP_ADMIN_ZT_IP" \
-    -addext "subjectAltName=IP:$DEVMCP_ADMIN_ZT_IP"
+    -addext "subjectAltName=IP:$DEVMCP_ADMIN_ZT_IP" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign"
 fi
 chown root:www-data /etc/devmcp-admin/tls/admin.key
 chmod 0640 /etc/devmcp-admin/tls/admin.key
@@ -60,6 +62,7 @@ else
 fi
 systemctl daemon-reload
 /usr/bin/php "$SOURCE/bin/migrate-admin-form-auth.php" --execute MIGRATE_ADMIN_FORM_AUTH
+/usr/bin/php "$SOURCE/bin/migrate-admin-tls.php" --execute MIGRATE_ADMIN_TLS
 nginx -t
 systemctl reload nginx
 echo "HTTPS vhost configured with persistent ZeroTier bind retry. Database credentials and migrations must be configured separately."

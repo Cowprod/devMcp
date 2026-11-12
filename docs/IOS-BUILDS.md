@@ -84,3 +84,11 @@ développeur activé. Utiliser une IP ZeroTier en HTTPS est possible avec un cer
 contenant cette IP ; le certificat du lab doit être installé puis explicitement
 approuvé sur chaque appareil. La génération d’une IPA ne prouve pas à elle seule
 que son installation et son lancement sur un appareil physique ont été validés.
+
+Le serveur HTTPS utilise un certificat de serveur distinct de la racine installée
+sur les appareils : SAN de type IP, `extendedKeyUsage=serverAuth`, clé RSA 3072 bits
+et chaîne signée par la racine existante. La migration automatique préserve le
+fichier `/devmcp-ca.crt` octet pour octet ainsi que les empreintes d’enrôlement.
+Elle sauvegarde la configuration nginx, la valide avant rechargement et conserve
+un retour arrière. Les agents déjà enrôlés et les profils iPhone existants
+continuent d’utiliser la même racine.
