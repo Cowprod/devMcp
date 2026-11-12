@@ -44,6 +44,7 @@ final class RemoteTools
             default => throw new InvalidArgumentException('Unknown managed remote action'),
         };
         if(str_starts_with($operation,'ios_')&&$record['os_family']!=='macos')throw new InvalidArgumentException('iOS builds require a macOS agent');
+        $q->assertOperationAllowed($record,$operation);
         if ((int) $record['ready'] !== 1 && $operation !== 'create') {
             throw new RuntimeException('Wait for the workspace creation job before using this project');
         }
@@ -85,6 +86,12 @@ final class RemoteTools
             $details['arguments'] = $arguments;
         }
         return $q->enqueue($project, $operation, $details);
+    }
+
+    public function assertLocalMachineAction(string $action): void
+    {
+        $capability=str_starts_with($action,'android.build')?'cordova_android':($action==='ios.build'?'cordova_ios':($action==='project.deploy'?'hosting':null));
+        if($capability!==null)(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->require('local',$capability);
     }
 
     public static function fromConfig(array $config): ?self
@@ -236,7 +243,12 @@ final class RemoteTools
             $actions = [];
             $managed=$this->projectQueue()->project($project);
             $names=self::MANAGED_ACTIONS;
-            if($managed['os_family']==='macos')$names=[...$names,'ios.capabilities','ios.build'];
+            $capabilities=(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($managed['machine_id']);
+            if(!$capabilities['hosting'])$names=array_values(array_diff($names,['project.deploy']));
+            if($managed['os_family']==='macos'){
+                $names[]='ios.capabilities';
+                if($capabilities['cordova_ios'])$names[]='ios.build';
+            }
             foreach ($names as $id) {
                 $parameters = match ($id) {
                     'ios.build' => [['id'=>'target','type'=>'enum','values'=>['simulator','device'],'required'=>true],

@@ -11,7 +11,7 @@ final class RegistryEditor
 {
     public function __construct(private readonly PDO $db) {}
 
-    public function createMachine(string $name, string $os, string $architecture): string
+    public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
         $name = trim($name);
         if (preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/D', $name) !== 1
@@ -26,6 +26,7 @@ final class RegistryEditor
                 "INSERT INTO dm_machine (id,name,os_family,architecture,status) VALUES (?,?,?,?, 'pending')"
             );
             $statement->execute([$id, $name, $os, $architecture]);
+            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($id,$os,$capabilities);
             $this->audit('machine.create', 'machine', $id);
             $this->db->commit();
         } catch (\Throwable $e) {
@@ -33,6 +34,21 @@ final class RegistryEditor
             throw $e;
         }
         return $id;
+    }
+
+    public function setMachineCapabilities(string $id,array $values): void
+    {
+        $this->db->beginTransaction();
+        try {
+            if($id==='local')$os=PHP_OS_FAMILY==='Darwin'?'macos':strtolower(PHP_OS_FAMILY);
+            else {
+                $q=$this->db->prepare('SELECT os_family FROM dm_machine WHERE id=?');$q->execute([$id]);$os=$q->fetchColumn();
+                if(!is_string($os))throw new InvalidArgumentException('Machine introuvable');
+            }
+            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($id,$os,$values);
+            $this->audit('machine.capabilities.update','machine',$id);
+            $this->db->commit();
+        }catch(\Throwable $error){$this->db->rollBack();throw $error;}
     }
 
     public function approveMachine(string $machineId): void
@@ -123,6 +139,7 @@ final class RegistryEditor
         }
         $this->db->beginTransaction();
         try {
+            \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::validate($os,(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($id));
             $statement = $this->db->prepare('UPDATE dm_machine SET name=?, os_family=?, architecture=? WHERE id=?');
             $statement->execute([$name, $os, $architecture, $id]);
             $check = $this->db->prepare('SELECT id FROM dm_machine WHERE id=?');

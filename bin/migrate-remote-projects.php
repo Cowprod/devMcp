@@ -10,7 +10,7 @@ if (posix_geteuid() !== 0 || ($argv[1] ?? null) !== '--execute' || ($argv[2] ?? 
 $admin = require '/etc/devmcp-admin/distributed.php';
 $runtime = require '/etc/devmcp/mcp-distributed.php';
 $migration = DatabaseConnection::connect($admin['dsn'], $admin['migration_username'], $admin['migration_password']);
-$sql = file_get_contents(dirname(__DIR__) . '/database/migrations/008_remote_projects.sql');
+$sql = file_get_contents(dirname(__DIR__) . '/database/migrations/008_remote_projects.sql')."\n".file_get_contents(dirname(__DIR__) . '/database/migrations/009_machine_capabilities.sql');
 foreach (explode(';', $sql) as $statement) {
     if (trim($statement) !== '') $migration->exec($statement);
 }
@@ -24,7 +24,7 @@ foreach (array_unique([$admin['writer_username'], $runtime['writer_username']]) 
     $query = $root->prepare('SELECT Host FROM mysql.user WHERE User=?');$query->execute([$user]);
     $hosts=$query->fetchAll(PDO::FETCH_COLUMN);
     if($hosts===[])throw new RuntimeException('Runtime SQL account unavailable');
-    foreach($hosts as $host) foreach(['dm_remote_project','dm_remote_project_job'] as $table) {
+    foreach($hosts as $host) foreach(['dm_remote_project','dm_remote_project_job','dm_machine_capability'] as $table) {
         $root->exec('GRANT SELECT,INSERT,UPDATE,DELETE ON '.$quotedDatabase.'.`'.$table.'` TO '.$root->quote($user).'@'.$root->quote($host));
     }
 }
@@ -32,7 +32,7 @@ $query = $root->prepare('SELECT Host FROM mysql.user WHERE User=?');
 $query->execute([$admin['username']]);
 $hosts = $query->fetchAll(PDO::FETCH_COLUMN);
 if ($hosts === []) throw new RuntimeException('Admin read SQL account unavailable');
-foreach ($hosts as $host) foreach (['dm_remote_project', 'dm_remote_project_job'] as $table) {
+foreach ($hosts as $host) foreach (['dm_remote_project', 'dm_remote_project_job', 'dm_machine_capability'] as $table) {
     $root->exec('GRANT SELECT ON '.$quotedDatabase.'.`'.$table.'` TO '.$root->quote($admin['username']).'@'.$root->quote($host));
 }
 $db=DatabaseConnection::connect($runtime['dsn'],$runtime['writer_username'],$runtime['writer_password']);
