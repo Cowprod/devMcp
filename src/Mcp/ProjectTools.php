@@ -701,6 +701,7 @@ final class ProjectTools
             );
         }
 
+        $this->remoteTools?->assertLocalMachineAction($action);
         return $this->runner->run($projectDefinition, $action, $arguments);
     }
 
@@ -717,6 +718,7 @@ final class ProjectTools
         if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
             return $this->remoteTools->start($project, $action, $arguments);
         }
+        $this->remoteTools?->assertLocalMachineAction($action);
         return $this->jobs->start($project, $action, $arguments);
     }
 

@@ -54,6 +54,7 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $this->git(['clone','--bare',$this->root.'/work',$this->root.'/remote.git'],$this->root);
         file_put_contents($this->root.'/fake/ssh',"#!/bin/sh\nfor arg in \"\$@\"; do [ \"\$arg\" = -G ] && exit 0; done\nexec /usr/bin/git-upload-pack ".escapeshellarg($this->root.'/remote.git')."\n");
         chmod($this->root.'/fake/ssh',0700);
+        (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($this->machine,'linux',['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]);
         $this->oldPath=(string)getenv('PATH');
         $this->oldEnvPath=$_ENV['PATH']??null;$this->oldServerPath=$_SERVER['PATH']??null;
         $path=$this->root.'/fake:'.$this->oldPath;
@@ -67,6 +68,7 @@ final class RemoteProjectCreationMySqlTest extends TestCase
             $field=$table==='dm_project'?'id':'project_id';$this->db->prepare('DELETE FROM '.$table.' WHERE '.$field.'=?')->execute([$this->project]);
         }
         $this->db->prepare('DELETE FROM dm_agent_zerotier_address WHERE machine_id=?')->execute([$this->machine]);
+        $this->db->prepare('DELETE FROM dm_machine_capability WHERE machine_key=?')->execute([$this->machine]);
         $this->db->prepare('DELETE FROM dm_machine WHERE id=?')->execute([$this->machine]);
         if(isset($this->oldPath))putenv('PATH='.$this->oldPath);
         if(isset($this->oldPath)){
@@ -77,6 +79,36 @@ final class RemoteProjectCreationMySqlTest extends TestCase
             $it=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->root,\FilesystemIterator::SKIP_DOTS),\RecursiveIteratorIterator::CHILD_FIRST);
             foreach($it as $f){if($f->isDir()&&!$f->isLink())rmdir($f->getPathname());else unlink($f->getPathname());}
             rmdir($this->root);
+        }
+    }
+
+    public function testCapabilityMigrationIsRepeatableAndPreservesOperatorChoices(): void
+    {
+        $values=['hosting'=>false,'cordova_android'=>true,'cordova_ios'=>false];
+        $capabilities=new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db);
+        $capabilities->save($this->machine,'linux',$values);
+        $sql=file_get_contents(dirname(__DIR__,2).'/database/migrations/009_machine_capabilities.sql');
+        for($pass=0;$pass<2;++$pass)foreach(explode(';',$sql) as $statement)if(trim($statement)!=='')$this->db->exec($statement);
+        self::assertSame($values,$capabilities->get($this->machine));
+        self::assertSame(['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false],$capabilities->get('local'));
+    }
+
+    public function testCapabilityMigrationRetainsExistingLocalAndroidBuildAuthorization(): void
+    {
+        $capabilities=new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db);
+        $previous=$capabilities->get('local');$fixture='capability-seed-'.$this->machine;
+        try {
+            $this->db->prepare('INSERT INTO dm_local_project_config (project_id,config_json) VALUES (?,?)')->execute([$fixture,'{"actions":{"android.build_debug":{}}}']);
+            $this->db->exec("DELETE FROM dm_machine_capability WHERE machine_key='local'");
+            $sql=file_get_contents(dirname(__DIR__,2).'/database/migrations/009_machine_capabilities.sql');
+            foreach(explode(';',$sql) as $statement)if(trim($statement)!=='')$this->db->exec($statement);
+            self::assertTrue($capabilities->get('local')['cordova_android']);
+            $capabilities->save('local','linux',['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]);
+            foreach(explode(';',$sql) as $statement)if(trim($statement)!=='')$this->db->exec($statement);
+            self::assertFalse($capabilities->get('local')['cordova_android']);
+        }finally{
+            $this->db->prepare('DELETE FROM dm_local_project_config WHERE project_id=?')->execute([$fixture]);
+            $capabilities->save('local','linux',$previous);
         }
     }
 
@@ -91,6 +123,7 @@ final class RemoteProjectCreationMySqlTest extends TestCase
     public function testCreationUsesTheNormalApiAndBecomesActiveOnlyAfterTheAgentConfirmsItsWorkspace(string $os): void
     {
         $this->db->prepare('UPDATE dm_machine SET os_family=? WHERE id=?')->execute([$os,$this->machine]);
+        (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($this->machine,$os,['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>$os==='macos']);
         $token=$this->root.'/token';file_put_contents($token,str_repeat('x',32));chmod($token,0600);
         $requests=0;
         $creator=new PrivateRepositoryCreator('Cowprod',$token,function($url,$secret,$request)use(&$requests){

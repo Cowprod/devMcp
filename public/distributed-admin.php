@@ -234,13 +234,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $editor = new RegistryEditor($writer);
         switch ($_POST['operation'] ?? '') {
             case 'machine.create':
-                $editor->createMachine((string) ($_POST['name'] ?? ''), (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
+                $editor->createMachine((string) ($_POST['name'] ?? ''), (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''), \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::fromPost($_POST));
                 break;
             case 'enrollment.issue':
                 $invitation = (new EnrollmentService($writer))->issue((string) ($_POST['machine_id'] ?? ''));
                 $platform = $writer->prepare('SELECT os_family FROM dm_machine WHERE id=?');
                 $platform->execute([(string) $_POST['machine_id']]);
                 $invitation['os_family'] = $platform->fetchColumn();
+                break;
+            case 'machine.capabilities.save':
+                $editor->setMachineCapabilities((string)($_POST['machine_key']??''),\Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::fromPost($_POST));
                 break;
             case 'machine.approve':
                 $editor->approveMachine((string) ($_POST['machine_id'] ?? ''));
@@ -339,6 +342,7 @@ try {
     $registry = new RegistryRepository($db);
     $dashboard = new DashboardRepository($db);
     $machines = $registry->machines();
+    $machineCapabilities = (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($db))->all();
     $projects = $registry->projects();
     $deployments = $registry->deployments();
     $jobs = $dashboard->recentJobs();
@@ -664,13 +668,17 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 <div class="input-group mb-2"><span class="input-group-text">Nom</span><input class="form-control" name="name" maxlength="128" required></div>
 <div class="input-group mb-2"><span class="input-group-text">OS</span><select class="form-select" name="os"><option value="linux">Linux</option><option value="windows">Windows</option><option value="macos">macOS</option></select></div>
 <div class="input-group mb-3"><span class="input-group-text">Architecture</span><select class="form-select" name="architecture"><option value="x86_64">x86_64</option><option value="aarch64">aarch64</option><option value="armv7">armv7</option></select></div>
+<?php foreach(\Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::LABELS as $capability=>$label): ?>
+<input type="hidden" name="<?= e($capability) ?>" value="0"><div class="form-check form-switch mb-2"><input class="form-check-input" role="switch" type="checkbox" id="new-<?= e($capability) ?>" name="<?= e($capability) ?>" value="1" <?= $capability==='hosting'?'checked':'' ?>><label class="form-check-label" for="new-<?= e($capability) ?>"><?= e($label) ?></label></div>
+<?php endforeach; ?>
+<p class="small text-secondary">Ces choix déclarent les usages de la machine ; ils n’installent pas les outils de compilation.</p>
 <div class="btn-group"><button class="btn btn-success" type="submit">Ajouter</button></div>
 </form><small class="text-secondary">Machine créée en attente, sans autorisation d'exécution.</small>
 </div></div></div></section><h2 class="h5">Machines</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Machine</th><th>OS</th><th>Architecture</th><th>État</th><th>Connexion</th><th>Version agent</th><th>Dernier contact (UTC)</th><th>Enrôlement</th></tr></thead><tbody>
 <?php if ($localSnapshot['ok']): ?>
-<tr><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
+<tr data-machine-key="local"><td><?= e($localSnapshot['host']['name']) ?></td><td><?= e($localSnapshot['host']['os']) ?></td>
 <td><?= e($localSnapshot['host']['architecture']) ?></td><td><span class="badge bg-info">Local</span></td>
 <td><span class="badge <?= $localFresh ? 'bg-success' : 'bg-warning' ?>"><?= $localFresh ? 'Hôte local' : 'Instantané périmé' ?></span></td><td>—</td>
 <td><?= e($localSnapshot['generated_at_utc']) ?></td><td>Sans agent distant</td></tr>
@@ -1135,12 +1143,20 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
   const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
+  const machineCapabilities = <?= json_encode($machineCapabilities, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const machineCapabilityLabels = <?= json_encode(\Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::LABELS, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
   const specs = {
     machines: {title:'Machines', columns:['Machine','OS','Architecture','État','Connexion','Version agent','Dernier contact (UTC)','Enrôlement'], key:0, sub:3},
     projects: {title:'Projets', columns:['Identifiant','Description','Origine','Workspace local','Actions locales','Dépôt','Moteur'], key:0, sub:2},
     deployments: {title:'Affectations', columns:['Projet','Machine','Répertoire','Exécution','Diagnostic','Branche','Commit','Contrôle UTC'], key:0, sub:1}
   };
   const registry = {};
+  document.querySelectorAll('input[name="operation"][value="machine.create"]').forEach(operation=>{
+    const form=operation.form,os=form.querySelector('select[name="os"]');
+    const update=()=>{['cordova_ios','cordova_android'].forEach(key=>{const input=form.querySelector('input[type="checkbox"][name="'+key+'"]');input.disabled=key==='cordova_ios'?os.value!=='macos':!['linux','macos'].includes(os.value);if(input.disabled)input.checked=false;});};
+    os.addEventListener('change',update);update();
+  });
+
   function el(tag, cls, text) {const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
   // Both the legacy deployment form and the Project detail form follow the same
   // descriptive catalogue. The server and agent independently validate requests.
@@ -1362,6 +1378,25 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
     const canEdit=!!csrf && ((name==='machines'&&!!id)
         || (name==='projects'&&(row.dataset.registryEditable==='1'||(row.dataset.localProject==='1'&&document.documentElement.dataset.localInventoryFresh==='1')))
         || (name==='deployments'&&!!id&&row.dataset.enabled==='0'));
+    if(name==='machines' && csrf){
+      const machineKey=row.dataset.machineKey||id, values=machineCapabilities[machineKey];
+      const card=el('section','mt-4');card.appendChild(el('h3','h6','Capacités de la machine'));
+      if(values){
+        const form=el('form');form.method='post';form.action='/';
+        [['csrf',csrf],['operation','machine.capabilities.save'],['machine_key',machineKey]].forEach(([name,value])=>{const input=el('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);});
+        const iosAllowed=row.cells[1].textContent.trim()==='macos', androidAllowed=['macos','linux'].includes(row.cells[1].textContent.trim());
+        Object.entries(machineCapabilityLabels).forEach(([key,label])=>{
+          const hidden=el('input');hidden.type='hidden';hidden.name=key;hidden.value='0';form.appendChild(hidden);
+          const group=el('div','form-check form-switch mb-2'),input=el('input','form-check-input');
+          input.type='checkbox';input.setAttribute('role','switch');input.name=key;input.value='1';input.id='capability-'+machineKey+'-'+key;input.checked=values[key]===true;
+          input.disabled=(key==='cordova_ios'&&!iosAllowed)||(key==='cordova_android'&&!androidAllowed);
+          const text=el('label','form-check-label',label);text.htmlFor=input.id;group.append(input,text);form.appendChild(group);
+        });
+        form.appendChild(el('p','small text-secondary','Capacités déclarées. Activer un switch n’installe aucun SDK ; les outils et versions du projet restent à vérifier avant compilation. Désactiver une capacité ne coupe pas les services déjà démarrés.'));
+        const save=el('button','btn btn-success','Enregistrer les capacités');save.type='submit';form.appendChild(save);card.appendChild(form);
+      }else card.appendChild(el('p','text-warning','Capacités non déclarées.'));
+      body.appendChild(card);
+    }
     if(name==='projects'){
       const runtimeCard=el('section','mt-4');
       runtimeCard.appendChild(el('h3','h6','Moteur applicatif'));

@@ -131,3 +131,24 @@ plateformes du dépôt ne sont pas modifiées par le runner. Les actions Android
 existantes, notamment la préparation MultiCam, gardent leur fonctionnement.
 L’exemple `examples/cordova-ios-smoke` valide le script web, un hook
 `after_prepare`, le plugin natif Device et une compilation réelle.
+
+## Déclaration des capacités dans l’admin
+
+Dans Machines, le formulaire de création et la fiche de chaque machine proposent
+les switchs « Hébergement web », « Builds Cordova Android » et « Builds iOS /
+Cordova iOS ». La ligne locale TouchDeck possède également sa fiche de capacités,
+sans créer un agent distant fictif. Les modifications sont persistées et auditées.
+
+Les switchs déclarent les usages autorisés ; ils n’installent pas de SDK et ne
+constituent pas une preuve de compilation. iOS est réservé à macOS. Les nouveaux
+builds iOS et les déploiements web distants respectent ces choix, ainsi que les
+actions locales Android existantes `android.build*`. Les diagnostics restent
+accessibles. Désactiver un switch ne coupe pas un service déjà lancé et ne déplace
+pas les builds sur une autre machine.
+
+La migration conserve l’hébergement existant et les builds iOS déjà proposés aux
+Macs, ainsi que les actions Android locales déjà déclarées dans les projets SQL.
+Pour les autres machines, Android reste désactivé jusqu’à déclaration explicite. Un switch Android
+n’ajoute pas à lui seul un runner Android générique à un agent : les actions de
+compilation du projet doivent exister, et leurs prérequis doivent être vérifiés.
+Un nouveau Mac ne reçoit aucune autorisation iOS ou Android implicite.
