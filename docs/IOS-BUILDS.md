@@ -147,7 +147,8 @@ accessibles. Désactiver un switch ne coupe pas un service déjà lancé et ne d
 pas les builds sur une autre machine.
 
 La migration conserve l’hébergement existant et les builds iOS déjà proposés aux
-Macs. Android reste désactivé jusqu’à déclaration explicite. Un switch Android
+Macs, ainsi que les actions Android locales déjà déclarées dans les projets SQL.
+Pour les autres machines, Android reste désactivé jusqu’à déclaration explicite. Un switch Android
 n’ajoute pas à lui seul un runner Android générique à un agent : les actions de
 compilation du projet doivent exister, et leurs prérequis doivent être vérifiés.
 Un nouveau Mac ne reçoit aucune autorisation iOS ou Android implicite.

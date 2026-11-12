@@ -93,6 +93,25 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         self::assertSame(['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false],$capabilities->get('local'));
     }
 
+    public function testCapabilityMigrationRetainsExistingLocalAndroidBuildAuthorization(): void
+    {
+        $capabilities=new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db);
+        $previous=$capabilities->get('local');$fixture='capability-seed-'.$this->machine;
+        try {
+            $this->db->prepare('INSERT INTO dm_local_project_config (project_id,config_json) VALUES (?,?)')->execute([$fixture,'{"actions":{"android.build_debug":{}}}']);
+            $this->db->exec("DELETE FROM dm_machine_capability WHERE machine_key='local'");
+            $sql=file_get_contents(dirname(__DIR__,2).'/database/migrations/009_machine_capabilities.sql');
+            foreach(explode(';',$sql) as $statement)if(trim($statement)!=='')$this->db->exec($statement);
+            self::assertTrue($capabilities->get('local')['cordova_android']);
+            $capabilities->save('local','linux',['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]);
+            foreach(explode(';',$sql) as $statement)if(trim($statement)!=='')$this->db->exec($statement);
+            self::assertFalse($capabilities->get('local')['cordova_android']);
+        }finally{
+            $this->db->prepare('DELETE FROM dm_local_project_config WHERE project_id=?')->execute([$fixture]);
+            $capabilities->save('local','linux',$previous);
+        }
+    }
+
     private function git(array $args,string $cwd): void
     {
         $p=new Process(['/usr/bin/git',...$args],$cwd);$p->mustRun();
