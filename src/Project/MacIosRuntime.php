@@ -49,6 +49,7 @@ final class MacIosRuntime
                     if(!is_file($settings))throw new RuntimeException('Cordova requires the configured agent Node runtime');
                     $tools=require $settings;
                 }
+                MacCordovaIos::assertBackend($config,$tools,$revision);
                 $environment=MacCordovaIos::environment($tools);
                 $prepared=MacCordovaIos::prepare($source,$config,$output,$tools,$environment,$run);
                 $source=$prepared['root'];$container=$prepared['container'];
@@ -110,10 +111,11 @@ final class MacIosRuntime
 
     public static function configuration(mixed $config): array
     {
-        if(!is_array($config)||array_diff(array_keys($config),['kind','path','scheme','configuration','team_id','web_build_script','verify_script']))throw new RuntimeException('Invalid iOS build configuration');
+        if(!is_array($config)||array_diff(array_keys($config),['kind','path','scheme','configuration','team_id','web_build_script','verify_script','backend_required']))throw new RuntimeException('Invalid iOS build configuration');
         if(!in_array($config['kind']??null,['project','workspace','cordova'],true))throw new RuntimeException('Explicit Xcode project, workspace or Cordova configuration required');
         if(($config['path']??null)!=='.'||$config['kind']!=='cordova')RemoteProjectPackage::path($config['path']??'');
         if($config['kind']!=='cordova'&&!str_ends_with($config['path'],$config['kind']==='project'?'.xcodeproj':'.xcworkspace'))throw new RuntimeException('Xcode container extension mismatch');
+        if(isset($config['backend_required'])&&($config['kind']!=='cordova'||!is_bool($config['backend_required'])))throw new RuntimeException('Invalid Cordova backend requirement');
         foreach(['web_build_script','verify_script'] as $key)if(isset($config[$key])&&($config['kind']!=='cordova'||!is_string($config[$key])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9:_-]{0,99}$/D',$config[$key])))throw new RuntimeException('Invalid Cordova npm script');
         foreach(['scheme','configuration'] as $key)if(!is_string($config[$key]??null)||!preg_match('/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/D',$config[$key]))throw new RuntimeException('Invalid Xcode '.$key);
         if(isset($config['team_id'])&&(!is_string($config['team_id'])||!preg_match('/^[A-Z0-9]{10}$/D',$config['team_id'])))throw new RuntimeException('Invalid configured Apple team');

@@ -15,7 +15,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/bin/remote-job-policy.php';
 
 header('Cache-Control: no-store');
-if(isset($_GET['ios_artifact'])){require __DIR__.'/ios-download.php';exit;}
+if(isset($_GET['ios_artifact'])||isset($_GET['mobile_artifact'])){require __DIR__.'/ios-download.php';exit;}
 
 $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
 if (!is_string($configPath) || !is_file($configPath)) {
@@ -749,8 +749,8 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <?php endforeach; ?>
 </tbody></table></div>
 <?php $iosBuilds=(new \Cowprod\DevMcp\Project\IosArtifactStore())->completed(); ?>
-<?php if($iosBuilds): ?><section class="card mb-4"><div class="card-body"><h2 class="h5">Builds iOS</h2><div class="table-responsive"><table class="table"><thead><tr><th>Projet</th><th>Version</th><th>Destination</th><th>Build</th></tr></thead><tbody>
-<?php foreach($iosBuilds as $build): ?><tr><td><?= e($build['project_id']) ?></td><td><?= e($build['artifact']['version']) ?></td><td><?= $build['artifact']['signed']?'iPhone / iPad':'Simulateur' ?></td><td><a href="/?ios_artifact=<?= e($build['token']) ?>">Ouvrir / télécharger</a></td></tr><?php endforeach; ?>
+<?php if($iosBuilds): ?><section class="card mb-4"><div class="card-body"><h2 class="h5">Builds mobiles</h2><div class="table-responsive"><table class="table"><thead><tr><th>Projet</th><th>Version</th><th>Destination</th><th>Build</th></tr></thead><tbody>
+<?php foreach($iosBuilds as $build): ?><tr><td><?= e($build['project_id']) ?></td><td><?= e($build['artifact']['version']) ?></td><td><?= $build['artifact']['target']==='android'?'Android':($build['artifact']['signed']?'iPhone / iPad':'Simulateur') ?></td><td><a href="/?ios_artifact=<?= e($build['token']) ?>">Ouvrir / télécharger</a></td></tr><?php endforeach; ?>
 </tbody></table></div></div></section><?php endif; ?>
 </section>
 <section class="admin-panel" id="panel-deployments" data-panel="deployments">

@@ -149,6 +149,34 @@ pas les builds sur une autre machine.
 La migration conserve l’hébergement existant et les builds iOS déjà proposés aux
 Macs, ainsi que les actions Android locales déjà déclarées dans les projets SQL.
 Pour les autres machines, Android reste désactivé jusqu’à déclaration explicite. Un switch Android
-n’ajoute pas à lui seul un runner Android générique à un agent : les actions de
-compilation du projet doivent exister, et leurs prérequis doivent être vérifiés.
+n’installe pas Java ni le SDK : l’agent doit être à jour et les outils explicitement
+configurés dans le projet avant compilation.
 Un nouveau Mac ne reçoit aucune autorisation iOS ou Android implicite.
+
+## Backend et applications dans le même dépôt
+
+`examples/mobile-counter` regroupe un backend Node (`server.js` et `backend/`)
+et une application Cordova (`mobile/`). Déployer le backend sur la machine du
+projet, puis appeler `ios.build` et `android.build` avec le même commit exact.
+`backend_required=true` impose un backend actif à cette révision ; son URL réelle
+est transmise au script web par `DEVMCP_BACKEND_URL`, dans la copie de build.
+
+Sur un agent macOS avec Android déclaré, `android.build` exige `commit` et produit
+un APK debug signé et vérifié par `apksigner`. `.devmcp/android.json` fixe le dossier
+Cordova, `java_home`, `sdk_root`, `gradle` et `build_tools`, sans supposer leur
+installation. `~/` désigne le compte de l’agent. Les autres versions ne sont pas
+substituées en cas d’échec. Le pipeline iOS conserve l’équipe explicitement choisie.
+Les agents Linux conservent leurs actions Android locales existantes ; le runner
+Android distant ajouté ici s’exécute sur les agents macOS.
+
+Les deux builds empruntent le transport d’artefacts HTTPS existant. Le serveur lie
+l’upload au job, à sa machine, sa plateforme et son commit. Les anciens liens iOS
+restent valides ; Android dispose d’un lien `mobile_artifact` avec un téléchargement
+APK. Chaque résultat MCP retourne `build_url`, `download_url`, taille et SHA-256.
+Le fichier atomique `mobile-artifacts/releases.json` du workspace conserve les
+liens iOS/Android ; le service Node le lit via `MOBILE_RELEASES_FILE` pour afficher
+sa propre page de distribution. Il ne dépend pas d’un déploiement supplémentaire.
+
+L’action déclarée `machine.capabilities.set` du projet `devmcp-admin` permet aussi
+d’enregistrer les trois switchs via MCP, avec l’ID exact de la machine et trois
+valeurs `on`/`off`. Elle utilise la même validation et le même journal que l’admin.

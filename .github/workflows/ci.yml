@@ -31,9 +31,14 @@ jobs:
           sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/distributed/admin-form-auth-migration.sh
           php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/admin-tls-certificates-smoke.php
           sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/Distributed/admin-tls-migration-smoke.sh
+      - name: Verify shared mobile backend HTTP and persistence
+        run: node tests/Distributed/mobile-counter-backend.mjs
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
+          php -l bin/devmcp-machine-capabilities
+          php -l src/Project/MacAndroidRuntime.php
+          php -l src/Project/MobileReleaseIndex.php
           php -l bin/devmcp-hosting-enqueue
           php -l bin/devmcp-hosting-root
           php -l bin/devmcp-hosting-gateway

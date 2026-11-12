@@ -1,0 +1,6 @@
+{
+  "name": "devmcp-mobile-counter-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Node API and Cordova apps in one devMcp project"
+}

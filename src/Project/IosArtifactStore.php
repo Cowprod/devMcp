@@ -17,7 +17,7 @@ final class IosArtifactStore
         if(!is_array($meta)||array_diff(array_keys($meta),['size','sha256','target','signed','bundle_id','version','title','revision']))throw new RuntimeException('Invalid artifact metadata');
         if(!is_int($meta['size']??null)||$meta['size']<1||$meta['size']>268435456
             ||!preg_match('/^[a-f0-9]{64}$/D',$meta['sha256']??'')||!preg_match('/^[a-f0-9]{40}$/D',$meta['revision']??'')
-            ||!in_array($meta['target']??null,['device','simulator'],true)||($meta['signed']??null)!==($meta['target']==='device')
+            ||!in_array($meta['target']??null,['device','simulator','android'],true)||($meta['signed']??null)!==in_array($meta['target'],['device','android'],true)
             ||!preg_match('/^[A-Za-z0-9][A-Za-z0-9.-]{1,199}$/D',$meta['bundle_id']??'')
             ||!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/D',$meta['version']??'')
             ||!is_string($meta['title']??null)||strlen($meta['title'])>255)throw new RuntimeException('Invalid artifact values');

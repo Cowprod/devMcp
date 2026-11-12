@@ -1,0 +1,25 @@
+{
+  "name": "devmcp-mobile-counter",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:web": "node scripts/build-web.cjs",
+    "verify:ios": "node scripts/verify.cjs ios",
+    "verify:android": "node scripts/verify.cjs android"
+  },
+  "devDependencies": {
+    "cordova": "13.0.0",
+    "cordova-ios": "8.2.0",
+    "cordova-android": "15.1.0",
+    "cordova-plugin-device": "3.0.0"
+  },
+  "cordova": {
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "plugins": {
+      "cordova-plugin-device": {}
+    }
+  }
+}

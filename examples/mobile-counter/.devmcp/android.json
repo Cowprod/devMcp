@@ -1,0 +1,11 @@
+{
+  "kind": "cordova",
+  "path": "mobile",
+  "java_home": "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home",
+  "sdk_root": "~/Android",
+  "gradle": "/opt/homebrew/bin/gradle",
+  "build_tools": "36.0.0",
+  "web_build_script": "build:web",
+  "verify_script": "verify:android",
+  "backend_required": true
+}

@@ -66,13 +66,13 @@ final class MachineCapabilitiesTest extends TestCase
         $actions=array_column($remote->actions('app')['actions'],'id');
         self::assertNotContains('ios.build',$actions);self::assertNotContains('project.deploy',$actions);
         self::assertContains('ios.capabilities',$actions);self::assertContains('workspace.sync',$actions);
-        foreach(['ios_build','deploy'] as $operation){
+        foreach(['ios_build','android_build','deploy'] as $operation){
             try{(new RemoteProjectQueue($this->db))->enqueue('app',$operation);self::fail('Disabled operation accepted');}
             catch(RuntimeException $e){self::assertStringContainsString('désactivée',$e->getMessage());}
         }
         (new RegistryEditor($this->db))->setMachineCapabilities($id,['hosting'=>true,'cordova_android'=>true,'cordova_ios'=>true]);
         $actions=array_column($remote->actions('app')['actions'],'id');
-        self::assertContains('ios.build',$actions);self::assertContains('project.deploy',$actions);
+        self::assertContains('ios.build',$actions);self::assertContains('project.deploy',$actions);self::assertContains('android.build',$actions);
     }
     public function testLocalAndroidSwitchControlsExistingBuildActions():void
     {
