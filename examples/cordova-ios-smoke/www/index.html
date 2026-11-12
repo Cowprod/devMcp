@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>devMcp Cordova</title>
+<style>body{font:20px system-ui;background:#101827;color:#edf2ff;margin:0;min-height:100vh;display:grid;place-items:center}main{padding:32px;text-align:center;max-width:480px}.check{font-size:80px;color:#4ade80}p{line-height:1.5;color:#b8c6df}</style></head>
+<body><main><div class="check">✓</div><h1 id="status">Démarrage Cordova…</h1><p id="detail">Chargement des composants natifs</p></main>
+<script src="cordova.js"></script><script src="web-build.js"></script><script src="prepared.js"></script>
+<script>document.addEventListener('deviceready',function(){var ok=window.devmcpWebPrepared===true&&window.devmcpHookPrepared===true&&window.device&&device.platform==='iOS';document.getElementById('status').textContent=ok?'Cordova prêt — iOS':'Validation incomplète';document.getElementById('detail').textContent=ok?'Préparé, compilé et signé sur le Mac mini via devMcp.':'Vérifier les étapes de préparation et le plugin Device.';},false);</script></body></html>

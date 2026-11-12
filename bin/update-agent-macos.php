@@ -24,7 +24,7 @@ try{
  $archive=$base.'/state/update-source.tar';$stage=$base.'/bundles/.stage-'.bin2hex(random_bytes(6));mkdir($stage,0700);
  $run(['/usr/bin/git','-C',$source,'archive','--format=tar','--output='.$archive,$sha]);
  $run(['/usr/bin/tar','-xf',$archive,'-C',$stage]);unlink($archive);
- foreach(['bin/distributed-agent-macos.php','src/Project/MacProjectRuntime.php','src/Project/MacIosRuntime.php','src/Project/MacIosArtifactUpload.php','src/Project/RemoteProjectRuntime.php','src/Project/RemoteProjectPackage.php'] as $file)$run(['/opt/homebrew/bin/php','-l',$stage.'/'.$file]);
+ foreach(['bin/distributed-agent-macos.php','src/Project/MacProjectRuntime.php','src/Project/MacIosRuntime.php','src/Project/MacCordovaIos.php','src/Project/MacIosArtifactUpload.php','src/Project/RemoteProjectRuntime.php','src/Project/RemoteProjectPackage.php'] as $file)$run(['/opt/homebrew/bin/php','-l',$stage.'/'.$file]);
  $run(['/opt/homebrew/bin/node','--check',$stage.'/bin/devmcp-static-server.mjs']);
  copy($base.'/active/agent-settings.php',$stage.'/agent-settings.php');file_put_contents($stage.'/revision',$sha."\n");
  rename($stage,$bundle);$next=$base.'/.active-'.bin2hex(random_bytes(6));symlink('bundles/'.$sha,$next);rename($next,$base.'/active');

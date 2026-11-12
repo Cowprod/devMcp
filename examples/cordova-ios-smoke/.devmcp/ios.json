@@ -1,0 +1,1 @@
+{"kind":"cordova","path":".","scheme":"App","configuration":"Release","web_build_script":"build:web","verify_script":"verify:ios"}

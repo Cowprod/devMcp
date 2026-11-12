@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget id="net.cowprod.devmcp.cordovasmoke" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>devMcp Cordova</name>
+    <description>Validation Cordova préparée et compilée par devMcp sur le Mac mini.</description>
+    <content src="index.html" />
+    <preference name="deployment-target" value="17.0" />
+    <hook type="after_prepare" src="hooks/after_prepare.js" />
+    <plugin name="cordova-plugin-device" spec="3.0.0" />
+</widget>

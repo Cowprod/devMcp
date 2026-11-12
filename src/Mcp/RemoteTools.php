@@ -248,7 +248,7 @@ final class RemoteTools
                     'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find' => [['id' => 'path', 'type' => 'relative_path', 'required' => false]],
                     default => [],
                 };
-                $actions[] = ['id' => $id, 'description' => 'Agent project operation: ' . $id,
+                $actions[] = ['id' => $id, 'description' => $id==='ios.build' ? 'Compile un projet Xcode ou Cordova depuis un commit exact ; préparation Cordova automatique et livraison HTTPS.' : 'Agent project operation: ' . $id,
                     'target' => 'remote', 'sync_allowed' => false, 'parameters' => $parameters];
             }
             return ['project' => $project, 'actions' => $actions];

@@ -57,7 +57,7 @@ staging="$(mktemp -d)";trap 'rm -rf "$staging"' EXIT
 /usr/bin/git -c core.hooksPath=/dev/null clone --quiet --no-checkout https://github.com/Cowprod/devMcp.git "$staging/source"
 /usr/bin/git -C "$staging/source" -c core.hooksPath=/dev/null fetch --quiet origin "$release"
 /usr/bin/git -C "$staging/source" -c core.hooksPath=/dev/null checkout --quiet --detach "$release"
-for file in bin/distributed-agent-macos.php src/Project/RemoteProjectPackage.php src/Project/RemoteProjectRuntime.php src/Project/MacProjectRuntime.php src/Project/MacIosRuntime.php src/Project/MacIosArtifactUpload.php; do "$php" -l "$staging/source/$file" >/dev/null;done
+for file in bin/distributed-agent-macos.php src/Project/RemoteProjectPackage.php src/Project/RemoteProjectRuntime.php src/Project/MacProjectRuntime.php src/Project/MacIosRuntime.php src/Project/MacCordovaIos.php src/Project/MacIosArtifactUpload.php; do "$php" -l "$staging/source/$file" >/dev/null;done
 "$node" --check "$staging/source/bin/devmcp-static-server.mjs"
 for occupied in "$base/active" "$base/bundles/$release" "$account_home/Library/LaunchAgents/net.cowprod.devmcp.agent.plist" "$account_home/Library/LaunchAgents/net.cowprod.devmcp.update.plist"; do
   [[ ! -e "$occupied" && ! -L "$occupied" ]] || { echo 'Installation path occupied; enrollment token not consumed' >&2;exit 1; }
