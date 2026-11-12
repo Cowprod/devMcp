@@ -18,6 +18,8 @@ jobs:
           php -l bin/update-agent-macos.php
           php -l bin/configure-macos-launcher.php
           php -l src/Project/MacProjectRuntime.php
+          php -l src/Project/MacAndroidRuntime.php
+          php -l src/Project/MobileReleaseIndex.php
           php -l src/Project/MacIosRuntime.php
           php -l src/Project/MacCordovaIos.php
           php -l src/Project/MacIosArtifactUpload.php

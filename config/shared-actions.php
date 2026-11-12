@@ -3,6 +3,17 @@
 declare(strict_types=1);
 
 return [
+    'machine.capabilities.set' => [
+        'description'=>'Déclare les capacités d’une machine du registre ; ne déplace aucun projet et n’installe aucun SDK.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-machine-capabilities',['param'=>'machine'],['param'=>'hosting'],['param'=>'android'],['param'=>'ios']],
+        'cwd'=>'.','timeout'=>15,'target'=>'local',
+        'parameters'=>[
+            'machine'=>['type'=>'identifier','description'=>'ID exact de la machine, ou local.'],
+            'hosting'=>['type'=>'enum','values'=>['on','off'],'description'=>'Hébergement web.'],
+            'android'=>['type'=>'enum','values'=>['on','off'],'description'=>'Builds Cordova Android.'],
+            'ios'=>['type'=>'enum','values'=>['on','off'],'description'=>'Builds iOS.'],
+        ],
+    ],
     'admin.password.bootstrap' => [
         'description' => 'Lit le nouveau mot de passe admin genere lors de la migration vers le formulaire HTML.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-admin-password-bootstrap'],

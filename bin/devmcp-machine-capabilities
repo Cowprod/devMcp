@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+try {
+    if($argc!==5)throw new InvalidArgumentException('Expected machine ID and hosting/android/ios on or off');
+    foreach(array_slice($argv,2) as $value)if(!in_array($value,['on','off'],true))throw new InvalidArgumentException('Explicit on/off required');
+    $config=require (getenv('DEVMCP_DISTRIBUTED_CONFIG')?:'/etc/devmcp/mcp-distributed.php');
+    $db=\Cowprod\DevMcp\Distributed\Registry\DatabaseConnection::connect($config['dsn'],$config['writer_username'],$config['writer_password']);
+    (new \Cowprod\DevMcp\Distributed\Admin\RegistryEditor($db))->setMachineCapabilities($argv[1],['hosting'=>$argv[2]==='on','cordova_android'=>$argv[3]==='on','cordova_ios'=>$argv[4]==='on']);
+    echo json_encode(['machine'=>$argv[1],'capabilities'=>(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($db))->get($argv[1])],JSON_THROW_ON_ERROR)."\n";
+}catch(Throwable $error){fwrite(STDERR,$error->getMessage()."\n");exit(1);}

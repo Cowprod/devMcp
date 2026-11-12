@@ -13,7 +13,7 @@ final class MacIosArtifactUpload
         try{
             while(!feof($handle)){
                 $chunk=fread($handle,32768);if($chunk==='')break;
-                $reply=$post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>'ios-artifact','job_id'=>$job['id'],
+                $reply=$post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>$data['target']==='android'?'mobile-artifact':'ios-artifact','job_id'=>$job['id'],
                     'artifact'=>$meta,'offset'=>$offset,'data'=>base64_encode($chunk)]);
                 $offset+=strlen($chunk);
                 if(($reply['ok']??false)!==true||($reply['upload']['offset']??0)<$offset)throw new RuntimeException('iOS artifact chunk was not acknowledged');
@@ -21,9 +21,10 @@ final class MacIosArtifactUpload
         }finally{fclose($handle);}
         $token=$reply['upload']['token']??'';
         if(($reply['upload']['complete']??false)!==true||!preg_match('/^[a-f0-9]{64}$/D',$token))throw new RuntimeException('iOS artifact delivery incomplete');
+        $query=$data['target']==='android'?'mobile_artifact':'ios_artifact';
         unset($data['artifact_local']);
-        return $data+['download_url'=>$server.'/?ios_artifact='.$token.'&file=app',
-            'build_url'=>$server.'/?ios_artifact='.$token,
+        return $data+['download_url'=>$server.'/?'.$query.'='.$token.'&file=app',
+            'build_url'=>$server.'/?'.$query.'='.$token,
             'installation_available'=>$data['signed']];
     }
 }

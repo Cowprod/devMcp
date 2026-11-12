@@ -82,7 +82,7 @@ final class RemoteProjectQueue
 
     public function assertOperationAllowed(array $record,string $operation): void
     {
-        $capability=match($operation){'deploy'=>'hosting','ios_build'=>'cordova_ios',default=>null};
+        $capability=match($operation){'deploy'=>'hosting','ios_build'=>'cordova_ios','android_build'=>'cordova_android',default=>null};
         if($capability!==null)(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->require($record['machine_id'],$capability);
     }
 

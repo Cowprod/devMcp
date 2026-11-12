@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget id="net.cowprod.devmcp.counter" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+ <name>Compteur Lab</name><description>Compteur partagé avec le backend du mini</description><content src="index.html"/>
+ <access origin="http://192.168.194.244"/><hook type="after_prepare" src="hooks/after-prepare.js"/>
+ <platform name="ios">
+  <preference name="deployment-target" value="17.0"/>
+  <config-file target="*-Info.plist" parent="NSLocalNetworkUsageDescription"><string>Se connecter au compteur hébergé sur le Mac mini du lab via ZeroTier.</string></config-file>
+  <edit-config target="NSAppTransportSecurity" file="*-Info.plist" mode="merge"><dict><key>NSAllowsArbitraryLoadsInWebContent</key><true/><key>NSAllowsLocalNetworking</key><true/></dict></edit-config>
+ </platform>
+ <platform name="android">
+  <preference name="MixedContentMode" value="0"/>
+  <edit-config file="app/src/main/AndroidManifest.xml" target="/manifest/application" mode="merge"><application android:networkSecurityConfig="@xml/lab_network"/></edit-config>
+  <resource-file src="resources/android/lab_network.xml" target="app/src/main/res/xml/lab_network.xml"/>
+ </platform>
+</widget>

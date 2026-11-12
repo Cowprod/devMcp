@@ -55,10 +55,14 @@ try {
         try{
             $heartbeat=static function()use($post,$job,$revision):void{
                 $post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
-                $post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>'ios-heartbeat','job_id'=>$job['id'],'result'=>['running'=>true]]);
+                $post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>$job['operation']==='android_build'?'mobile-heartbeat':'ios-heartbeat','job_id'=>$job['id'],'result'=>['running'=>true]]);
             };
             $data=MacProjectRuntime::run($job,['enabled'=>true,'machine_id'=>$config['machine_id'],'bind_ipv4'=>$config['bind_ipv4'],'heartbeat'=>$heartbeat]);
-            if($job['operation']==='ios_build')$data=\Cowprod\DevMcp\Project\MacIosArtifactUpload::publish($data,$job,$post,$config['central_url']);
+            if(in_array($job['operation'],['ios_build','android_build'],true)){
+                $data=\Cowprod\DevMcp\Project\MacIosArtifactUpload::publish($data,$job,$post,$config['central_url']);
+                require_once dirname(__DIR__).'/src/Project/MobileReleaseIndex.php';
+                \Cowprod\DevMcp\Project\MobileReleaseIndex::record(\Cowprod\DevMcp\Project\RemoteProjectPackage::workspacePath($job['project_id'],'macos',$config['machine_id']),$data);
+            }
             $result=['ok'=>true,'data'=>$data];
         }
         catch(Throwable $error){$result=['ok'=>false,'error'=>$error->getMessage()];}

@@ -8,7 +8,7 @@ final class MacProjectRuntime extends RemoteProjectRuntime
 {
     public static function run(array $job, array $policy): array
     {
-        if(!in_array($job['operation']??'', ['ios_capabilities','ios_build'],true))return parent::run($job,$policy);
+        if(!in_array($job['operation']??'', ['ios_capabilities','ios_build','android_build'],true))return parent::run($job,$policy);
         if(($policy['enabled']??false)!==true||($job['machine_id']??null)!==($policy['machine_id']??null)
             ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Invalid iOS agent identity');
         require_once __DIR__.'/MacIosRuntime.php';
@@ -21,7 +21,13 @@ final class MacProjectRuntime extends RemoteProjectRuntime
         $package=RemoteProjectPackage::validate($job['package']??[]);
         if($package['project_id']!==$project||$package['repository']!==$meta['repository'])throw new RuntimeException('iOS build source repository mismatch');
         static::stage($workspace,$package);
-        return MacIosRuntime::build($workspace,$job,$policy['heartbeat']??null);
+        $tools=require dirname(__DIR__,2).'/agent-settings.php';
+        $tools['backend_url']=$meta['url']??null;$tools['backend_revision']=$meta['active_revision']??null;
+        if($job['operation']==='android_build'){
+            require_once __DIR__.'/MacAndroidRuntime.php';
+            return MacAndroidRuntime::build($workspace,$job,$policy['heartbeat']??null,$tools);
+        }
+        return MacIosRuntime::build($workspace,$job,$policy['heartbeat']??null,$tools);
     }
 
     protected static function owner(): int { return posix_geteuid(); }
@@ -88,7 +94,7 @@ final class MacProjectRuntime extends RemoteProjectRuntime
         if(!is_executable($config['launcher']??''))throw new RuntimeException('Named devMcp launcher is unavailable; update the agent');
         $args=[$config['launcher'],...$args];
         $definition=['Label'=>self::label($meta),'AssociatedBundleIdentifiers'=>['net.cowprod.devmcp'],'ProgramArguments'=>$args,'WorkingDirectory'=>$current,
-            'EnvironmentVariables'=>['HOST'=>$ip,'PORT'=>(string)$port,'DATA_DIR'=>$data],
+            'EnvironmentVariables'=>['HOST'=>$ip,'PORT'=>(string)$port,'DATA_DIR'=>$data,'MOBILE_RELEASES_FILE'=>$workspace.'/mobile-artifacts/releases.json'],
             'RunAtLoad'=>true,'KeepAlive'=>true,'ThrottleInterval'=>5,'Umask'=>63,
             'StandardOutPath'=>$workspace.'/stdout.log','StandardErrorPath'=>$workspace.'/stderr.log'];
         $body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- devMcp ".$meta['project_id']." -->\n<plist version=\"1.0\">".self::xml($definition).'</plist>';
