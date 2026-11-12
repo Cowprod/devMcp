@@ -128,12 +128,29 @@ final class ServerFactory
         $remoteProvisionSchema = $localProvisionSchema;
         $remoteProvisionSchema['properties']['confirmation']['enum'] = ['PROVISION_REMOTE_WORKSPACE'];
 
+        $myTrackMePoc = new MyTrackMePocTools();
+        $myTrackMePocSchema = [
+            'type' => 'object',
+            'properties' => [
+                'action' => ['type' => 'string', 'enum' => [
+                    'mtm_get_field_types', 'mtm_list_databases', 'mtm_create_mock_database',
+                    'mtm_get_design_state', 'mtm_record_design_turn', 'mtm_finalize_design',
+                    'mtm_design_report', 'mtm_propose_model', 'mtm_approve_plan',
+                    'mtm_get_plan', 'mtm_simulate_plan',
+                ]],
+                'arguments_json' => ['type' => 'string', 'description' => 'Objet JSON encode en chaine. Par defaut {}.'],
+            ],
+            'required' => ['action'], 'additionalProperties' => false,
+        ];
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
                 '0.5.0',
                 description: 'Plan d’exécution de développement borné par projet.',
             )
+            ->addTool([$myTrackMePoc, 'call'], 'mytrackme_poc',
+                description: 'POC conversationnel MyTrackMe simule. Lire le catalogue, creer une base fictive, enregistrer des tours, finaliser et consulter le plan. Aucune operation MyTrackMe reelle.',
+                inputSchema: $myTrackMePocSchema)
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
