@@ -28,8 +28,8 @@ Ajouter `.devmcp/ios.json` :
 ```
 
 Pour un workspace, utiliser `"kind":"workspace"` et le chemin `.xcworkspace`.
-Le projet/schéma doit être versionné et directement compilable par Xcode. Les
-étapes propres à Cordova, Flutter ou React Native ne sont pas générées implicitement.
+Le projet/schéma doit être versionné et directement compilable par Xcode. La préparation Cordova est disponible avec `kind=cordova` (ci-dessous). Les
+étapes propres à Flutter ou React Native ne sont pas générées implicitement.
 Les limites habituelles du paquet de sources devMcp restent applicables ; ne pas
 versionner DerivedData, les IPA ou les archives Xcode. Les dépendances Swift
 Package Manager sont résolues par Xcode. L’exemple `examples/ios-smoke` est une
@@ -92,3 +92,42 @@ fichier `/devmcp-ca.crt` octet pour octet ainsi que les empreintes d’enrôleme
 Elle sauvegarde la configuration nginx, la valide avant rechargement et conserve
 un retour arrière. Les agents déjà enrôlés et les profils iPhone existants
 continuent d’utiliser la même racine.
+
+## Projets Cordova
+
+L’action reste `ios.build`. Dans `.devmcp/ios.json`, indiquer explicitement :
+
+```json
+{"kind":"cordova","path":".","scheme":"App","configuration":"Release","web_build_script":"build:web","verify_script":"verify:ios"}
+```
+
+`path` désigne le dossier Cordova dans le dépôt (`.` ou, par exemple, `app`).
+`scheme` est le schéma Xcode généré par la version de cordova-ios du projet :
+Cordova iOS 8 utilise `App`. Le runner exige l’unique `.xcworkspace` généré par
+la préparation, sans choisir un projet différent en cas d’échec.
+
+Versionner `config.xml`, `package.json`, `package-lock.json`, `www/`, les hooks,
+les scripts de vérification et les plugins locaux. Déclarer `cordova` et
+`cordova-ios` dans les dépendances npm, et `ios` dans `cordova.platforms`.
+Les plateformes, plugins npm et dépendances sont restaurés à partir de ces
+sources. Ne pas versionner `node_modules/`, `plugins/` ni `platforms/ios/`.
+
+Le build copie le dépôt dans son propre dossier de travail, préserve les modes
+exécutables et exécute `npm ci --include=dev --engine-strict`, l’éventuel script
+`web_build_script`, puis `cordova prepare ios` avec le CLI local verrouillé.
+Les hooks Cordova restent actifs. L’éventuel `verify_script` s’exécute après la
+préparation : son échec arrête le build avant Xcode. Les deux noms de scripts
+réfèrent à des entrées de `package.json` ; ils sont facultatifs.
+
+Node et npm viennent de l’installation de l’agent. Le PATH est fourni
+explicitement, sans dépendre d’un profil de terminal. Si CocoaPods manque,
+l’agent l’installe avec le Homebrew de ce Mac. Une incompatibilité de versions,
+un conflit de plugins ou un hook en erreur reste une erreur explicite, sans
+substitution de version ni compilation d’une ancienne plateforme générée.
+
+Xcode compile ensuite le workspace, puis la signature et la livraison HTTPS
+suivent le même parcours que les projets natifs. Les sources Git et les autres
+plateformes du dépôt ne sont pas modifiées par le runner. Les actions Android
+existantes, notamment la préparation MultiCam, gardent leur fonctionnement.
+L’exemple `examples/cordova-ios-smoke` valide le script web, un hook
+`after_prepare`, le plugin natif Device et une compilation réelle.

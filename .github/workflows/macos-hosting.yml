@@ -19,6 +19,7 @@ jobs:
           php -l bin/configure-macos-launcher.php
           php -l src/Project/MacProjectRuntime.php
           php -l src/Project/MacIosRuntime.php
+          php -l src/Project/MacCordovaIos.php
           php -l src/Project/MacIosArtifactUpload.php
           bash -n deploy/distributed/install-agent-macos.sh
           node --check bin/devmcp-static-server.mjs
@@ -37,3 +38,9 @@ jobs:
         run: php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/macos-ios-build-smoke.php
       - name: Verify server certificate with the native Apple SSL trust policy
         run: php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/admin-tls-certificates-smoke.php
+      - name: Prepare and compile a real Cordova app with a native plugin and hook
+        env:
+          DEVMCP_RUN_MAC_TESTS: '1'
+        run: |
+          export DEVMCP_TEST_NODE="$(command -v node)"
+          php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/macos-cordova-ios-smoke.php
