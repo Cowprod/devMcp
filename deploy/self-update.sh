@@ -54,6 +54,8 @@ esac
 # manual projects. This only configures a job action; no tests run on deploy.
 # Register the restricted local service action before other action migrations.
 # No application is started by registering an action.
+update_stage=local-android-action
+/usr/bin/php /opt/devmcp/bin/migrate-local-android-action.php --execute MIGRATE_LOCAL_ANDROID
 update_stage=project-service-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-service-action.php --execute MIGRATE_PROJECT_SERVICE
 update_stage=project-test-action
@@ -70,6 +72,8 @@ update_stage=agent-zerotier-address-migration
 /usr/bin/php /opt/devmcp/bin/migrate-agent-zerotier-address.php --execute MIGRATE_AGENT_ZEROTIER_ADDRESS
 update_stage=remote-projects
 /usr/bin/php /opt/devmcp/bin/migrate-remote-projects.php --execute MIGRATE_REMOTE_PROJECTS
+update_stage=local-android-runtime
+/bin/bash /opt/devmcp/deploy/install-local-android-runtime.sh
 # Provisioning runs inside systemd's read-only sandbox, unlike local CLI
 # diagnostics. Reconcile only the approved workspace root and narrow unit
 # drop-ins before the runtime is restarted.

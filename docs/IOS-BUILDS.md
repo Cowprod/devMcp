@@ -180,3 +180,28 @@ sa propre page de distribution. Il ne dépend pas d’un déploiement supplémen
 L’action déclarée `machine.capabilities.set` du projet `devmcp-admin` permet aussi
 d’enregistrer les trois switchs via MCP, avec l’ID exact de la machine et trois
 valeurs `on`/`off`. Elle utilise la même validation et le même journal que l’admin.
+
+## Android local sur le serveur central Linux
+
+Les nouveaux projets locaux créés par `project_create` possèdent l’action standard
+`android.build` (`commit` obligatoire), en plus de leur hébergement web. Les projets
+locaux déjà provisionnés sont mis à jour sans remplacer les actions Android propres
+aux anciens projets, notamment MultiCam. Le switch Android de la machine locale
+reste vérifié au démarrage de chaque build.
+
+Dans `.devmcp/android.json`, utiliser `"toolchain":"machine"` pour sélectionner
+explicitement le profil installé `/etc/devmcp/android-runtime.php`, sans mélanger
+ce choix avec des chemins Java/SDK/Gradle du projet. L’installation du runtime ne
+s’effectue que si Android est déclaré actif. Les dépendances Cordova restent locales
+au projet et verrouillées par `package-lock.json` ; aucune installation globale de
+Cordova n’est nécessaire. Gradle 8.14.2 est installé séparément avec son SHA-256 fixé.
+
+Le build s’exécute comme le worker devMcp, à partir d’un snapshot Git vérifié, dans
+`/var/lib/devmcp/mobile-builds`. L’APK est signé, contrôlé et publié en HTTPS par un
+stockage local distinct ; les liens distants du mini sont conservés. L’exemple
+`examples/touchdeck-android` valide aussi le backend Node du même projet. Le contexte
+du processus réel du backend doit correspondre au projet et au commit demandés.
+
+Un service ADB persistant utilise le propriétaire non privilégié du SDK et sa clé
+ADB existante. Les clients MCP restent sur le socket local standard ; aucune clé
+n’est remplacée et aucune application de tablette n’est installée par la migration.

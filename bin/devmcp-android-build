@@ -1,0 +1,29 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Project\{ProjectServiceRequestPolicy,RemoteProjectSource,CordovaAndroidRuntime,LocalAndroidBuild,IosArtifactStore,MobileReleaseIndex};
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
+use Cowprod\DevMcp\Mcp\RemoteTools;
+try{
+    if(PHP_OS_FAMILY!=='Linux'||$argc!==2||!preg_match('/^[a-f0-9]{40}$/D',$argv[1]))throw new RuntimeException('Linux local Android build requires an exact source commit');
+    $id=ProjectServiceRequestPolicy::projectFromCwd((string)getcwd(),'/srv/devmcp/workspaces');
+    if(getenv('DEVMCP_PROJECT_ID')!==$id||!preg_match('/^[a-f0-9]{32}$/D',getenv('DEVMCP_JOB_ID')?:''))throw new RuntimeException('An authenticated MCP job context is required');
+    $config=require (getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
+    $runtime=RuntimeFactory::fromConfig($config,dirname(__DIR__).'/var');$project=$runtime->projects->get($id);
+    if($project->root!==getcwd())throw new RuntimeException('Project workspace mismatch');
+    $remote=RemoteTools::fromConfig($config);if($remote===null)throw new RuntimeException('SQL project registry required');
+    $remote->assertLocalMachineAction('android.build');
+    $record=$remote->provisioningStore()->get($id);
+    if($record['state']!=='active'||$record['machine']!==gethostname()||!$record['actions_enabled']||$record['workspace_path']!==getcwd())throw new RuntimeException('Active local project required');
+    $profile='/etc/devmcp/android-runtime.php';if(!is_file($profile)||is_link($profile)||fileowner($profile)!==0)throw new RuntimeException('Machine Android runtime not installed');
+    $tools=require $profile;
+    $package=(new RemoteProjectSource('/var/lib/devmcp/remote-sources'))->snapshot($id,$record['repository'],$argv[1]);
+    $workspace=LocalAndroidBuild::ROOT.'/'.$id;LocalAndroidBuild::stagePackage($workspace,$package);
+    $android=json_decode(file_get_contents($workspace.'/releases/'.$argv[1].'/.devmcp/android.json'),true,32,JSON_THROW_ON_ERROR);
+    if(($android['backend_required']??false)===true)$tools=array_replace($tools,LocalAndroidBuild::backend($id,$argv[1]));
+    $data=CordovaAndroidRuntime::build($workspace,['id'=>getenv('DEVMCP_JOB_ID'),'project_id'=>$id,'package'=>$package,'arguments'=>[]],null,$tools);
+    $data=LocalAndroidBuild::publish($data,new IosArtifactStore(IosArtifactStore::LOCAL_ROOT,0640,true),$tools['central_url']);
+    MobileReleaseIndex::record($workspace,$data);
+    echo json_encode($data,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES)."\n";
+}catch(Throwable $error){fwrite(STDERR,'Android build failed: '.$error->getMessage()."\n");exit(1);}
