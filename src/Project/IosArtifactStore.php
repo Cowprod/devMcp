@@ -6,13 +6,14 @@ use RuntimeException;
 /** Authenticated agent upload, in bounded chunks over the existing HTTPS protocol. */
 final class IosArtifactStore
 {
+    public const LOCAL_ROOT='/var/lib/devmcp-local-artifacts';
     public const ROOT='/var/lib/devmcp-ios-artifacts';
-    public function __construct(private readonly string $root=self::ROOT) {}
+    public function __construct(private readonly string $root=self::ROOT,private readonly int $fileMode=0600,private readonly bool $local=false) {if(!in_array($fileMode,[0600,0640],true)||($local&&$fileMode!==0640))throw new RuntimeException('Invalid artifact permissions');}
 
     public function receive(string $machine,string $project,array $payload): array
     {
         $id=$payload['job_id']??'';$meta=$payload['artifact']??null;$offset=$payload['offset']??null;
-        if(!preg_match('/^[a-f0-9]{32}$/D',$id)||!preg_match('/^[a-f0-9]{32}$/D',$machine))throw new RuntimeException('Invalid artifact identity');
+        if(!preg_match('/^[a-f0-9]{32}$/D',$id)||($this->local?$machine!=='local':!preg_match('/^[a-f0-9]{32}$/D',$machine)))throw new RuntimeException('Invalid artifact identity');
         RemoteProjectPackage::projectId($project);
         if(!is_array($meta)||array_diff(array_keys($meta),['size','sha256','target','signed','bundle_id','version','title','revision']))throw new RuntimeException('Invalid artifact metadata');
         if(!is_int($meta['size']??null)||$meta['size']<1||$meta['size']>268435456
@@ -38,6 +39,7 @@ final class IosArtifactStore
             $handle=fopen(is_file($file)?$file:$part,'c+b');
             if(!is_resource($handle))throw new RuntimeException('Artifact file unavailable');
             try {
+                chmod(is_file($file)?$file:$part,$this->fileMode);
                 $size=fstat($handle)['size'];
                 if($offset<$size){
                     fseek($handle,$offset);
@@ -73,7 +75,7 @@ final class IosArtifactStore
         $temporary=$path.'.tmp-'.bin2hex(random_bytes(6));
         $json=json_encode($value,JSON_THROW_ON_ERROR);
         if(file_put_contents($temporary,$json,LOCK_EX)!==strlen($json))throw new RuntimeException('Artifact metadata write failed');
-        chmod($temporary,0600);
+        chmod($temporary,$this->fileMode);
         if(!rename($temporary,$path))throw new RuntimeException('Artifact metadata publication failed');
     }
 

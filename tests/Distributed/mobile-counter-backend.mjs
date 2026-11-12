@@ -1,7 +1,8 @@
 import {spawn} from 'node:child_process';import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import assert from 'node:assert/strict';import {createServer} from 'node:net';
+const sample=process.argv[2]||'mobile-counter';assert(['mobile-counter','touchdeck-android'].includes(sample));
 const socket=createServer();await new Promise(resolve=>socket.listen(0,'127.0.0.1',resolve));const port=socket.address().port;await new Promise(resolve=>socket.close(resolve));
 const dir=mkdtempSync(join(tmpdir(),'devmcp-counter-'));let child;
-async function start(){child=spawn(process.execPath,['examples/mobile-counter/server.js'],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),DATA_DIR:dir},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{child.stdout.once('data',resolve);child.once('exit',code=>reject(Error('Backend exited '+code)));});}
+async function start(){child=spawn(process.execPath,['examples/'+sample+'/server.js'],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),DATA_DIR:dir,DEVMCP_PUBLIC_BACKEND_URL:'http://127.0.0.1:'+port,DEVMCP_SOURCE_REVISION:'a'.repeat(40)},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{child.stdout.once('data',resolve);child.once('exit',code=>reject(Error('Backend exited '+code)));});}
 async function stop(){child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));}
 const base='http://127.0.0.1:'+port;
 try{

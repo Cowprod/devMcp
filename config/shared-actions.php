@@ -3,6 +3,12 @@
 declare(strict_types=1);
 
 return [
+    'android.build'=>[
+        'description'=>'Compile un projet Cordova Android depuis un commit exact sur le serveur local et publie son APK signé en HTTPS.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-build',['param'=>'commit']],
+        'cwd'=>'.','timeout'=>3600,'target'=>'local',
+        'parameters'=>['commit'=>['type'=>'git_sha','description'=>'Commit Git exact à compiler.']],
+    ],
     'machine.capabilities.set' => [
         'description'=>'Déclare les capacités d’une machine du registre ; ne déplace aucun projet et n’installe aucun SDK.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-machine-capabilities',['param'=>'machine'],['param'=>'hosting'],['param'=>'android'],['param'=>'ios']],

@@ -78,6 +78,13 @@ try {
     }
     echo 'devMcp service: ', $argv[1], ' ', $plan['runtime'], ' ',
         $ip, ':', $plan['port'], "\n";
+    $plan['env']['DEVMCP_PROJECT_ID']=$argv[1];
+    $plan['env']['DEVMCP_PUBLIC_BACKEND_URL']='http://'.$ip.':'.$plan['port'];
+    if(is_dir($plan['cwd'].'/.git')){
+        $status=new Process(['/usr/bin/git','status','--porcelain','--untracked-files=normal'],$plan['cwd']);$status->mustRun();
+        $head=new Process(['/usr/bin/git','rev-parse','HEAD'],$plan['cwd']);$head->mustRun();$sha=trim($head->getOutput());
+        if(trim($status->getOutput())===''&&preg_match('/^[a-f0-9]{40}$/D',$sha))$plan['env']['DEVMCP_SOURCE_REVISION']=$sha;
+    }
     $process = new Process($plan['argv'], $plan['cwd'], $plan['env'], null, null);
     // Application services are intentionally long-lived, unlike short MCP jobs.
     $process->setTimeout(null);

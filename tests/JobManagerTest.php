@@ -72,6 +72,16 @@ final class JobManagerTest extends TestCase
         self::assertSame('job_finished', $records[2]['event']);
     }
 
+    public function testWorkerBindsTheBuildToItsActualMcpJobAndProject(): void
+    {
+        $registry=$this->registry(['async.context'=>['description'=>'Job context','argv'=>[PHP_BINARY,'-r','echo json_encode([getenv("DEVMCP_JOB_ID"),getenv("DEVMCP_PROJECT_ID")]);'],'timeout'=>5]]);
+        $audit=new AuditLogger($this->root.'/audit.jsonl');$store=new FileJobStore($this->root.'/jobs');
+        $manager=new JobManager($registry,$store,new ArtifactService(),$audit,4096);
+        $job=$manager->start('demo','async.context');
+        self::assertTrue((new JobWorker($registry,$store,$audit,'local',1000))->runOnce());
+        self::assertSame([$job['job_id'],'demo'],json_decode($manager->output($job['job_id'])['stdout']['content'],true));
+    }
+
     public function testCanCancelQueuedJobBeforeWorkerClaimsIt(): void
     {
         $registry = $this->registry([

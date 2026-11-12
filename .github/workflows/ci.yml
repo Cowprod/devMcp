@@ -32,10 +32,17 @@ jobs:
           php -d zend.assertions=1 -d assert.exception=1 tests/Distributed/admin-tls-certificates-smoke.php
           sudo env DEVMCP_RUN_ROOT_TESTS=1 bash tests/Distributed/admin-tls-migration-smoke.sh
       - name: Verify shared mobile backend HTTP and persistence
-        run: node tests/Distributed/mobile-counter-backend.mjs
+        run: |
+          node tests/Distributed/mobile-counter-backend.mjs
+          node tests/Distributed/mobile-counter-backend.mjs touchdeck-android
       - name: Lint PHP entrypoints
         run: |
           php -l bin/devmcp
+          php -l src/Project/CordovaAndroidRuntime.php
+          php -l src/Project/LocalAndroidBuild.php
+          php -l bin/devmcp-android-build
+          php -l src/Project/LocalAndroidBuild.php
+          php -l src/Project/CordovaAndroidRuntime.php
           php -l bin/devmcp-machine-capabilities
           php -l src/Project/MacAndroidRuntime.php
           php -l src/Project/MobileReleaseIndex.php
@@ -135,6 +142,8 @@ jobs:
           ! python3 deploy/distributed/hosting-peer-probe.py --runtime static --target-ip 127.0.0.1 --peer-ip 127.0.0.2 --port 17600
           ! python3 deploy/distributed/hosting-peer-probe.py --runtime php --target-ip 192.168.194.189 --peer-ip 192.168.194.189 --port 17600
           ! python3 deploy/distributed/hosting-peer-probe.py --runtime node --target-ip 192.168.194.189 --peer-ip 192.168.194.188 --port 80
+      - name: Lint local Android installer
+        run: bash -n deploy/install-local-android-runtime.sh
       - name: Lint deployment scripts
         run: |
           sh -n deploy/self-update.sh

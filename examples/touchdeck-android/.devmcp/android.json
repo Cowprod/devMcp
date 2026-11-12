@@ -1,0 +1,8 @@
+{
+  "kind": "cordova",
+  "path": "mobile",
+  "toolchain": "machine",
+  "web_build_script": "build:web",
+  "verify_script": "verify:android",
+  "backend_required": true
+}

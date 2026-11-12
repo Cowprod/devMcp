@@ -7,13 +7,15 @@ header('Referrer-Policy: no-referrer');
 header('X-Content-Type-Options: nosniff');
 try{
     if(($_SERVER['HTTPS']??'')!=='on'||!in_array($_SERVER['REQUEST_METHOD']??'',['GET','HEAD'],true))throw new RuntimeException('HTTPS required');
-    $token=(string)($_GET['mobile_artifact']??$_GET['ios_artifact']??'');
-    $record=(new IosArtifactStore())->get($token);$meta=$record['artifact'];
+    $local=isset($_GET['local_artifact']);
+    $token=(string)($local?$_GET['local_artifact']:($_GET['mobile_artifact']??$_GET['ios_artifact']??''));
+    $store=$local?new IosArtifactStore(IosArtifactStore::LOCAL_ROOT,0640,true):new IosArtifactStore();
+    $record=$store->get($token);$meta=$record['artifact'];
     $android=$meta['target']==='android';
     $ip=$_SERVER['SERVER_ADDR']??'';
     if(!filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4))throw new RuntimeException('Central HTTPS address unavailable');
     $port=(int)($_SERVER['SERVER_PORT']??443);
-    $base='https://'.$ip.($port===443?'':':'.$port).'/?'.($android?'mobile_artifact':'ios_artifact').'='.$token;
+    $base='https://'.$ip.($port===443?'':':'.$port).'/?'.($local?'local_artifact':($android?'mobile_artifact':'ios_artifact')).'='.$token;
     $escape=static fn(string $s):string=>htmlspecialchars($s,ENT_QUOTES|ENT_XML1,'UTF-8');
     $file=$_GET['file']??'';
     if($file==='app'){

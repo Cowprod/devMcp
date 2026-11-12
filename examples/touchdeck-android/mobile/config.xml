@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget id="net.cowprod.devmcp.touchdeckcounter" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+ <name>Compteur TouchDeck</name><description>Compteur partagé avec le backend de TouchDeck</description><content src="index.html"/>
+ <access origin="http://192.168.194.189"/><hook type="after_prepare" src="hooks/after-prepare.js"/>
+ <platform name="android">
+  <preference name="MixedContentMode" value="0"/>
+  <edit-config file="app/src/main/AndroidManifest.xml" target="/manifest/application" mode="merge"><application android:networkSecurityConfig="@xml/lab_network"/></edit-config>
+  <resource-file src="resources/android/lab_network.xml" target="app/src/main/res/xml/lab_network.xml"/>
+ </platform>
+</widget>

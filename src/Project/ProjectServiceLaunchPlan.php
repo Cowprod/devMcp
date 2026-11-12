@@ -72,6 +72,8 @@ final class ProjectServiceLaunchPlan
             'port' => $port, 'bind_ip' => $bindIp,
             'php_session_path' => $sessionPath,
             'env' => [
+                'DATA_DIR'=>'/var/lib/devmcp-project-'.$projectId,
+                'MOBILE_RELEASES_FILE'=>LocalAndroidBuild::ROOT.'/'.$projectId.'/mobile-artifacts/releases.json',
                 'PORT' => (string) $port,
                 'HOST' => $bindIp,
                 'DEVMCP_PREVIEW_PORT' => (string) $port,

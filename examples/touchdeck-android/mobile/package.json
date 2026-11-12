@@ -1,0 +1,22 @@
+{
+  "name": "devmcp-touchdeck-android",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:web": "node scripts/build-web.cjs",
+    "verify:android": "node scripts/verify.cjs android"
+  },
+  "devDependencies": {
+    "cordova": "13.0.0",
+    "cordova-android": "15.1.0",
+    "cordova-plugin-device": "3.0.0"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ],
+    "plugins": {
+      "cordova-plugin-device": {}
+    }
+  }
+}
