@@ -22,6 +22,7 @@ final class MacProjectRuntime extends RemoteProjectRuntime
         if($package['project_id']!==$project||$package['repository']!==$meta['repository'])throw new RuntimeException('iOS build source repository mismatch');
         static::stage($workspace,$package);
         $tools=require dirname(__DIR__,2).'/agent-settings.php';
+        $tools['build_start']=$policy['build_start']??null;
         $tools['backend_url']=$meta['url']??null;$tools['backend_revision']=$meta['active_revision']??null;
         if($job['operation']==='android_build'){
             require_once __DIR__.'/MacAndroidRuntime.php';

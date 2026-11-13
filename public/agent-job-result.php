@@ -16,10 +16,11 @@ try {
         throw new RuntimeException('size');
     }
     $payload = json_decode($body, true, 8, JSON_THROW_ON_ERROR);
+    $buildStart = is_array($payload) && ($payload['queue']??null)==='mobile-build-start';
     $iosHeartbeat = is_array($payload) && in_array($payload['queue'] ?? null,['ios-heartbeat','mobile-heartbeat'],true);
     $iosUpload = is_array($payload) && in_array($payload['queue'] ?? null,['ios-artifact','mobile-artifact'],true);
     $projectQueue = is_array($payload) && ($payload['queue'] ?? null) === 'projects';
-    if (!is_array($payload) || array_keys($payload) !== ($iosUpload ? ['protocol_version','queue','job_id','artifact','offset','data'] : (($projectQueue||$iosHeartbeat)
+    if (!is_array($payload) || array_keys($payload) !== ($iosUpload ? ['protocol_version','queue','job_id','artifact','offset','data'] : (($projectQueue||$iosHeartbeat||$buildStart)
         ? ['protocol_version','queue','job_id','result'] : ['protocol_version','job_id','result']))
         || $payload['protocol_version'] !== 1
         || !is_string($payload['job_id']) || !preg_match('/^[a-f0-9]{32}$/D', $payload['job_id'])
@@ -44,6 +45,15 @@ try {
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''),
         (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $matches[1], true);
+    if($buildStart){
+        (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
+        if($payload['result']!==['starting'=>true])throw new RuntimeException('Invalid build start');
+        $query=$db->prepare("SELECT j.project_id,j.operation FROM dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation IN ('ios_build','android_build') AND p.machine_id=j.machine_id");
+        $query->execute([$payload['job_id'],$machineId]);$job=$query->fetch(PDO::FETCH_ASSOC);
+        if(!is_array($job))throw new RuntimeException('Unknown claimed build');
+        $count=(new \Cowprod\DevMcp\Project\IosArtifactStore())->discardPrevious($machineId,$job['project_id'],$job['operation']==='android_build'?'android':'ios',$payload['job_id']);
+        echo json_encode(['protocol_version'=>1,'ok'=>true,'removed'=>$count],JSON_THROW_ON_ERROR);exit;
+    }
     if($iosHeartbeat){
         (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
         if($payload['result']!==['running'=>true])throw new RuntimeException('Invalid iOS heartbeat');

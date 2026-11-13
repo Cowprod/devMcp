@@ -70,6 +70,46 @@ final class IosArtifactStore
         }finally{flock($lock,LOCK_UN);fclose($lock);}
     }
 
+    /** Retire old published and partial uploads only for this machine/project/platform. */
+    public function discardPrevious(string $machine,string $project,string $platform,string $currentJob): int
+    {
+        RemoteProjectPackage::projectId($project);
+        if(!in_array($platform,['ios','android'],true)||!preg_match('/^[a-f0-9]{32}$/D',$currentJob)
+            ||($this->local?$machine!=='local':!preg_match('/^[a-f0-9]{32}$/D',$machine)))throw new RuntimeException('Invalid build cleanup identity');
+        if(!is_dir($this->root)||is_link($this->root))throw new RuntimeException('Artifact store unavailable');
+        $removed=0;
+        foreach(glob($this->root.'/*.json')?:[] as $file){
+            $id=basename($file,'.json');
+            if(!preg_match('/^[a-f0-9]{32}$/D',$id)||$id===$currentJob)continue;
+            if(is_link($file))throw new RuntimeException('Unexpected artifact metadata link');
+            $record=json_decode(file_get_contents($file),true,16,JSON_THROW_ON_ERROR);
+            $targets=$platform==='ios'?['device','simulator']:['android'];
+            if(($record['machine_id']??null)!==$machine||($record['project_id']??null)!==$project||!in_array($record['artifact']['target']??null,$targets,true))continue;
+            if(($record['job_id']??null)!==$id||is_link($this->root.'/'.$id.'.lock'))throw new RuntimeException('Artifact cleanup identity mismatch');
+            $lock=fopen($this->root.'/'.$id.'.lock','c+b');
+            if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('Previous artifact is still being uploaded');
+            try{
+                if(isset($record['token'])){
+                    if(!preg_match('/^[a-f0-9]{64}$/D',$record['token']))throw new RuntimeException('Invalid artifact ticket');
+                    $ticket=$this->root.'/'.$record['token'].'.ticket';
+                    if(is_link($ticket))throw new RuntimeException('Unexpected artifact ticket link');
+                    if(is_file($ticket)){
+                        $data=json_decode(file_get_contents($ticket),true,8,JSON_THROW_ON_ERROR);
+                        if(($data['job_id']??null)!==$id)throw new RuntimeException('Artifact ticket belongs to another job');
+                        if(!unlink($ticket))throw new RuntimeException('Cannot retire previous download link');
+                    }
+                }
+                foreach(['.bin','.part','.json'] as $suffix){
+                    $path=$this->root.'/'.$id.$suffix;
+                    if((file_exists($path)||is_link($path))&&!unlink($path))throw new RuntimeException('Cannot remove previous artifact');
+                }
+            }finally{flock($lock,LOCK_UN);fclose($lock);}
+            if(!unlink($this->root.'/'.$id.'.lock'))throw new RuntimeException('Cannot remove old artifact lock');
+            ++$removed;
+        }
+        return $removed;
+    }
+
     private function write(string $path,array $value): void
     {
         $temporary=$path.'.tmp-'.bin2hex(random_bytes(6));

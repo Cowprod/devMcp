@@ -218,3 +218,21 @@ La capture est propre à chaque job. Aucun chemin APK ou téléchargement arbitr
 n’est accepté. Cette action concerne les builds locaux du serveur central.
 Un lancement confirmé ne prouve pas que les appels réseau de l’application
 fonctionnent : vérifier la capture et le backend séparément.
+
+### Un seul essai conservé par projet et plateforme
+
+Au démarrage d’un **nouveau job** iOS ou Android, le runner prend le verrou
+de build puis supprime tous les dossiers des essais précédents de cette plateforme,
+réussis ou échoués : logs complets, DerivedData, sources Cordova préparées,
+archives Xcode, exports IPA/APK et cache SwiftPM propre au projet. Les sources
+versionnées et le backend restent indépendants des dossiers de build.
+
+L’essai courant reste sur disque, même en échec, jusqu’au rebuild suivant.
+Une reprise du même job réussi réutilise son résultat ; elle ne nettoie rien.
+Un job concurrent ne peut pas déclencher le nettoyage d’un build en cours.
+Les liens de la plateforme sont retirés de l’index, et les anciens paquets
+publiés et téléversements incomplets sont supprimés du serveur central dès le
+début du build authentifié. **Les anciens liens deviennent invalides, même si
+le nouveau build échoue.** iOS et Android, les projets et les machines sont isolés.
+L’historique des états de jobs et ses extraits de diagnostic bornés reste dans
+le registre ; les gros fichiers et journaux complets ne s’accumulent plus.

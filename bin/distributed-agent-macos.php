@@ -57,7 +57,11 @@ try {
                 $post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
                 $post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>$job['operation']==='android_build'?'mobile-heartbeat':'ios-heartbeat','job_id'=>$job['id'],'result'=>['running'=>true]]);
             };
-            $data=MacProjectRuntime::run($job,['enabled'=>true,'machine_id'=>$config['machine_id'],'bind_ipv4'=>$config['bind_ipv4'],'heartbeat'=>$heartbeat]);
+            $buildStart=static function()use($post,$job):void{
+                $reply=$post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>'mobile-build-start','job_id'=>$job['id'],'result'=>['starting'=>true]]);
+                if(($reply['ok']??false)!==true)throw new RuntimeException('Central build cleanup was not acknowledged');
+            };
+            $data=MacProjectRuntime::run($job,['enabled'=>true,'machine_id'=>$config['machine_id'],'bind_ipv4'=>$config['bind_ipv4'],'heartbeat'=>$heartbeat,'build_start'=>$buildStart]);
             if(in_array($job['operation'],['ios_build','android_build'],true)){
                 $data=\Cowprod\DevMcp\Project\MacIosArtifactUpload::publish($data,$job,$post,$config['central_url']);
                 require_once dirname(__DIR__).'/src/Project/MobileReleaseIndex.php';

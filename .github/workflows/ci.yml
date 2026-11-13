@@ -39,6 +39,7 @@ jobs:
         run: |
           php -l bin/devmcp
           php -l src/Project/CordovaAndroidRuntime.php
+          php -l src/Project/MobileBuildRetention.php
           php -l src/Project/LocalAndroidBuild.php
           php -l bin/devmcp-android-build
           php -l bin/devmcp-android-install

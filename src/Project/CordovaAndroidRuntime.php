@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 use RuntimeException;
+require_once __DIR__.'/MobileBuildRetention.php';
 
 /** Locked Cordova Android debug builds with an explicitly selected toolchain. */
 class CordovaAndroidRuntime
@@ -23,33 +24,34 @@ class CordovaAndroidRuntime
 
     public static function build(string $workspace,array $job,?callable $heartbeat=null,?array $tools=null): array
     {
-        if(($job['arguments']??[])!==[])throw new RuntimeException('Android debug build accepts no arguments other than the source commit');
-        $revision=$job['package']['revision'];$source=$workspace.'/releases/'.$revision;
-        $file=$source.'/.devmcp/android.json';
-        if(!is_file($file)||is_link($file))throw new RuntimeException('Missing .devmcp/android.json');
-        $config=self::configuration(json_decode(file_get_contents($file),true,32,JSON_THROW_ON_ERROR));
-        require_once __DIR__.'/MacCordovaIos.php';
-        $tools??=require dirname(__DIR__,2).'/agent-settings.php';
-        if(($config['toolchain']??null)==='machine'){
-            if(!is_array($tools['android']??null))throw new RuntimeException('Machine Android toolchain is not installed');
-            $machine=array_intersect_key($tools['android'],array_flip(['java_home','sdk_root','gradle','build_tools']));
-            unset($config['toolchain']);$config=self::configuration($config+$machine);
-        }
-        MacCordovaIos::assertBackend($config,$tools,$revision);
-        $environment=MacCordovaIos::environment($tools);$home=posix_getpwuid(posix_geteuid())['dir'];
-        $expand=static fn($path)=>str_starts_with($path,'~/')?$home.substr($path,1):$path;
-        $java=$expand($config['java_home']);$sdk=$expand($config['sdk_root']);$gradle=$expand($config['gradle']);
-        foreach([$java.'/bin/java',$java.'/bin/javac',$gradle,$sdk.'/build-tools/'.$config['build_tools'].'/apksigner',$sdk.'/build-tools/'.$config['build_tools'].'/aapt'] as $tool)if(!is_executable($tool))throw new RuntimeException('Configured Android tool unavailable: '.$tool);
-        $environment['JAVA_HOME']=$java;$environment['CORDOVA_JAVA_HOME']=$java;
-        $environment['ANDROID_HOME']=$sdk;$environment['ANDROID_SDK_ROOT']=$sdk;
-        $environment['PATH']=$java.'/bin:'.dirname($gradle).':'.$sdk.'/platform-tools:'.$sdk.'/cmdline-tools/latest/bin:'.$environment['PATH'];
-        $parent=$workspace.'/android-builds';if(!is_dir($parent))mkdir($parent,0700);
+        $parent=MobileBuildRetention::parent($workspace,'android',$job['id']);
         $lock=fopen($parent.'/.build.lock','c+b');if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('An Android build is already running');
         $output=$parent.'/'.$job['id'];$log=$output.'/build.log';
         try{
+            if(is_link($output)||is_link($output.'/result.json'))throw new RuntimeException('Build result must not be a link');
             if(is_file($output.'/result.json'))return json_decode(file_get_contents($output.'/result.json'),true,32,JSON_THROW_ON_ERROR);
             if(file_exists($output))throw new RuntimeException('Previous Android build incomplete; start a new job');
-            mkdir($output,0700);
+            MobileBuildRetention::begin($workspace,'android',$job['id'],$tools['build_start']??null);
+            if(($job['arguments']??[])!==[])throw new RuntimeException('Android debug build accepts no arguments other than the source commit');
+            $revision=$job['package']['revision'];$source=$workspace.'/releases/'.$revision;
+            $file=$source.'/.devmcp/android.json';
+            if(!is_file($file)||is_link($file))throw new RuntimeException('Missing .devmcp/android.json');
+            $config=self::configuration(json_decode(file_get_contents($file),true,32,JSON_THROW_ON_ERROR));
+            require_once __DIR__.'/MacCordovaIos.php';
+            $tools??=require dirname(__DIR__,2).'/agent-settings.php';
+            if(($config['toolchain']??null)==='machine'){
+                if(!is_array($tools['android']??null))throw new RuntimeException('Machine Android toolchain is not installed');
+                $machine=array_intersect_key($tools['android'],array_flip(['java_home','sdk_root','gradle','build_tools']));
+                unset($config['toolchain']);$config=self::configuration($config+$machine);
+            }
+            MacCordovaIos::assertBackend($config,$tools,$revision);
+            $environment=MacCordovaIos::environment($tools);$home=posix_getpwuid(posix_geteuid())['dir'];
+            $expand=static fn($path)=>str_starts_with($path,'~/')?$home.substr($path,1):$path;
+            $java=$expand($config['java_home']);$sdk=$expand($config['sdk_root']);$gradle=$expand($config['gradle']);
+            foreach([$java.'/bin/java',$java.'/bin/javac',$gradle,$sdk.'/build-tools/'.$config['build_tools'].'/apksigner',$sdk.'/build-tools/'.$config['build_tools'].'/aapt'] as $tool)if(!is_executable($tool))throw new RuntimeException('Configured Android tool unavailable: '.$tool);
+            $environment['JAVA_HOME']=$java;$environment['CORDOVA_JAVA_HOME']=$java;
+            $environment['ANDROID_HOME']=$sdk;$environment['ANDROID_SDK_ROOT']=$sdk;
+            $environment['PATH']=$java.'/bin:'.dirname($gradle).':'.$sdk.'/platform-tools:'.$sdk.'/cmdline-tools/latest/bin:'.$environment['PATH'];
             $run=static function(array $argv,string $cwd)use($log,$environment,$heartbeat):void{self::command($argv,$cwd,$log,$environment,$heartbeat);};
             $run([$java.'/bin/java','-version'],$source);$run([$gradle,'--version'],$source);
             $prepared=MacCordovaIos::prepare($source,$config,$output,$tools,$environment,$run,'android');$root=$prepared['root'];
@@ -66,7 +68,7 @@ class CordovaAndroidRuntime
                 'title'=>$job['project_id'],'log_tail'=>self::tail($log)];
             if($result['size']>268435456)throw new RuntimeException('APK exceeds the 256 MiB limit');
             file_put_contents($output.'/result.json',json_encode($result,JSON_THROW_ON_ERROR));return $result;
-        }catch(\Throwable $error){throw new RuntimeException($error->getMessage()."\n".self::tail($log),previous:$error);}
+        }catch(\Throwable $error){if(is_file($log))file_put_contents($log,"\n[devMcp] FAILED: ".$error->getMessage()."\n",FILE_APPEND);throw new RuntimeException($error->getMessage()."\n".self::tail($log),previous:$error);}
         finally{flock($lock,LOCK_UN);fclose($lock);}
     }
 
