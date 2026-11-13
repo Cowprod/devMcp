@@ -95,8 +95,7 @@ try {
     $catalogue=PublicProjectCatalogue::export($inventory,$snapshot['host']['name'],$localIp);
     PublicProjectCatalogue::publish($catalogue);
     echo 'OK: ',count($catalogue['projects'])," projet(s) locaux et distants publiés dans le catalogue public\n";
-    echo 'OK: '
-, count($snapshot['projects']), " projet(s) locaux publiés\n";
+    echo 'OK: ', count($snapshot['projects']), " projet(s) locaux publiés\n";
 } catch (Throwable $error) {
     fwrite(STDERR, 'Export impossible: ' . $error->getMessage() . "\n");
     exit(1);
