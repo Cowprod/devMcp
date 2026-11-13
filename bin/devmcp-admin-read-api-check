@@ -1,0 +1,39 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+/** Trusted on-server smoke check. Uses a temporary read credential, always revoked; prints no credential. */
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Distributed\Admin\{AdminReadTokens,AdminSession};
+if (PHP_SAPI!=='cli'||($argv[1]??'')!=='--check') exit(2);
+$site=file_get_contents('/etc/nginx/sites-available/devmcp-admin.conf');
+if (!preg_match('/listen\s+([0-9.]+):443\s+ssl;/',$site,$m)||!filter_var($m[1],FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)) throw new RuntimeException('Explicit IPv4 TLS bind required');
+$origin='https://'.$m[1];
+$store=new AdminReadTokens(new AdminSession('/etc/devmcp-admin/web-auth.php','/var/lib/devmcp-admin-auth'),'/var/lib/devmcp-admin-auth');
+$token=$store->issue(time())['access_token'];
+$checks=[];
+$request=static function(string $path,int $expected,string $method='GET',bool $authenticated=true)use($origin,$token,&$checks):array{
+    $curl=curl_init($origin.'/api/admin/v1'.$path);
+    curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_TIMEOUT=>30,
+        CURLOPT_CAINFO=>'/etc/devmcp-admin/tls/admin.crt',CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,
+        CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>$authenticated?['Authorization: Bearer '.$token,'Origin: app://localhost']:[]]);
+    $raw=curl_exec($curl);$status=curl_getinfo($curl,CURLINFO_RESPONSE_CODE);$error=curl_errno($curl);curl_close($curl);
+    if ($error||$status!==$expected) throw new RuntimeException('Admin read API check failed: '.$method.' '.$path.' HTTP '.$status.' curl '.$error);
+    $data=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
+    $checks[]=['method'=>$method,'path'=>$path,'http'=>$status];return $data;
+};
+try {
+    $request('/machines',401,authenticated:false);
+    $list=$request('/machines',200)['machines'];
+    $id=null;
+    foreach ($list as $machine) if ($machine['name']==='Mini') $id=$machine['id'];
+    $id??=$list[0]['id']??null;if($id===null)throw new RuntimeException('No machine returned');
+    $machine=$request('/machines/'.$id,200)['machine'];
+    if($machine['project_count']!==count($machine['projects']))throw new RuntimeException('Invalid association count');
+    $projectId=$machine['projects'][0]['id']??null;
+    if($projectId!==null){$p=$request('/projects/'.$projectId,200)['project'];if($p['id']!==$projectId)throw new RuntimeException('Unexpected project');}
+    $request('/machines',405,'POST');
+    $request('/projects/devmcp-api-missing-'.bin2hex(random_bytes(8)),404);
+    $request('/session',200,'DELETE');
+    $request('/machines',401);
+    echo json_encode(['ok'=>true,'origin'=>$origin,'source'=>'server ZeroTier-bound HTTPS address','tls_verified'=>true,'authentication'=>'temporary CLI-issued read token (password login covered by HTTP fixture tests)','machine'=>$machine['name'],'project_count'=>$machine['project_count'],'checks'=>$checks],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES)."\n";
+} finally {$store->revoke($token);}

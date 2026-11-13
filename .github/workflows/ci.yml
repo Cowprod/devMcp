@@ -94,6 +94,13 @@ jobs:
           php -l bin/devmcp-touchdeck-ota
           php -l public/index.php
           php -l public/distributed-admin.php
+          php -l public/admin-read-api.php
+          php -l bin/migrate-admin-read-api.php
+          php -l bin/devmcp-admin-read-api-check
+          php -l src/Distributed/Admin/AdminReadApi.php
+          php -l src/Distributed/Admin/AdminReadTokens.php
+          php -l src/Distributed/Admin/AdminReadRepository.php
+          php -l src/Distributed/Admin/AdminReadApiNginx.php
           php -l src/Distributed/Admin/LocalProjectSnapshot.php
           php -l src/Distributed/Admin/AndroidSnapshot.php
           php -l src/Project/MobileProjectCatalogue.php
