@@ -96,6 +96,8 @@ jobs:
           php -l public/distributed-admin.php
           php -l src/Distributed/Admin/LocalProjectSnapshot.php
           php -l src/Distributed/Admin/AndroidSnapshot.php
+          php -l src/Project/MobileProjectCatalogue.php
+          php -l src/Project/MobileArtifactAvailability.php
           php -l src/Distributed/Admin/PublicProjectCatalogue.php
           php -l bin/devmcp-project-catalogue
           php -l bin/devmcp-admin-projects-export

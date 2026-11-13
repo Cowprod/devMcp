@@ -29,6 +29,7 @@ final class ProjectTools
         private readonly ?PrivateRepositoryCreator $githubCreator = null,
         private readonly ?ProvisioningStore $provisioning = null,
         private readonly ?LocalWorkspaceProvisioner $localProvisioner = null,
+        private readonly ?\Cowprod\DevMcp\Project\MobileProjectCatalogue $mobileCatalogue = null,
     ) {
     }
 
@@ -91,6 +92,7 @@ final class ProjectTools
             if($probeLocalPreviews&&$entry['id']!==$servingProject)$entry = $this->withLocalPreviewStatus($entry);
         }
         unset($entry);
+        if($this->mobileCatalogue!==null)$projects=$this->mobileCatalogue->enrich($projects);
         return [
             'projects' => $projects,
             'host' => $this->hostTools->capabilities(),
@@ -622,6 +624,12 @@ final class ProjectTools
      * @return array<string, mixed>
      */
     public function projectDescribe(string $project): array
+    {
+        $description=$this->describeProject($project);
+        return $this->mobileCatalogue===null?$description:$this->mobileCatalogue->enrich([$description])[0];
+    }
+
+    private function describeProject(string $project): array
     {
         if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
             return $this->remoteTools->describe($project);
