@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 use RuntimeException;
+require_once __DIR__.'/MobileBuildRetention.php';
 
 /** Xcode builds run as the enrolled macOS user, never as root. */
 final class MacIosRuntime
@@ -25,19 +26,19 @@ final class MacIosRuntime
         self::arguments($args);
         $revision=$job['package']['revision'];
         $source=$workspace.'/releases/'.$revision;
-        $configFile=$source.'/.devmcp/ios.json';
-        if(!is_file($configFile)||is_link($configFile))throw new RuntimeException('Missing .devmcp/ios.json build configuration');
-        $config=self::configuration(json_decode(file_get_contents($configFile),true,16,JSON_THROW_ON_ERROR));
-        $id=$job['id'];$output=$workspace.'/ios-builds/'.$id;
-        if(!is_dir($workspace.'/ios-builds'))mkdir($workspace.'/ios-builds',0700);
+        $id=$job['id'];$parent=MobileBuildRetention::parent($workspace,'ios',$id);$output=$parent.'/'.$id;
         $lock=fopen($workspace.'/ios-builds/.build.lock','c+b');
         if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))throw new RuntimeException('An iOS build is already running for this project');
         try {
             $resultFile=$output.'/result.json';
+            if(is_link($output)||is_link($resultFile))throw new RuntimeException('Build result must not be a link');
             if(is_file($resultFile))return json_decode(file_get_contents($resultFile),true,16,JSON_THROW_ON_ERROR);
             if(file_exists($output))throw new RuntimeException('Previous build incomplete; inspect its log and start a new job');
-            mkdir($output,0700);
             $log=$output.'/build.log';
+            MobileBuildRetention::begin($workspace,'ios',$id,$tools['build_start']??null);
+            $configFile=$source.'/.devmcp/ios.json';
+            if(!is_file($configFile)||is_link($configFile))throw new RuntimeException('Missing .devmcp/ios.json build configuration');
+            $config=self::configuration(json_decode(file_get_contents($configFile),true,16,JSON_THROW_ON_ERROR));
             $caps=self::capabilities();
             if(!$caps['full_xcode'])throw new RuntimeException('Full Xcode is required; install it and complete first launch');
             $environment=null;
@@ -96,6 +97,7 @@ final class MacIosRuntime
             file_put_contents($resultFile,json_encode($result,JSON_THROW_ON_ERROR));
             return $result;
         } catch(\Throwable $error) {
+            if(isset($log)&&is_file($log))file_put_contents($log,"\n[devMcp] FAILED: ".$error->getMessage()."\n",FILE_APPEND);
             throw new RuntimeException($error->getMessage().(isset($log)?"\n".self::tail($log):''),previous:$error);
         } finally {self::$heartbeat=null;flock($lock,LOCK_UN);fclose($lock);}
     }
@@ -159,6 +161,7 @@ final class MacIosRuntime
             usleep(200000);clearstatcache(true,$log);
         }while(true);
         proc_close($p);
+        if(in_array('-exportArchive',$argv,true))MobileBuildRetention::retainDistributionLogs($log);
         if($status['exitcode']!==0)throw new RuntimeException('iOS build command failed ('.$status['exitcode'].'): '.$argv[0]);
     }
 }

@@ -22,6 +22,9 @@ try{
     $workspace=LocalAndroidBuild::ROOT.'/'.$id;LocalAndroidBuild::stagePackage($workspace,$package);
     $android=json_decode(file_get_contents($workspace.'/releases/'.$argv[1].'/.devmcp/android.json'),true,32,JSON_THROW_ON_ERROR);
     if(($android['backend_required']??false)===true)$tools=array_replace($tools,LocalAndroidBuild::backend($id,$argv[1]));
+    $tools['build_start']=static function()use($id,$workspace):void{
+        (new IosArtifactStore(IosArtifactStore::LOCAL_ROOT,0640,true))->discardPrevious('local',$id,'android',getenv('DEVMCP_JOB_ID'));
+    };
     $data=CordovaAndroidRuntime::build($workspace,['id'=>getenv('DEVMCP_JOB_ID'),'project_id'=>$id,'package'=>$package,'arguments'=>[]],null,$tools);
     $data=LocalAndroidBuild::publish($data,new IosArtifactStore(IosArtifactStore::LOCAL_ROOT,0640,true),$tools['central_url']);
     MobileReleaseIndex::record($workspace,$data);
