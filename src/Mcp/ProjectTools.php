@@ -37,6 +37,12 @@ final class ProjectTools
      */
     public function projectList(): array
     {
+        return $this->projectInventory(true);
+    }
+
+    /** Shared live registry view; HTTP HEAD callers skip network probes to avoid recursion. */
+    public function projectInventory(bool $probeLocalPreviews,?string $servingProject=null): array
+    {
         $projects = [];
         $local = $this->projects->all();
         foreach ($local as $project) {
@@ -82,7 +88,7 @@ final class ProjectTools
             if ($this->remoteTools !== null && $this->remoteTools->projectQueue()->project($entry['id']) !== null) {
                 $entry = array_replace($entry, $this->remoteTools->describe($entry['id']));
             }
-            $entry = $this->withLocalPreviewStatus($entry);
+            if($probeLocalPreviews&&$entry['id']!==$servingProject)$entry = $this->withLocalPreviewStatus($entry);
         }
         unset($entry);
         return [

@@ -6,7 +6,18 @@ use RuntimeException;
 /** Display-only view of the exact inventory returned by MCP project_list. */
 final class PublicProjectCatalogue
 {
-    public const PATH='/var/lib/devmcp-admin-bridge/catalogue.json';
+    public static function live(array $config,bool $probeLocalPreviews=true): array
+    {
+        $remote=\Cowprod\DevMcp\Mcp\RemoteTools::fromConfig($config);
+        if($remote===null||!$remote->sqlProjectConfiguration()->isReady())throw new RuntimeException('The live distributed registry is unavailable');
+        $servingProject=getenv('DEVMCP_PROJECT_ID');
+        $servingProject=is_string($servingProject)&&preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D',$servingProject)?$servingProject:null;
+        $inventory=\Cowprod\DevMcp\Runtime\RuntimeFactory::fromConfig($config,dirname(__DIR__,3).'/var')->tools->projectInventory($probeLocalPreviews,$servingProject);
+        $host=gethostname();$ip=$config['preview_zerotier_ipv4']??'';
+        // Same explicit lab address as the existing MCP preview probes.
+        if($ip===''&&$host==='touchdeck')$ip='192.168.194.189';
+        return self::export($inventory,$host,$ip);
+    }
 
     public static function export(array $inventory,string $localHost,string $localIpv4): array
     {
@@ -43,14 +54,4 @@ final class PublicProjectCatalogue
         return ['schema_version'=>1,'generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'projects'=>$rows];
     }
 
-    public static function publish(array $catalogue,string $path=self::PATH): void
-    {
-        if(is_link($path))throw new RuntimeException('Catalogue must not be a link');
-        $json=json_encode($catalogue,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)."\n";
-        $temporary=tempnam(dirname($path),'.catalogue-');
-        if($temporary===false)throw new RuntimeException('Catalogue staging unavailable');
-        try{
-            if(file_put_contents($temporary,$json,LOCK_EX)!==strlen($json)||!chmod($temporary,0640)||!rename($temporary,$path))throw new RuntimeException('Catalogue publication failed');
-        }finally{if(is_file($temporary))unlink($temporary);}
-    }
 }

@@ -39,6 +39,13 @@ final class ProjectToolsTest extends TestCase
         self::assertArrayHasKey('serial_devices', $result['host']);
     }
 
+    public function testMetadataReaderUsesTheSameInventoryAsTheMcpTool():void
+    {
+        $tools=$this->tools([]);
+        self::assertSame($tools->projectList()['projects'],$tools->projectInventory(false)['projects']);
+        self::assertSame($tools->projectList()['projects'],$tools->projectInventory(true,'demo')['projects']);
+    }
+
     public function testActionRunAllowsExplicitLocalSyncAction(): void
     {
         $tools = $this->tools([
