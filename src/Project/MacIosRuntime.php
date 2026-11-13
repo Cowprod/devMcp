@@ -135,6 +135,13 @@ final class MacIosRuntime
     private static function command(array $argv,string $cwd,string $log,?array $environment=null): void
     {
         file_put_contents($log,"\n[devMcp] ".json_encode($argv,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES)."\n",FILE_APPEND);
+        // Xcode's IPA exporter invokes Apple's rsync with Apple-specific flags. Homebrew rsync may reject them.
+        // Keep the Cordova PATH for preparation, but prefer native macOS tools for exportArchive only.
+        if($argv[0]==='/usr/bin/xcodebuild'&&in_array('-exportArchive',$argv,true)){
+            $environment??=getenv()?:[];
+            $previousPath=$environment['PATH']??'';
+            $environment['PATH']='/usr/bin:/bin:/usr/sbin:/sbin'.(is_string($previousPath)&&$previousPath!==''?':'.$previousPath:'');
+        }
         $p=proc_open($argv,[0=>['file','/dev/null','r'],1=>['file',$log,'a'],2=>['file',$log,'a']],$pipes,$cwd,$environment);
         if(!is_resource($p))throw new RuntimeException('iOS build process unavailable');
         $start=microtime(true);$lastHeartbeat=0.0;
