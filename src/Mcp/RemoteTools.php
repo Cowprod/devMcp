@@ -127,6 +127,14 @@ final class RemoteTools
         return new ProvisioningStore($this->db, $allocator);
     }
 
+    public function mobileCatalogue(\Cowprod\DevMcp\Project\ProjectRegistry $projects,\Cowprod\DevMcp\Execution\FileJobStore $jobs,array $config): \Cowprod\DevMcp\Project\MobileProjectCatalogue
+    {
+        $ip=$config['preview_zerotier_ipv4']??'';
+        if($ip===''&&gethostname()==='touchdeck')$ip='192.168.194.189';
+        $central=is_string($ip)&&filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)!==false?'https://'.$ip:'';
+        return new \Cowprod\DevMcp\Project\MobileProjectCatalogue($this->db,$projects,$jobs,$this->sourceRoot,$central,'/var/lib/devmcp-admin-bridge/admin-ca.crt');
+    }
+
     public function sqlProjectConfiguration(): \Cowprod\DevMcp\Project\SqlProjectConfiguration
     {
         return new \Cowprod\DevMcp\Project\SqlProjectConfiguration($this->db);

@@ -94,7 +94,7 @@ final class RuntimeFactory
         if (!array_key_exists('enabled', $previewConfig)) {
             $previewConfig['enabled'] = ($config['project_provisioning']['enabled'] ?? false) === true;
         }
-        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore($previewConfig), $localProvisioner);
+        $tools = new ProjectTools($projects, $runner, $jobs, $audit, new \Cowprod\DevMcp\Mcp\HostTools(), $remote, PrivateRepositoryCreator::fromConfig($config), $remote?->provisioningStore($previewConfig), $localProvisioner, $remote?->mobileCatalogue($projects,$store,$config));
 
         return new Runtime(
             $projects,

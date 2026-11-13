@@ -47,7 +47,10 @@ final class PublicProjectCatalogue
                 'http'=>$http,'status_checked_at_utc'=>(string)($project['preview_http_checked_at_utc']??''),
                 'provisioning_state'=>(string)($project['provisioning_state']??''),'url'=>$url,
                 'github'=>is_string($repository)&&preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$~D',$repository)?'https://github.com/'.$repository:null,
-                'artifacts'=>[],
+                'platforms'=>$project['platforms']??['web'=>$url!==null,'ios'=>null,'android'=>null],
+                'mobile_configuration'=>$project['mobile_configuration']??['known'=>false,'revision'=>null,'errors'=>[]],
+                'mobile_builds'=>$project['mobile_builds']??[],
+                'artifacts'=>$project['artifacts']??[],
             ];
         }
         usort($rows,static fn($a,$b)=>strcmp($a['id'],$b['id']));

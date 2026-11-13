@@ -171,6 +171,25 @@ final class FileJobStore
         }
     }
 
+    /** Latest local build metadata only; never reads stdout, stderr or private arguments into the catalogue. */
+    public function latestMobileBuilds(): array
+    {
+        $latest=[];
+        foreach(new \DirectoryIterator($this->root) as $directory){
+            $id=$directory->getFilename();
+            if(!preg_match('/^[a-f0-9]{32}$/D',$id))continue;
+            $path=$directory->getPathname().'/job.json';
+            if($directory->isLink()||is_link($path))throw new RuntimeException('Linked job metadata is invalid');
+            if(!is_file($path))continue;
+            $job=$this->get($id);
+            if($job->target!=='local'||!in_array($job->actionId,['ios.build','android.build'],true))continue;
+            $platform=$job->actionId==='ios.build'?'ios':'android';$row=$job->toPublicArray();
+            $previous=$latest[$job->projectId][$platform]??null;
+            if($previous===null||strcmp($row['created_at'].$row['job_id'],$previous['created_at'].$previous['job_id'])>0)$latest[$job->projectId][$platform]=$row;
+        }
+        return $latest;
+    }
+
     public function requestCancel(string $jobId): JobRecord
     {
         return $this->mutate(
