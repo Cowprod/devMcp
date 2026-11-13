@@ -9,7 +9,7 @@ use PDO;
 
 final class RegistryEditor
 {
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin') {}
 
     public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
@@ -248,8 +248,8 @@ final class RegistryEditor
     private function audit(string $event, string $type, string $id): void
     {
         $statement = $this->db->prepare(
-            "INSERT INTO dm_audit_event (actor,event_type,object_type,object_id,outcome) VALUES ('web-admin',?,?,?,'success')"
+            "INSERT INTO dm_audit_event (actor,event_type,object_type,object_id,outcome) VALUES (?,?,?,?,'success')"
         );
-        $statement->execute([$event, $type, $id]);
+        $statement->execute([$this->actor, $event, $type, $id]);
     }
 }

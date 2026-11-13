@@ -1,5 +1,7 @@
 # Mobile administration API v1
 
+Persistent device sessions and the first explicit registry write routes are documented in [ADMIN-MOBILE-SESSIONS.md](ADMIN-MOBILE-SESSIONS.md). The legacy username/password login described below remains read-only and never receives persistence or write permission implicitly.
+
 ## Audit and reuse
 
 The existing administration entrypoint is `public/distributed-admin.php`, served only on the explicit ZeroTier TLS address by `deploy/distributed/nginx-admin.conf.example`. It authenticates through `AdminSession`, `/etc/devmcp-admin/web-auth.php` (bcrypt password hash plus reset version), and HttpOnly/Secure/SameSite=Strict PHP sessions in `/var/lib/devmcp-admin-auth`. There is one administrator account; no pre-existing per-project ACL or read-only Web role. Existing Web operations remain behind that session and their CSRF checks.
@@ -31,7 +33,7 @@ Base in the current lab: `https://192.168.194.189/api/admin/v1`.
 | GET | `/projects/{id}` | Project detail including all recorded machine associations |
 | OPTIONS | API paths | Cordova CORS preflight only; no data or credential issuance |
 
-Only these versioned paths exist. There are no unversioned aliases and no project/machine write routes. Write methods receive 405 after authentication. Unknown resources return 404; missing, expired, forged or revoked credentials return 401; blocked origins/HTTP return 403; throttled login 429; dependencies unavailable 503. Errors are `{"api_version":1,"error":{"code":"authentication_required"}}`, with fixed codes and no exception text. Data responses include `api_version: 1` and `generated_at_utc` (time of collection start; individual observation/build dates remain separate). All responses are `Cache-Control: no-store`.
+These are the original read-only paths. There are no unversioned aliases. Explicit mobile write routes are documented separately and require an opt-in `admin:write` device session; legacy/read-only credentials receive 403 on those routes. Unsupported methods receive 405 after authentication. Unknown resources return 404; missing, expired, forged or revoked credentials return 401; blocked origins/HTTP return 403; throttled login 429; dependencies unavailable 503. Errors are `{"api_version":1,"error":{"code":"authentication_required"}}`, with fixed codes and no exception text. Data responses include `api_version: 1` and `generated_at_utc` (time of collection start; individual observation/build dates remain separate). All responses are `Cache-Control: no-store`.
 
 ### Login
 
@@ -100,10 +102,10 @@ Every data request uses `Authorization: Bearer <access_token>`. Tokens are rando
 1. Keep existing catalogue, filters and favorites untouched. Request admin details on demand using stable machine/project IDs; use `/machines` to resolve display names to stable IDs. Never assume the display name is a hostname or an ID.
 2. Prompt for the existing administrator username/password. POST JSON to `/session`; keep the resulting bearer in memory, never in the repository, bundle, URL, logs or localStorage. Discard the password after login. A 401 requires a new login; there is no permanent refresh credential.
 3. Use `fetch(url, {headers:{Authorization:'Bearer '+token}, credentials:'omit'})`. POST login also uses `Content-Type: application/json`. DELETE `/session` on logout, then clear memory. Keep the same API origin fixed/validated before sending credentials.
-4. The API allows exact WebView origins `app://localhost` (iOS) and `https://localhost` (Android secure local origin); preflight allows Authorization/Content-Type, GET/POST/DELETE/OPTIONS. It sends no credentialed CORS and accepts neither `*` nor `null`. Explicitly configure Cordova scheme `app` and hostname `localhost` on iOS if needed. An Android app using insecure file mode must use a secure local origin before consuming this API. Native HTTP clients may omit Origin but must still authenticate.
+4. The API allows exact WebView origins `app://localhost` (iOS) and `https://localhost` (Android secure local origin); preflight allows Authorization/Content-Type, GET/POST/PATCH/PUT/DELETE/OPTIONS. It sends no credentialed CORS and accepts neither `*` nor `null`. Explicitly configure Cordova scheme `app` and hostname `localhost` on iOS if needed. An Android app using insecure file mode must use a secure local origin before consuming this API. Native HTTP clients may omit Origin but must still authenticate.
 5. The device must join ZeroTier and trust the installed lab CA (full trust enabled on iOS). HTTPS certificate/hostname verification must stay enabled. Installation links retain their existing download authorization semantics; use `build_url` for iOS installation and `download_url` for APK.
 
-Web cookies, HTTP Basic and agent bearer tokens do not authenticate this API. Future administrative actions must use a separately designed scope and server authorization; `admin:read` must never be upgraded implicitly.
+Web cookies, HTTP Basic and agent bearer tokens do not authenticate this API. Administrative data changes require the separately granted `admin:write` scope and the existing business validations; `admin:read` is never upgraded implicitly.
 
 ## Deployment and verification
 

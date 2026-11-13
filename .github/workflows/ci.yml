@@ -98,6 +98,8 @@ jobs:
           php -l bin/migrate-admin-read-api.php
           php -l bin/devmcp-admin-read-api-check
           php -l src/Distributed/Admin/AdminReadApi.php
+          php -l src/Distributed/Admin/AdminPersistentSessions.php
+          php -l src/Distributed/Admin/AdminRegistryOperations.php
           php -l src/Distributed/Admin/AdminReadTokens.php
           php -l src/Distributed/Admin/AdminReadRepository.php
           php -l src/Distributed/Admin/AdminReadApiNginx.php

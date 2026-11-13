@@ -45,15 +45,17 @@ final class AdminReadRepository
         $projects = [];
         foreach ($registry->projects() as $row) {
             $repo = self::github($row['repository_url']);
-            $projects[$row['id']] = ['id'=>$row['id'],'name'=>null,'description'=>$row['description'],
-                'github'=>$repo,'kind'=>null,'provisioning_state'=>null,'deployment_state'=>null,'deployment_checked_at_utc'=>null,
+            $projects[$row['id']] = ['id'=>$row['id'],'name'=>null,'description'=>$projects[$row['id']]['description']??$row['description'],
+                'registry_metadata'=>$projects[$row['id']]['registry_metadata']??null,
+                'github'=>$repo,'registry_metadata'=>['description'=>$row['description'],'repository_url'=>$repo],'kind'=>null,'provisioning_state'=>null,'deployment_state'=>null,'deployment_checked_at_utc'=>null,
                 'runtime_type'=>null,'desired_state'=>null,'environment'=>null,'port'=>null,'url'=>null,
                 'platforms'=>['web'=>null,'ios'=>null,'android'=>null],
                 'mobile_configuration'=>null,'mobile_builds'=>null,'artifacts'=>[], 'assignments'=>[]];
         }
         foreach ($catalogue['projects'] as $row) {
             $projects[$row['id']] = array_replace($projects[$row['id']]??[], [
-                'id'=>$row['id'],'name'=>null,'description'=>$row['description'],
+                'id'=>$row['id'],'name'=>null,'description'=>$projects[$row['id']]['description']??$row['description'],
+                'registry_metadata'=>$projects[$row['id']]['registry_metadata']??null,
                 'github'=>$row['github']??($projects[$row['id']]['github']??null),
                 'kind'=>$row['kind'],'provisioning_state'=>$row['provisioning_state']?:null,
                 // HTTP observation is not an inferred deployment success.
