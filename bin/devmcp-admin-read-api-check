@@ -11,17 +11,28 @@ $origin='https://'.$m[1];
 $store=new AdminReadTokens(new AdminSession('/etc/devmcp-admin/web-auth.php','/var/lib/devmcp-admin-auth'),'/var/lib/devmcp-admin-auth');
 $token=$store->issue(time())['access_token'];
 $checks=[];
-$request=static function(string $path,int $expected,string $method='GET',bool $authenticated=true)use($origin,$token,&$checks):array{
+$transport=static function(string $path,string $method,bool $authenticated)use($origin,$token):array{
     $curl=curl_init($origin.'/api/admin/v1'.$path);
     curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_TIMEOUT=>30,
         CURLOPT_CAINFO=>'/etc/devmcp-admin/tls/admin.crt',CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,
         CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>$authenticated?['Authorization: Bearer '.$token,'Origin: app://localhost']:[]]);
     $raw=curl_exec($curl);$status=curl_getinfo($curl,CURLINFO_RESPONSE_CODE);$error=curl_errno($curl);curl_close($curl);
+    return ['status'=>$status,'error'=>$error,'body'=>$raw];
+};
+$request=static function(string $path,int $expected,string $method='GET',bool $authenticated=true)use($transport,&$checks):array{
+    $reply=$transport($path,$method,$authenticated);$status=$reply['status'];$error=$reply['error'];$raw=$reply['body'];
     if ($error||$status!==$expected) throw new RuntimeException('Admin read API check failed: '.$method.' '.$path.' HTTP '.$status.' curl '.$error);
     $data=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
     $checks[]=['method'=>$method,'path'=>$path,'http'=>$status];return $data;
 };
 try {
+    // nginx reload is asynchronous: the old worker can briefly serve its old 404 route.
+    // Wait only for that observed transition; authentication/TLS/server errors still fail immediately.
+    for ($attempt=0;$attempt<30;++$attempt) {
+        $ready=$transport('/machines','GET',false);
+        if ($ready['error']!==0||$ready['status']!==404) break;
+        usleep(100000);
+    }
     $request('/machines',401,authenticated:false);
     $list=$request('/machines',200)['machines'];
     $id=null;
