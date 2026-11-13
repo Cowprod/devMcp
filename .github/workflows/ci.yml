@@ -41,6 +41,8 @@ jobs:
           php -l src/Project/CordovaAndroidRuntime.php
           php -l src/Project/LocalAndroidBuild.php
           php -l bin/devmcp-android-build
+          php -l bin/devmcp-android-install
+          php -l src/Project/AndroidInstallation.php
           php -l src/Project/LocalAndroidBuild.php
           php -l src/Project/CordovaAndroidRuntime.php
           php -l bin/devmcp-machine-capabilities

@@ -67,6 +67,20 @@ final class ArtifactServiceTest extends TestCase
         self::assertFalse($chunk['eof']);
     }
 
+    public function testJobSpecificScreenshotsCannotReadAnotherJobsFile(): void
+    {
+        $project=$this->registry(['screen'=>['description'=>'Capture de test','argv'=>[PHP_BINARY,'-r',''], 'artifacts'=>[['id'=>'screen','path'=>'{job_id}.png']]]])->get('demo');
+        $action=$project->getAction('screen');
+        $one=str_repeat('a',32);$two=str_repeat('b',32);
+        file_put_contents($this->root.'/'.$one.'.png','first');
+        $service=new ArtifactService();
+        self::assertTrue($service->list($one,$project,$action)['artifacts'][0]['exists']);
+        self::assertFalse($service->list($two,$project,$action)['artifacts'][0]['exists']);
+        self::assertSame('first',base64_decode($service->get($one,$project,$action,'screen')['content'],true));
+        self::expectException(\InvalidArgumentException::class);
+        $service->list('../outside',$project,$action);
+    }
+
     public function testRejectsArtifactSymlinkOutsideWorkspace(): void
     {
         $outside = tempnam(sys_get_temp_dir(), 'devmcp-outside-');

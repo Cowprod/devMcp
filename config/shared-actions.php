@@ -3,6 +3,22 @@
 declare(strict_types=1);
 
 return [
+    'android.install'=>[
+        'description'=>'Installe un APK debug publié par un build Android local réussi sur une tablette ADB explicitement choisie, lance l’app et capture son écran.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install',['param'=>'project_id'],['param'=>'build_id'],['param'=>'device']],
+        'cwd'=>'.','timeout'=>240,'target'=>'local',
+        'parameters'=>[
+            'project_id'=>['type'=>'identifier','description'=>'Projet local ayant produit l’APK.'],
+            'build_id'=>['type'=>'identifier','description'=>'ID exact du job android.build réussi.'],
+            'device'=>['type'=>'android_serial','description'=>'Numéro ADB exact d’une tablette connectée et autorisée.'],
+        ],
+        'artifacts'=>[['id'=>'screenshot.png','path'=>'.devmcp-artifacts/android/{job_id}.png','media_type'=>'image/png']],
+    ],
+    'android.devices'=>[
+        'description'=>'Liste les tablettes ADB et leurs numéros stables pour choisir une cible d’installation.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install','devices'],
+        'cwd'=>'.','timeout'=>20,'target'=>'local','sync'=>true,
+    ],
     'android.build'=>[
         'description'=>'Compile un projet Cordova Android depuis un commit exact sur le serveur local et publie son APK signé en HTTPS.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-build',['param'=>'commit']],

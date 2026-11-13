@@ -1,0 +1,44 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Project\{IosArtifactStore,AndroidInstallation};
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
+use Cowprod\DevMcp\Mcp\RemoteTools;
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+use Symfony\Component\Process\Process;
+try{
+    $config=require (getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');$runtime=RuntimeFactory::fromConfig($config,dirname(__DIR__).'/var');
+    if(getcwd()!==$runtime->projects->get('devmcp-admin')->root)throw new RuntimeException('Admin MCP action context required');
+    $profile=require '/etc/devmcp/android-runtime.php';$adb=$profile['android']['sdk_root'].'/platform-tools/adb';
+    $env=['JAVA_HOME'=>$profile['android']['java_home']];
+    $run=static function(array $args,int $timeout=30)use($env):string{$p=new Process($args,null,$env,null,$timeout);$p->mustRun();return $p->getOutput();};
+    $devices=AndroidSnapshot::parseDevices($run([$adb,'devices','-l']));
+    if($argc===2&&$argv[1]==='devices'){echo json_encode(['devices'=>$devices],JSON_THROW_ON_ERROR)."\n";exit;}
+    if($argc!==4||getenv('DEVMCP_PROJECT_ID')!=='devmcp-admin'||!preg_match('/^[a-f0-9]{32}$/D',getenv('DEVMCP_JOB_ID')?:'')||!preg_match('/^[a-f0-9]{32}$/D',$argv[2]))throw new RuntimeException('Expected project ID, exact build job ID and ADB serial');
+    [$script,$project,$build,$device]=$argv;
+    $remote=RemoteTools::fromConfig($config);if($remote===null)throw new RuntimeException('Machine capabilities required');$remote->assertLocalMachineAction('android.install');
+    $job=$runtime->jobs->status($build);
+    if(($job['project']??null)!==$project||$job['action']!=='android.build'||$job['status']!=='succeeded')throw new RuntimeException('A successful standard Android build of this project is required');
+    $store=new IosArtifactStore(IosArtifactStore::LOCAL_ROOT,0640,true);$record=$store->getByJob($build);
+    $artifact=AndroidInstallation::validate($record,$project,$device,$devices);
+    $directory='/var/lib/devmcp/android-installs/'.getenv('DEVMCP_JOB_ID');if(!mkdir($directory,0700,true))throw new RuntimeException('Fresh install staging directory required');
+    $apk=$directory.'/app.apk';if(!copy($record['path'],$apk))throw new RuntimeException('Cannot stage verified APK');
+    if(hash_file('sha256',$apk)!==$artifact['sha256'])throw new RuntimeException('Staged APK digest mismatch');
+    $tools=$profile['android']['sdk_root'].'/build-tools/'.$profile['android']['build_tools'];
+    $run([$tools.'/apksigner','verify',$apk]);
+    $metadata=AndroidInstallation::packageMetadata($run([$tools.'/aapt','dump','badging',$apk]),$artifact);
+    $installed=$run([$adb,'-s',$device,'install','-r','--no-streaming',$apk],180);
+    if(!preg_match('/^Success\s*$/m',$installed))throw new RuntimeException('ADB did not confirm installation: '.trim($installed));
+    $package=$metadata['package'];$dump=$run([$adb,'-s',$device,'shell','dumpsys','package',$package]);
+    if(!preg_match('/versionCode='.preg_quote($metadata['version_code'],'/').'\b/',$dump))throw new RuntimeException('Installed package version differs from the APK');
+    $component=AndroidInstallation::component($run([$adb,'-s',$device,'shell','cmd','package','resolve-activity','--brief','-c','android.intent.category.LAUNCHER',$package]),$package);
+    $launch=$run([$adb,'-s',$device,'shell','am','start','-W','-n',$component]);if(!str_contains($launch,'Status: ok'))throw new RuntimeException('App launch was not confirmed');
+    usleep(1500000);
+    $png=$run([$adb,'-s',$device,'exec-out','screencap','-p']);
+    if(!str_starts_with($png,"\x89PNG\r\n\x1a\n")||strlen($png)>12582912)throw new RuntimeException('Valid bounded ADB screenshot required');
+    $screens=getcwd().'/.devmcp-artifacts/android';if(!is_dir($screens)&&!mkdir($screens,0700,true))throw new RuntimeException('Screenshot directory unavailable');
+    file_put_contents($screens.'/'.getenv('DEVMCP_JOB_ID').'.png',$png,LOCK_EX);
+    unlink($apk);rmdir($directory);
+    echo json_encode(['project_id'=>$project,'build_id'=>$build,'device'=>$device]+$metadata+['installed'=>true,'launch_confirmed'=>true,'screenshot_artifact'=>'screenshot.png','apk_sha256'=>$artifact['sha256']],JSON_THROW_ON_ERROR)."\n";
+}catch(Throwable $error){fwrite(STDERR,'Android installation failed: '.$error->getMessage()."\n");exit(1);}

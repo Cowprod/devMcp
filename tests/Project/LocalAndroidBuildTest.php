@@ -31,6 +31,7 @@ final class LocalAndroidBuildTest extends TestCase
             $store=new IosArtifactStore($root,0640,true);$result=LocalAndroidBuild::publish($data,$store,'https://192.168.194.189');
             self::assertStringContainsString('?local_artifact=',$result['download_url']);self::assertArrayNotHasKey('artifact_local',$result);
             parse_str(parse_url($result['build_url'],PHP_URL_QUERY),$query);$record=$store->get($query['local_artifact']);
+            self::assertSame($record,$store->getByJob($data['build_id']));
             self::assertSame('local',$record['machine_id']);self::assertSame('apk-test',file_get_contents($record['path']));
             self::assertSame(0640,fileperms($record['path'])&0777);self::assertSame(0640,fileperms($root.'/'.$data['build_id'].'.json')&0777);
             self::assertSame($result,LocalAndroidBuild::publish($data,$store,'https://192.168.194.189'));

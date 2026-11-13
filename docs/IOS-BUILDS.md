@@ -205,3 +205,16 @@ du processus réel du backend doit correspondre au projet et au commit demandés
 Un service ADB persistant utilise le propriétaire non privilégié du SDK et sa clé
 ADB existante. Les clients MCP restent sur le socket local standard ; aucune clé
 n’est remplacée et aucune application de tablette n’est installée par la migration.
+
+### Installation Android sur une tablette USB du serveur central
+
+Sur `devmcp-admin`, `android.devices` liste les numéros ADB. L’action asynchrone
+`android.install` reçoit `project_id`, `build_id` (job `android.build` local réussi)
+et `device` (numéro exact autorisé). Elle vérifie le projet, le SHA-256 et la
+signature de l’APK debug publié, puis installe avec `adb install -r` sans
+désinstaller ni autoriser un downgrade. Elle lance l’application et expose
+`screenshot.png` via `artifact_list` / `artifact_get` du job d’installation.
+La capture est propre à chaque job. Aucun chemin APK ou téléchargement arbitraire
+n’est accepté. Cette action concerne les builds locaux du serveur central.
+Un lancement confirmé ne prouve pas que les appels réseau de l’application
+fonctionnent : vérifier la capture et le backend séparément.

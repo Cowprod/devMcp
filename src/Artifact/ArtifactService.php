@@ -30,7 +30,7 @@ final class ArtifactService
         $artifacts = [];
 
         foreach ($action->getArtifacts() as $definition) {
-            $resolved = $this->resolveExistingFile($project->root, $definition->path, false);
+            $resolved = $this->resolveExistingFile($project->root, $this->jobPath($definition->path,$jobId), false);
 
             $artifacts[] = [
                 ...$definition->toPublicArray(),
@@ -62,7 +62,7 @@ final class ArtifactService
         }
 
         $definition = $action->getArtifact($artifactId);
-        $path = $this->resolveExistingFile($project->root, $definition->path, true);
+        $path = $this->resolveExistingFile($project->root, $this->jobPath($definition->path,$jobId), true);
 
         if ($path === null) {
             throw new RuntimeException("Artefact introuvable : {$artifactId}");
@@ -115,6 +115,13 @@ final class ArtifactService
             'encoding' => 'base64',
             'content' => base64_encode($content),
         ];
+    }
+
+    private function jobPath(string $path,string $jobId): string
+    {
+        if(!str_contains($path,'{job_id}'))return $path;
+        if(!preg_match('/^[a-f0-9]{32}$/D',$jobId))throw new InvalidArgumentException('Invalid artifact job ID');
+        return str_replace('{job_id}',$jobId,$path);
     }
 
     private function resolveExistingFile(
