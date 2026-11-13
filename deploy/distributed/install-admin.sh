@@ -63,6 +63,7 @@ fi
 systemctl daemon-reload
 /usr/bin/php "$SOURCE/bin/migrate-admin-form-auth.php" --execute MIGRATE_ADMIN_FORM_AUTH
 /usr/bin/php "$SOURCE/bin/migrate-admin-tls.php" --execute MIGRATE_ADMIN_TLS
+/usr/bin/php "$SOURCE/bin/migrate-admin-read-api.php" --execute INSTALL_ADMIN_READ_API
 nginx -t
 systemctl reload nginx
 echo "HTTPS vhost configured with persistent ZeroTier bind retry. Database credentials and migrations must be configured separately."

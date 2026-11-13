@@ -45,8 +45,10 @@ done
 bash /opt/devmcp/deploy/distributed/install-local-admin-bridge.sh
 /usr/bin/php /opt/devmcp/bin/migrate-admin-form-auth.php --execute MIGRATE_ADMIN_FORM_AUTH
 /usr/bin/php /opt/devmcp/bin/migrate-admin-tls.php --execute MIGRATE_ADMIN_TLS
+/usr/bin/php /opt/devmcp/bin/migrate-admin-read-api.php --execute INSTALL_ADMIN_READ_API
 
 if systemctl is-active --quiet php8.3-fpm.service; then
     systemctl reload php8.3-fpm.service
 fi
+runuser -u www-data -- /usr/bin/php /opt/devmcp-admin/bin/devmcp-admin-read-api-check --check
 echo "PASS - Code des deux installations synchronisé; admin web et ADB actualisés."
