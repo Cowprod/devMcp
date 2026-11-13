@@ -42,7 +42,7 @@ try {
     if($machine['project_count']!==count($machine['projects']))throw new RuntimeException('Invalid association count');
     $projectId=$machine['projects'][0]['id']??null;
     if($projectId!==null){$p=$request('/projects/'.$projectId,200)['project'];if($p['id']!==$projectId)throw new RuntimeException('Unexpected project');}
-    $request('/machines',405,'POST');
+    $request('/machines',403,'POST');
     $request('/projects/devmcp-api-missing-'.bin2hex(random_bytes(8)),404);
     $request('/session',200,'DELETE');
     $request('/machines',401);
