@@ -92,6 +92,17 @@ final class IosArtifactStore
         return $record+['path'=>$path];
     }
 
+    public function getByJob(string $job): array
+    {
+        if(!preg_match('/^[a-f0-9]{32}$/D',$job))throw new RuntimeException('Exact artifact job ID required');
+        $path=$this->root.'/'.$job.'.json';
+        if(!is_file($path)||is_link($path))throw new RuntimeException('Published build not found');
+        $record=json_decode(file_get_contents($path),true,16,JSON_THROW_ON_ERROR);
+        $resolved=$this->get($record['token']??'');
+        if(($resolved['job_id']??null)!==$job)throw new RuntimeException('Artifact ticket belongs to another job');
+        return $resolved;
+    }
+
     public function completed(): array
     {
         $rows=[];

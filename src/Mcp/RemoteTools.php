@@ -92,7 +92,7 @@ final class RemoteTools
 
     public function assertLocalMachineAction(string $action): void
     {
-        $capability=str_starts_with($action,'android.build')?'cordova_android':($action==='ios.build'?'cordova_ios':($action==='project.deploy'?'hosting':null));
+        $capability=(str_starts_with($action,'android.build')||$action==='android.install')?'cordova_android':($action==='ios.build'?'cordova_ios':($action==='project.deploy'?'hosting':null));
         if($capability!==null)(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->require('local',$capability);
     }
 
