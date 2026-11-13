@@ -21,6 +21,7 @@ install -d -o devmcp -g www-data -m 2750 /var/lib/devmcp-admin-bridge/logs
 for file in devmcp-admin-projects.service devmcp-admin-projects.timer devmcp-admin-android.service devmcp-admin-android.timer; do
     install -o root -g root -m 0644 "/opt/devmcp/deploy/systemd/$file" "/etc/systemd/system/$file"
 done
+php -l /opt/devmcp/src/Distributed/Admin/PublicProjectCatalogue.php
 php -l /opt/devmcp/src/Distributed/Admin/LocalProjectSnapshot.php
 php -l /opt/devmcp/src/Distributed/Admin/AndroidSnapshot.php
 php -l /opt/devmcp-admin/src/Distributed/Admin/AndroidDeviceLabel.php
