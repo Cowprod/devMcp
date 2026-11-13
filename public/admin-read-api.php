@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-use Cowprod\DevMcp\Distributed\Admin\{AdminReadApi,AdminReadTokens,AdminReadRepository,AdminSession,McpProjectServiceClient};
+use Cowprod\DevMcp\Distributed\Admin\{AdminReadApi,AdminReadTokens,AdminReadRepository,AdminSession,LiveProjectCatalogueClient};
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 require dirname(__DIR__).'/vendor/autoload.php';
 $auth=new AdminSession('/etc/devmcp-admin/web-auth.php','/var/lib/devmcp-admin-auth');
@@ -11,10 +11,9 @@ $snapshot=static function(int $now): array {
     if (!is_string($path)||!is_file($path)) throw new RuntimeException('Admin configuration unavailable');
     $config=require $path;
     $db=DatabaseConnection::connect($config['dsn'],$config['username'],$config['password']);
-    $client=new McpProjectServiceClient();
-    $repo=new AdminReadRepository($db,fn()=>$client->inventory(),
-        ['name'=>gethostname(),'os'=>strtolower(PHP_OS_FAMILY),'architecture'=>php_uname('m')],
-        (string)($_SERVER['SERVER_ADDR']??''));
+    $client=new LiveProjectCatalogueClient($db,gethostname());
+    $repo=new AdminReadRepository($db,fn()=>$client->read(),
+        ['name'=>gethostname(),'os'=>strtolower(PHP_OS_FAMILY),'architecture'=>php_uname('m')]);
     return $repo->snapshot($now);
 };
 $headers=['Authorization'=>$_SERVER['HTTP_AUTHORIZATION']??'', 'Content-Type'=>$_SERVER['CONTENT_TYPE']??''];

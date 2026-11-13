@@ -11,14 +11,14 @@ use PDO;
 /** Read projection of the existing registry and MCP, with an explicit public field allowlist. */
 final class AdminReadRepository
 {
-    public function __construct(private readonly PDO $db, private readonly Closure $inventory,
-        private readonly array $localHost, private readonly string $localIpv4) {}
+    public function __construct(private readonly PDO $db, private readonly Closure $catalogue,
+        private readonly array $localHost) {}
 
     public function snapshot(int $now): array
     {
         $registry = new RegistryRepository($this->db);
         $capabilities = (new MachineCapabilities($this->db))->all();
-        $catalogue = PublicProjectCatalogue::export(($this->inventory)(), $this->localHost['name'], $this->localIpv4);
+        $catalogue = ($this->catalogue)();
         $machines = [];
         foreach ($registry->machines() as $row) {
             $seen = $row['last_seen_at'] === null ? false : strtotime($row['last_seen_at'].' UTC');

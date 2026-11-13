@@ -11,8 +11,8 @@ Authoritative services reused:
 - `RegistryRepository`: `dm_machine`, `dm_project`, `dm_deployment`, and workspace diagnostics. Its existing safe field selections exclude agent identities and credentials.
 - `MachineCapabilities`: declared `hosting`, `cordova_android`, `cordova_ios` switches (`dm_machine_capability`). These declarations are not proof that every tool is installed.
 - `ProjectRuntimeCatalog`: runtime choices and desired state (`dm_project_runtime`). Only type and desired state are projected, never entrypoints or paths.
-- `McpProjectServiceClient`: existing loopback MCP transport, extended by a read-only `inventory()` call to `project_list`. This reuses provisioning (`dm_project_provisioning`), remote project metadata (`dm_remote_project`), preview port observations/reservations, and the existing mobile build/artifact projection. No extra artifact store or provisioning implementation is introduced.
-- `PublicProjectCatalogue::export`: the existing public catalogue projection.
+- `LiveProjectCatalogueClient`: reads the already deployed live catalogue on loopback, at the current `devmcp-projects` port from `dm_preview_port_reservation` for the central hostname. That existing service invokes the authoritative core inventory shared with MCP `project_list`, reusing provisioning (`dm_project_provisioning`), remote project metadata (`dm_remote_project`), preview observations, and the mobile build/artifact projection. No extra artifact store or provisioning implementation is introduced. The deployed server runs MCP through its stdio tunnel; the old admin MCP HTTP bridge points to a loopback port that does not listen. It is therefore not used or changed by this extension.
+- `PublicProjectCatalogue::export`: the existing public projection, consumed through the live catalogue service.
 
 Assignments combine the current MCP inventory, the existing distributed deployment registry, and the current remote-project machine. Multiple deployments remain visible, including disabled ones; `sources`, `deployment_id` and `enabled` distinguish recorded associations from enabled execution. Counts are distinct projects per machine. `local` is the existing central-host capability key; other machine IDs are the SQL stable IDs.
 
@@ -107,7 +107,7 @@ Web cookies, HTTP Basic and agent bearer tokens do not authenticate this API. Fu
 
 ## Deployment and verification
 
-No SQL migration or new database grant is needed: all queried tables are existing Web-admin read sources. Required existing migrations are distributed registry, diagnostics, remote projects, machine capabilities and project runtime catalogue. Missing sources return explicit 503; there is no stale-data or alternate authentication fallback.
+No SQL migration or new database grant is needed: all queried tables are existing Web-admin read sources. The `devmcp-projects` live catalogue must be running with a local SQL port reservation and the current mobile metadata schema. Its HTTP read uses only loopback, no redirects/proxy, a 25-second deadline, a 2 MiB bound, and a maximum source age of 60 seconds; errors return 503, with no alternate source. Required existing migrations are distributed registry, diagnostics, remote projects, machine capabilities and project runtime catalogue. Missing sources return explicit 503; there is no stale-data or alternate authentication fallback.
 
 The normal central updater syncs both checkouts and runs `migrate-admin-read-api.php --execute INSTALL_ADMIN_READ_API`. It inserts one marked nginx location into the existing explicit ZeroTier HTTPS vhost, preserves all Web/agent locations, backs up the previous config under `/var/backups/devmcp-admin-read-api-*`, runs nginx -t, reloads, and restores on failure. Installation refuses an unmanaged conflicting API route. PHP-FPM is reloaded through the existing deployer.
 

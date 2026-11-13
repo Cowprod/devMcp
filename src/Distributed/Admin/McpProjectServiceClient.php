@@ -24,16 +24,6 @@ final class McpProjectServiceClient
     /** @param ?Closure(array,?string):array{status:int,body:string,session?:string} $transport */
     public function __construct(private readonly ?Closure $transport = null) {}
 
-    /** Reuse the authoritative live MCP inventory, including mobile build availability. */
-    public function inventory(): array
-    {
-        $result = $this->callTool('project_list', []);
-        if (!is_array($result['projects'] ?? null) || !array_is_list($result['projects'])) {
-            throw new RuntimeException('Invalid project inventory');
-        }
-        return $result;
-    }
-
     public static function assertLocalProject(PDO $db, string $projectId, string $hostname): void
     {
         ProjectServiceRequestPolicy::validate('status', $projectId);

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Tests\Distributed;
-use Cowprod\DevMcp\Distributed\Admin\{AdminReadApi,AdminReadRepository,AdminReadTokens,AdminSession};
+use Cowprod\DevMcp\Distributed\Admin\{AdminReadApi,AdminReadRepository,AdminReadTokens,AdminSession,PublicProjectCatalogue};
 use PDO;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
@@ -42,8 +42,9 @@ final class AdminReadApiTest extends TestCase
             ['id'=>'local-web','description'=>'PHP','machine'=>'touchdeck','workspace'=>'/secret','preview_port'=>12001],
             ['id'=>'unassigned','description'=>'No assignment','provisioning_state'=>'registered']
         ]];
+        $inventory=PublicProjectCatalogue::export($inventory,'touchdeck','192.168.194.189');
         file_put_contents($this->root.'/inventory.json',json_encode($inventory));
-        $repo=new AdminReadRepository($db,fn()=>$inventory,['name'=>'touchdeck','os'=>'linux','architecture'=>'x86_64'],'192.168.194.189');
+        $repo=new AdminReadRepository($db,fn()=>$inventory,['name'=>'touchdeck','os'=>'linux','architecture'=>'x86_64']);
         $this->api=new AdminReadApi($this->tokens,fn(int $now)=>$repo->snapshot($now));
     }
     private function credentials(string $version): void
@@ -144,7 +145,7 @@ require AUTOLOAD;
 use Cowprod\DevMcp\Distributed\Admin\{AdminReadApi,AdminReadTokens,AdminReadRepository,AdminSession};
 $root=ROOT;
 $tokens=new AdminReadTokens(new AdminSession($root.'/auth.php',$root),$root);
-$repo=new AdminReadRepository(new PDO('sqlite:'.$root.'/registry.sqlite'),fn()=>json_decode(file_get_contents($root.'/inventory.json'),true),['name'=>'touchdeck','os'=>'linux','architecture'=>'x86_64'],'192.168.194.189');
+$repo=new AdminReadRepository(new PDO('sqlite:'.$root.'/registry.sqlite'),fn()=>json_decode(file_get_contents($root.'/inventory.json'),true),['name'=>'touchdeck','os'=>'linux','architecture'=>'x86_64']);
 $api=new AdminReadApi($tokens,fn($now)=>$repo->snapshot($now));
 AdminReadApi::emit($api->handle($_SERVER['REQUEST_METHOD'],parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH),getallheaders(),file_get_contents('php://input'),true,$_SERVER['REMOTE_ADDR'],1800000000));
 ROUTER;

@@ -14,17 +14,6 @@ final class McpProjectServiceClientTest extends TestCase
 {
     private const JOB = '0123456789abcdef0123456789abcdef';
 
-    public function testInventoryUsesOnlyTheExistingReadOnlyTool(): void
-    {
-        $tools = [];
-        $client = new McpProjectServiceClient(static function(array $request, ?string $session) use (&$tools): array {
-            if (($request['method'] ?? null) === 'tools/call') $tools[] = $request['params'];
-            return self::answer($request, ['projects'=>[['id'=>'counter']]]);
-        });
-        self::assertSame(['projects'=>[['id'=>'counter']]], $client->inventory());
-        self::assertSame([['name'=>'project_list','arguments'=>[]]], $tools);
-    }
-
     public function testStartDelegatesOnlyTheExplicitBoundedOperationToMcp(): void
     {
         $calls = [];
