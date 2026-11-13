@@ -1,0 +1,11 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Distributed\Admin\PublicProjectCatalogue;
+try{
+    if(PHP_SAPI!=='cli'||$argc!==2||!in_array($argv[1],['--live','--metadata-only'],true))throw new RuntimeException('Expected --live or --metadata-only');
+    $config=require (getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
+    $catalogue=PublicProjectCatalogue::live($config,$argv[1]==='--live');
+    echo json_encode($catalogue,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)."\n";
+}catch(Throwable $error){fwrite(STDERR,'Live catalogue unavailable: '.get_class($error)."\n");exit(1);}

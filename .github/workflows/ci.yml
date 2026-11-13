@@ -97,6 +97,7 @@ jobs:
           php -l src/Distributed/Admin/LocalProjectSnapshot.php
           php -l src/Distributed/Admin/AndroidSnapshot.php
           php -l src/Distributed/Admin/PublicProjectCatalogue.php
+          php -l bin/devmcp-project-catalogue
           php -l bin/devmcp-admin-projects-export
           php -l bin/devmcp-admin-android
           python3 -m py_compile bin/devmcp-serial-capture

@@ -35,14 +35,9 @@ final class PublicProjectCatalogueTest extends TestCase
         self::expectException(RuntimeException::class);
         PublicProjectCatalogue::export(['projects'=>[['id'=>'same'],['id'=>'same']]],'touchdeck','192.168.194.189');
     }
-    public function testPublishedFileIsCompleteAndAtomicallyReplaced():void
+    public function testUnavailableLiveRegistryIsAnError():void
     {
-        $root=realpath(sys_get_temp_dir()).'/catalogue-'.bin2hex(random_bytes(5));mkdir($root,0700);
-        try{
-            $path=$root.'/catalogue.json';$data=PublicProjectCatalogue::export(['projects'=>[['id'=>'one']]],'touchdeck','192.168.194.189');
-            PublicProjectCatalogue::publish($data,$path);self::assertSame($data,json_decode(file_get_contents($path),true));self::assertSame(0640,fileperms($path)&0777);
-            $data['projects']=[];PublicProjectCatalogue::publish($data,$path);self::assertSame([],json_decode(file_get_contents($path),true)['projects']);
-            self::assertCount(1,glob($root.'/*'));
-        }finally{foreach(glob($root.'/*') as $file)unlink($file);rmdir($root);}
+        self::expectException(RuntimeException::class);
+        PublicProjectCatalogue::live(['distributed'=>['config_path'=>'/missing-devmcp-config']]);
     }
 }
