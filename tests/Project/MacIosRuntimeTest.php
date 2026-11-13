@@ -28,6 +28,14 @@ final class MacIosRuntimeTest extends TestCase
         $config=MacIosRuntime::configuration(['kind'=>'workspace','path'=>'native/App.xcworkspace','scheme'=>'App','configuration'=>'Release']);
         self::assertSame('native/App.xcworkspace',$config['path']);self::assertNull($config['team_id']);
     }
+    public function testExportUsesAppleRsyncBeforeHomebrewWithoutChangingOtherEnvironment(): void
+    {
+        $method=new \ReflectionMethod(MacIosRuntime::class,'exportEnvironment');
+        $env=$method->invoke(null,['PATH'=>'/opt/homebrew/bin:/usr/local/bin:/usr/bin','LANG'=>'en_US.UTF-8']);
+        self::assertStringStartsWith('/usr/bin:/bin:/usr/sbin:/sbin:', $env['PATH']);
+        self::assertStringContainsString('/opt/homebrew/bin', $env['PATH']);
+        self::assertSame('en_US.UTF-8',$env['LANG']);
+    }
     public function testRejectsContainerTraversal(): void
     {
         self::expectException(\InvalidArgumentException::class);
