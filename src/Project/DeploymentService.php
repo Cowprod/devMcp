@@ -69,7 +69,7 @@ final class DeploymentService
             // Re-read under the machine lock; concurrent editors must supply the current revision.
             $row=(new DeploymentRegistry($this->db))->get($id);
             $previous=$row['config_json']===null?[]:json_decode($row['config_json'],true,32,JSON_THROW_ON_ERROR);
-            if(!array_key_exists('variables',$requested))$config['variables']=$previous['variables']??[];
+            if(!array_key_exists('variables',$requested)&&($requested['clear_variables']??false)!==true)$config['variables']=$previous['variables']??[];
             if(!array_key_exists('port',$requested))$config['port']=$previous['port']??null;
             if((int)$row['config_revision']!==$revision)throw new InvalidArgumentException('Deployment configuration revision conflict');
             $q=$this->db->prepare("SELECT COUNT(*) FROM dm_remote_project_job WHERE deployment_id=? AND state IN ('preparing','queued','claimed')");$q->execute([$id]);

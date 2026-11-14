@@ -1,5 +1,7 @@
 # One project, multiple machine deployments
 
+MCP server feature version: 0.6.0.
+
 A project remains one `dm_project` record and one registered GitHub repository. A managed instance is identified by the existing `dm_deployment.id`. Version, workspace, runtime, desired configuration and jobs belong to that deployment, not to a global project target. Version 1 permits one deployment per project/machine pair, preserving the existing registry constraint. Several machines may use the same port.
 
 ## Compatibility and rollout
@@ -18,7 +20,7 @@ Existing installations absent from the registry are **not adopted** by registrat
 4. `deployment_action_start` with action `create` and an exact source commit prepares that instance's workspace. Follow the job with `job_status`.
 5. The same tool with action `deploy`, exact commit and runtime `static`, `php` or `node` deploys only that instance.
 6. Actions `sync`, `status`, `logs`, `stop`, `restart` remain instance-scoped. Sync needs a commit. Stop/restart operate on the existing service and active version; they do not activate a merely staged revision. Stop also disables automatic launch at reboot; restart/deploy enables it explicitly.
-7. `deployment_configure` requires the current configuration revision. An in-flight operation blocks edits. Changes apply with the next deploy. Omitting variables preserves existing values; explicitly providing `{}` clears them. Omitted port preserves the current configuration; a null port uses the agent's stable automatic allocation.
+7. `deployment_configure` requires the current configuration revision. An in-flight operation blocks edits. Changes apply with the next deploy. Omitting variables preserves existing values; the MCP field `clear_variables: true` explicitly clears them (do not combine it with replacement values). In the Web form, an explicit `{}` also clears them. Omitted port preserves the current configuration; a null port uses the agent's stable automatic allocation.
 
 A source-bearing job first enters `preparing`. The existing central worker uses its own GitHub SSH identity and existing source snapshot validator, then queues the authenticated agent job. PHP-FPM never needs the private GitHub key. Failed source preparation never queues an agent operation or changes another instance. No generic command execution endpoint is added.
 

@@ -7,9 +7,11 @@ final class DeploymentConfiguration
 {
     public static function validate(array $value): array
     {
-        if(array_diff(array_keys($value),['port','variables']))throw new InvalidArgumentException('Unknown deployment configuration field');
+        if(array_diff(array_keys($value),['port','variables','clear_variables']))throw new InvalidArgumentException('Unknown deployment configuration field');
         $port=$value['port']??null;
         if($port!==null&&(!is_int($port)||$port<12000||$port>19999))throw new InvalidArgumentException('Deployment port must be inside the approved hosting range 12000..19999');
+        if(array_key_exists('clear_variables',$value)&&!is_bool($value['clear_variables']))throw new InvalidArgumentException('clear_variables must be a boolean');
+        if(($value['clear_variables']??false)===true&&array_key_exists('variables',$value))throw new InvalidArgumentException('Choose either replacement variables or clear_variables, never both');
         $variables=$value['variables']??[];
         if(!is_array($variables)||count($variables)>64)throw new InvalidArgumentException('At most 64 environment variables are supported');
         foreach($variables as $name=>$text){

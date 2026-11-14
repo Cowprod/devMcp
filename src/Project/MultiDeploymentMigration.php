@@ -8,6 +8,7 @@ final class MultiDeploymentMigration
 {
     public static function apply(PDO $db,?string $backupDirectory=null): void
     {
+        if($db->inTransaction())throw new RuntimeException('Migration requires an idle database connection');
         $columns=static function(string $table)use($db):array{return array_column($db->query('SHOW COLUMNS FROM `'.$table.'`')->fetchAll(PDO::FETCH_ASSOC),'Field');};
         $initial=$db->query('SHOW INDEX FROM dm_remote_project')->fetchAll(PDO::FETCH_ASSOC);
         $oldPrimary=array_values(array_filter($initial,static fn($i)=>$i['Key_name']==='PRIMARY'));
@@ -29,11 +30,13 @@ final class MultiDeploymentMigration
     private static function backup(PDO $db,string $directory): void
     {
         if(is_link($directory)||(!is_dir($directory)&&!mkdir($directory,0700,true)))throw new RuntimeException('Private migration backup directory unavailable');
-        chmod($directory,0700);
+        if(!chmod($directory,0700))throw new RuntimeException('Cannot protect migration backup directory');
         $file=$directory.'/before-instances-'.gmdate('Ymd-His').'-'.bin2hex(random_bytes(6)).'.sql';
-        $handle=fopen($file,'xb');if(!is_resource($handle))throw new RuntimeException('Migration backup unavailable');chmod($file,0600);
+        $pending=$file.'.pending';$handle=fopen($pending,'xb');if(!is_resource($handle))throw new RuntimeException('Migration backup unavailable');if(!chmod($pending,0600)){fclose($handle);throw new RuntimeException('Cannot protect migration backup');}
         $write=static function(string $sql)use($handle):void{if(fwrite($handle,$sql)!==strlen($sql))throw new RuntimeException('Incomplete migration backup; schema not changed');};
         try{
+            if($db->inTransaction())throw new RuntimeException('Migration backup requires its own consistent snapshot');
+            $db->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');$db->beginTransaction();
             $write("SET @OLD_SQL_MODE=@@SQL_MODE;\nSET SQL_MODE=".$db->quote((string)$db->query('SELECT @@SESSION.sql_mode')->fetchColumn()).";\nSET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS;\nSET FOREIGN_KEY_CHECKS=0;\n");
             foreach(['dm_deployment','dm_remote_project','dm_remote_project_job'] as $table){
                 $create=$db->query('SHOW CREATE TABLE `'.$table.'`')->fetch(PDO::FETCH_NUM)[1];
@@ -46,7 +49,9 @@ final class MultiDeploymentMigration
                 }
             }
             $write("SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;\nSET SQL_MODE=@OLD_SQL_MODE;\n");if(!fflush($handle)||!fsync($handle))throw new RuntimeException('Migration backup could not be synchronized');
-        }finally{fclose($handle);}
+            $db->commit();
+        }finally{if($db->inTransaction())$db->rollBack();fclose($handle);}
+        if(!rename($pending,$file))throw new RuntimeException('Cannot publish the completed migration backup');
     }
 
 }

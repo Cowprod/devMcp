@@ -144,7 +144,8 @@ final class ServerFactory
             'required' => ['action'], 'additionalProperties' => false,
         ];
         $instanceConfigSchema=['type'=>'object','properties'=>['port'=>['type'=>['integer','null'],'minimum'=>12000,'maximum'=>19999],
-            'variables'=>['type'=>'object','additionalProperties'=>['type'=>'string']]],'additionalProperties'=>false];
+            'variables'=>['type'=>'object','minProperties'=>1,'additionalProperties'=>['type'=>'string'],'description'=>'Valeurs de remplacement non vides ; omettre pour conserver. Pour tout effacer, utiliser clear_variables:true.'],
+            'clear_variables'=>['type'=>'boolean','description'=>'Effacement explicite de toutes les variables. Ne pas fournir variables simultanément.']],'minProperties'=>1,'additionalProperties'=>false];
         $instanceRegisterSchema=['type'=>'object','properties'=>['project'=>['type'=>'string'],'machine_id'=>['type'=>'string','pattern'=>'^[a-f0-9]{32}$'],
             'confirmation'=>['type'=>'string','enum'=>['ADD_DEPLOYMENT']],'workspace_path'=>['type'=>['string','null']],
             'configuration'=>$instanceConfigSchema],'required'=>['project','machine_id','confirmation'],'additionalProperties'=>false];
@@ -158,7 +159,7 @@ final class ServerFactory
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
-                '0.5.0',
+                '0.6.0',
                 description: 'Plan d’exécution de développement borné par projet.',
             )
             ->addTool([$myTrackMePoc, 'call'], 'mytrackme_poc',

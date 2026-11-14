@@ -69,6 +69,33 @@ final class MultiDeploymentRegistryTest extends TestCase
         $this->db->prepare("INSERT INTO dm_remote_project_job(id,deployment_id,state) VALUES ('job',?,'preparing')")->execute([$a['deployment_id']]);
         try{$this->service->configure($a['deployment_id'],1,['port'=>12345]);self::fail('Changed queued configuration');}catch(InvalidArgumentException $e){self::assertStringContainsString('in-flight',$e->getMessage());}
     }
+    public function testMcpSchemaBindingsAndExplicitLocalSelectionWorkOverTheRealTransport():void
+    {
+        $a=$this->add($this->a,['variables'=>['PRIVATE_TOKEN'=>'never-return-this']]);$this->add($this->b);
+        $root=realpath(sys_get_temp_dir()).'/devmcp-multi-wire-'.bin2hex(random_bytes(5));mkdir($root,0700);
+        try{
+            $registry=\Cowprod\DevMcp\Project\ProjectRegistry::fromConfig(['projects'=>['shared-app'=>['root'=>$root,'actions'=>[]]]]);
+            $audit=new \Cowprod\DevMcp\Audit\AuditLogger($root.'/audit.jsonl');
+            $jobs=new \Cowprod\DevMcp\Execution\JobManager($registry,new \Cowprod\DevMcp\Execution\FileJobStore($root.'/jobs'),new \Cowprod\DevMcp\Artifact\ArtifactService(),$audit);
+            $tools=new \Cowprod\DevMcp\Mcp\ProjectTools($registry,new \Cowprod\DevMcp\Execution\ActionRunner($audit),$jobs,$audit,new \Cowprod\DevMcp\Mcp\HostTools(),new \Cowprod\DevMcp\Mcp\RemoteTools($this->db));
+            $call=static fn($name,$args)=>\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,$name,$args);
+            $list=$call('deployment_list',['project'=>'shared-app']);self::assertCount(2,$list['result']['structuredContent']['deployments']);self::assertStringNotContainsString('never-return-this',json_encode($list));
+            $changed=$call('deployment_configure',['deployment_id'=>$a['deployment_id'],'revision'=>1,'configuration'=>['port'=>12343]]);
+            self::assertSame(2,$changed['result']['structuredContent']['configuration_revision']);self::assertSame(['PRIVATE_TOKEN'],$changed['result']['structuredContent']['variable_names']);
+            $withVariables=$call('deployment_configure',['deployment_id'=>$a['deployment_id'],'revision'=>2,'configuration'=>['variables'=>['PRIVATE_TOKEN'=>'replacement-secret']]]);
+            self::assertSame(3,$withVariables['result']['structuredContent']['configuration_revision']);self::assertStringNotContainsString('replacement-secret',json_encode($withVariables));
+            $cleared=$call('deployment_configure',['deployment_id'=>$a['deployment_id'],'revision'=>3,'configuration'=>['clear_variables'=>true]]);
+            self::assertArrayHasKey('result',$cleared,json_encode($cleared));self::assertFalse($cleared['result']['isError']??false,json_encode($cleared));
+            self::assertSame([],$cleared['result']['structuredContent']['variable_names']);self::assertSame(4,$cleared['result']['structuredContent']['configuration_revision']);
+            $bad=$call('deployment_configure',['deployment_id'=>$a['deployment_id'],'revision'=>1,'configuration'=>['port'=>12344]]);
+            self::assertArrayNotHasKey('error',$bad);self::assertTrue($bad['result']['isError']);
+            $ambiguous=$call('action_list',['project'=>'shared-app']);self::assertTrue($ambiguous['result']['isError']);
+            $detail=json_decode($ambiguous['result']['content'][0]['text'],true);self::assertSame('DEPLOYMENT_REQUIRED',$detail['code']);self::assertCount(3,$detail['deployments']);
+            $local=$call('action_list',['project'=>'shared-app','deployment_id'=>'local']);self::assertSame([],$local['result']['structuredContent']['actions']);
+        }finally{
+            foreach(glob($root.'/*')?:[] as $path){if(is_file($path))unlink($path);elseif(is_dir($path))rmdir($path);}rmdir($root);
+        }
+    }
     public function testJobResultNeverReturnsPrivateRequestOrUnknownResultFields():void
     {
         $a=$this->add($this->a);$id=str_repeat('d',32);
@@ -76,7 +103,7 @@ final class MultiDeploymentRegistryTest extends TestCase
         $result=$this->service->job($id);self::assertTrue($result['ok']);self::assertSame(str_repeat('f',40),$result['data']['active_revision']);
         self::assertStringNotContainsString('request-secret',json_encode($result));self::assertStringNotContainsString('result-secret',json_encode($result));
     }
-    public static function forbiddenConfigurations():array{return [[['port'=>80]],[['port'=>20000]],[['variables'=>['PORT'=>'12345']]],[['variables'=>['LD_PRELOAD'=>'/tmp/code.so']]],[['variables'=>['PRIVATE'=>'one'."\n".'two']]],[['variables'=>['bad-name'=>'value']]],[['variables'=>['VALID'=>[]]]]];}
+    public static function forbiddenConfigurations():array{return [[['clear_variables'=>'yes']],[['clear_variables'=>true,'variables'=>['VALUE'=>'conflict']]],[['port'=>80]],[['port'=>20000]],[['variables'=>['PORT'=>'12345']]],[['variables'=>['LD_PRELOAD'=>'/tmp/code.so']]],[['variables'=>['PRIVATE'=>'one'."\n".'two']]],[['variables'=>['bad-name'=>'value']]],[['variables'=>['VALID'=>[]]]]];}
     #[\PHPUnit\Framework\Attributes\DataProvider('forbiddenConfigurations')]
     public function testRejectsUnsafeConfiguration(array $configuration):void{self::expectException(InvalidArgumentException::class);DeploymentConfiguration::validate($configuration);}
 }
