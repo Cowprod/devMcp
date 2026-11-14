@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 use RuntimeException;
 require_once __DIR__.'/MobileBuildRetention.php';
+require_once __DIR__.'/MacSigningTeams.php';
 
 /** Xcode builds run as the enrolled macOS user, never as root. */
 final class MacIosRuntime
@@ -12,10 +13,14 @@ final class MacIosRuntime
     {
         $developer = trim(self::capture(['/usr/bin/xcode-select','-p'],[0,2]));
         $full = is_file($developer.'/usr/bin/xcodebuild');
+        $identities = trim(self::capture(['/usr/bin/security','find-identity','-v','-p','codesigning']));
+        $teams = MacSigningTeams::fromKeychain($identities, self::capture(['/usr/bin/security','find-certificate','-a','-p'],[0,44]));
         return ['build_kinds'=>['project','workspace','cordova'],'platform'=>'macos','architecture'=>php_uname('m'),'developer_directory'=>$developer,
             'full_xcode'=>$full,'xcode_version'=>$full?trim(self::capture(['/usr/bin/xcodebuild','-version'])):null,
             'sdks'=>$full?trim(self::capture(['/usr/bin/xcodebuild','-showsdks'])):null,
-            'signing_identities'=>trim(self::capture(['/usr/bin/security','find-identity','-v','-p','codesigning'])),
+            'signing_identities'=>$identities,
+            'signing_teams'=>$teams,'signing_teams_checked_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
+            'signing_guidance'=>'Use signing_teams[].id for team_id. Never infer a Team ID from the certificate common name. A signing identity does not guarantee provisioning/export permission.',
             'setup_required'=>$full?[]:['Install full Xcode, select it with xcode-select, and complete its first launch']];
     }
 
@@ -35,12 +40,19 @@ final class MacIosRuntime
             if(is_file($resultFile))return json_decode(file_get_contents($resultFile),true,16,JSON_THROW_ON_ERROR);
             if(file_exists($output))throw new RuntimeException('Previous build incomplete; inspect its log and start a new job');
             $log=$output.'/build.log';
-            MobileBuildRetention::begin($workspace,'ios',$id,$tools['build_start']??null);
             $configFile=$source.'/.devmcp/ios.json';
-            if(!is_file($configFile)||is_link($configFile))throw new RuntimeException('Missing .devmcp/ios.json build configuration');
-            $config=self::configuration(json_decode(file_get_contents($configFile),true,16,JSON_THROW_ON_ERROR));
+            try {
+                if(!is_file($configFile)||is_link($configFile))throw new RuntimeException('Missing .devmcp/ios.json build configuration');
+                $config=self::configuration(json_decode(file_get_contents($configFile),true,16,JSON_THROW_ON_ERROR));
+            } catch (\Throwable $error) {
+                // Preserve the existing retention/logging contract for invalid project sources.
+                MobileBuildRetention::begin($workspace,'ios',$id,$tools['build_start']??null);
+                throw $error;
+            }
             $caps=self::capabilities();
             if(!$caps['full_xcode'])throw new RuntimeException('Full Xcode is required; install it and complete first launch');
+            $team = $args['target'] === 'device' ? MacSigningTeams::requireTeam($args['team_id'] ?? $config['team_id'], $caps['signing_teams']) : null;
+            MobileBuildRetention::begin($workspace,'ios',$id,$tools['build_start']??null);
             $environment=null;
             $run=static function(array $argv,?string $cwd=null)use(&$environment,&$source,$log):void{self::command($argv,$cwd??$source,$log,$environment);};
             if($config['kind']==='cordova'){
@@ -71,7 +83,6 @@ final class MacIosRuntime
                 $signed=false;
             } else {
                 if(!preg_match('/[1-9][0-9]* valid identities found/',$caps['signing_identities']))throw new RuntimeException('No valid Apple signing identity; configure Xcode Accounts and Manage Certificates');
-                $team=$args['team_id']??$config['team_id'];
                 if(!is_string($team)||!preg_match('/^[A-Z0-9]{10}$/D',$team))throw new RuntimeException('An explicit Apple developer team_id is required');
                 $archive=$output.'/App.xcarchive';
                 $run([...$common,'-destination','generic/platform=iOS','-archivePath',$archive,
