@@ -43,9 +43,9 @@ final class PreviewHttpProbe
         return 'offline';
     }
 
-    public static function check(int $port, string $ipv4 = '127.0.0.1'): array
+    public static function check(int $port, string $ipv4 = '127.0.0.1', string $method = 'HEAD'): array
     {
-        if ($port < 1024 || $port > 65535
+        if (!in_array($method, ['HEAD', 'GET'], true) || $port < 1024 || $port > 65535
             || filter_var($ipv4, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
             throw new InvalidArgumentException('Adresse ou port de prévisualisation invalide');
         }
@@ -64,7 +64,7 @@ final class PreviewHttpProbe
         }
         try {
             stream_set_timeout($socket, 0, (int) (self::TIMEOUT_SECONDS * 1000000));
-            $request = "HEAD / HTTP/1.1\r\nHost: " . $ipv4
+            $request = $method . " / HTTP/1.1\r\nHost: " . $ipv4
                 . "\r\nConnection: close\r\nUser-Agent: devmcp-local-preview-check\r\n\r\n";
             if (@fwrite($socket, $request) !== strlen($request)) {
                 return ['state' => 'tcp', 'status_code' => null];

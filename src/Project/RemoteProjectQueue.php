@@ -194,7 +194,7 @@ final class RemoteProjectQueue
                     $port = $data['port'] ?? null;
                     if (!is_string($ip) || !is_int($port) || $port < 12000 || $port > 19999
                         || ($data['url'] ?? '') !== 'http://' . $ip . ':' . $port
-                        || PreviewHttpProbe::check($port, $ip)['status_code'] !== 200) {
+                        || PreviewHttpProbe::check($port, $ip, 'GET')['status_code'] !== 200) {
                         throw new RuntimeException('Project HTTP is not reachable from the central ZeroTier peer');
                     }
                     $data['central_http_verified'] = true;
