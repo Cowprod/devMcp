@@ -236,3 +236,15 @@ début du build authentifié. **Les anciens liens deviennent invalides, même si
 le nouveau build échoue.** iOS et Android, les projets et les machines sont isolés.
 L’historique des états de jobs et ses extraits de diagnostic bornés reste dans
 le registre ; les gros fichiers et journaux complets ne s’accumulent plus.
+
+## Discover signing teams instead of guessing identifiers
+
+1. `action_list({"project":"my-app"})` returns public IDs such as `ios.capabilities` and `ios.build`. `ios_build` is an internal job operation, not a public action ID.
+2. `action_start({"project":"my-app","action":"ios.capabilities"})` queues a read-only inspection. Await its `job_status` result.
+3. The result adds `signing_teams`, e.g. `[{"id":"FB3A74YU84","name":"Listee","signing_certificate_count":2}]`, and an observation timestamp. Actual values come from the target Mac, never a hardcoded team list. Public certificates are matched to valid codesigning identities with available private keys. The Team ID is certificate subject **OU**, the label is **O**; the identifier in the common name **CN** is not used. Expired certificates, missing private signing identities and duplicate certificates do not become extra teams. This inventory is not a guarantee of provisioning or export authorization.
+4. `action_describe({"project":"my-app","action":"ios.build"})` supplies `arguments_schema`, guidance and the latest inventory for this machine. Fresh observations (15 minutes, measured from central receipt) provide named choices and a JSON Schema `enum`. Missing/old observations are explicitly `refresh_required`/`stale`, never silently current. Refresh with step 2.
+5. Start `ios.build` with explicit `target` and exact 40-character `commit`. For a device, choose `team_id` from the discovered IDs, or explicitly set it in the project's existing `.devmcp/ios.json`. Even a single team is never selected implicitly. Simulator builds accept neither signing team nor export method.
+
+Unknown actions and invalid build arguments return an MCP tool result with `isError: true`, a JSON error code, explanation and relevant choices/next action. They do not become a generic internal JSON-RPC error. An unknown team in a fresh central observation is refused before source packaging/queueing. The Mac always rechecks the chosen or configured team against its live keychain **before build retention and Xcode execution**, regardless of the central observation's age. Invalid signing choices do not delete the preceding build.
+
+No new SQL table, arbitrary commands, private key export or account credential storage is introduced. The existing `signing_identities` field is retained for compatibility, but clients should use `signing_teams` for selection. Existing explicit project `team_id` settings are preserved.

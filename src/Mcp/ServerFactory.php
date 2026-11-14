@@ -24,7 +24,7 @@ final class ServerFactory
                 ],
                 'action' => [
                     'type' => 'string',
-                    'description' => 'Identifiant de l’action déclarée côté serveur.',
+                    'description' => 'Identifiant public exact fourni par action_list, par exemple ios.build (jamais ios_build, nom interne de job). Appeler action_describe pour les paramètres et ios.capabilities pour les équipes Apple.',
                 ],
                 'arguments' => [
                     'type' => 'object',
@@ -201,7 +201,7 @@ final class ServerFactory
                 inputSchema: $projectPreviewSchema,
             )
             ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
-            ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée.')
+            ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée, ses paramètres et contraintes. Pour ios.build : schéma JSON et équipes de signature détectées ; actualiser avec ios.capabilities si nécessaire.')
             ->addTool(
                 [$tools, 'actionRun'],
                 'action_run',
@@ -211,7 +211,7 @@ final class ServerFactory
             ->addTool(
                 [$tools, 'actionStart'],
                 'action_start',
-                description: 'Met une action déclarée et ses arguments typés dans la file des jobs.',
+                description: 'Met une action publique déclarée dans la file des jobs. Consulter action_list et action_describe avant utilisation. Pour iOS : action ios.build, arguments target et commit obligatoires ; choisir team_id via ios.capabilities, jamais depuis le nom du certificat. Retourne job_id à suivre avec job_status.',
                 inputSchema: $actionInputSchema,
             )
             ->addTool([$tools, 'jobStatus'], 'job_status', description: 'Retourne l’état persistant d’un job.')

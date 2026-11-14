@@ -10,6 +10,7 @@ use Cowprod\DevMcp\Project\ProvisioningStore;
 use Cowprod\DevMcp\Project\PreviewPortAllocator;
 use PDO;
 use RuntimeException;
+use Mcp\Exception\ToolCallException;
 
 /**
  * MCP access to approved remote read-only deployments.
@@ -41,11 +42,12 @@ final class RemoteTools
             'ios.capabilities' => 'ios_capabilities', 'ios.build' => 'ios_build', 'android.build' => 'android_build',
             'project.status' => 'status', 'project.logs' => 'logs', 'git.head' => 'head',
             'workspace.list' => 'list', 'workspace.read' => 'read', 'workspace.stat' => 'stat', 'workspace.find' => 'find',
-            default => throw new InvalidArgumentException('Unknown managed remote action'),
+            default => self::reject('UNKNOWN_ACTION', 'Use the exact public action id from action_list, for example ios.build, not the internal job name ios_build.', ['allowed_actions'=>array_column($this->actions($project)['actions'],'id')]),
         };
         if(str_starts_with($operation,'ios_')&&$record['os_family']!=='macos')throw new InvalidArgumentException('iOS builds require a macOS agent');
         if($operation==='android_build'&&$record['os_family']!=='macos')throw new InvalidArgumentException('Managed Cordova Android builds currently require a macOS agent');
         $q->assertOperationAllowed($record,$operation);
+        $this->action($project, $action);
         if ((int) $record['ready'] !== 1 && $operation !== 'create') {
             throw new RuntimeException('Wait for the workspace creation job before using this project');
         }
@@ -55,14 +57,14 @@ final class RemoteTools
             'list', 'read', 'stat', 'find' => ['path'], default => [],
         };
         if (array_diff(array_keys($arguments), $allowed)) {
-            throw new InvalidArgumentException('Unknown remote project argument');
+            self::reject('UNKNOWN_ARGUMENT', 'Unknown remote project argument', ['allowed_arguments'=>$allowed]);
         }
         $details = [];
         if (in_array($operation, ['create', 'sync', 'deploy', 'ios_build', 'android_build'], true)) {
             $commit = $arguments['commit'] ?? null;
             if ((in_array($operation,['sync','ios_build','android_build'],true) && $commit === null)
                 || ($commit !== null && (!is_string($commit) || preg_match('/^[a-f0-9]{40}$/D', $commit) !== 1))) {
-                throw new InvalidArgumentException('Exact Git commit required');
+                self::reject('EXACT_COMMIT_REQUIRED', 'commit must be an exact Git SHA of 40 lowercase hexadecimal characters.', ['required_arguments'=>$operation==='ios_build'?['target','commit']:['commit']]);
             }
             if ($operation === 'deploy') {
                 if (!in_array($arguments['runtime'] ?? null, ['static', 'php', 'node'], true)) {
@@ -73,7 +75,14 @@ final class RemoteTools
             if($operation==='android_build')$details['arguments']=[];
             if($operation==='ios_build'){
                 $details['arguments']=array_diff_key($arguments,['commit'=>true]);
-                \Cowprod\DevMcp\Project\MacIosRuntime::arguments($details['arguments']);
+                try { \Cowprod\DevMcp\Project\MacIosRuntime::arguments($details['arguments']); }
+                catch (RuntimeException $error) { self::reject('INVALID_IOS_BUILD_ARGUMENTS', $error->getMessage(), ['discovery_action'=>'ios.capabilities']); }
+                if (($arguments['target'] ?? null) === 'device' && isset($arguments['team_id'])) {
+                    $signing = $this->signingTeams($record['machine_id']);
+                    if ($signing['status'] === 'current' && !in_array($arguments['team_id'], array_column($signing['teams'], 'id'), true)) {
+                        self::reject('APPLE_TEAM_UNAVAILABLE', 'team_id is not in the recent signing inventory. Refresh ios.capabilities if signing credentials changed.', ['available_teams'=>$signing['teams'],'discovery_action'=>'ios.capabilities']);
+                    }
+                }
             }
             $details['package'] = (new \Cowprod\DevMcp\Project\RemoteProjectSource($this->sourceRoot))
                 ->snapshot($project, $record['repository'], $commit);
@@ -287,10 +296,48 @@ final class RemoteTools
     {
         foreach ($this->actions($project)['actions'] as $entry) {
             if ($entry['id'] === $action) {
+                if ($action === 'ios.build') {
+                    $record = $this->projectQueue()->project($project);
+                    $entry['signing'] = $this->signingTeams($record['machine_id']);
+                    $entry['guidance'] = 'Call action_start with action ios.capabilities and await job_status to discover actual signing teams. Use their id, never certificate CN identifiers. Then action_start ios.build with target and exact commit. No team is selected implicitly; an explicit project team_id may be used.';
+                    $entry['arguments_schema'] = ['type'=>'object','properties'=>[
+                        'target'=>['type'=>'string','enum'=>['simulator','device']],
+                        'commit'=>['type'=>'string','pattern'=>'^[a-f0-9]{40}$'],
+                        'team_id'=>['type'=>'string','pattern'=>'^[A-Z0-9]{10}$','description'=>'Apple Team ID from ios.capabilities.signing_teams[].id; optional only when configured explicitly in the project.'],
+                        'method'=>['type'=>'string','enum'=>['debugging','release-testing']],
+                    ],'required'=>['target','commit'],'additionalProperties'=>false];
+                    if ($entry['signing']['status'] === 'current' && $entry['signing']['teams'] !== []) {
+                        $entry['arguments_schema']['properties']['team_id']['enum'] = array_column($entry['signing']['teams'],'id');
+                        foreach ($entry['parameters'] as &$parameter) if ($parameter['id'] === 'team_id') {
+                            $parameter['choices'] = $entry['signing']['teams'];
+                            $parameter['values'] = array_column($entry['signing']['teams'],'id');
+                        }
+                        unset($parameter);
+                    }
+                }
                 return $entry;
             }
         }
-        throw new InvalidArgumentException('Remote action not allowed');
+        self::reject('UNKNOWN_ACTION', 'Use an exact public action id from action_list. Internal job operation names such as ios_build are not action ids.', ['allowed_actions'=>array_column($this->actions($project)['actions'],'id')]);
+    }
+
+    private static function reject(string $code, string $message, array $details = []): never
+    {
+        throw new ToolCallException(json_encode(['code'=>$code,'message'=>$message]+$details, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function signingTeams(string $machine): array
+    {
+        $query = $this->db->prepare("SELECT result_json,finished_at FROM dm_remote_project_job WHERE machine_id=? AND operation='ios_capabilities' AND state='succeeded' ORDER BY finished_at DESC,id DESC LIMIT 1");
+        $query->execute([$machine]);
+        $row = $query->fetch(PDO::FETCH_ASSOC);
+        $data = $row === false ? null : json_decode($row['result_json'], true, 32, JSON_THROW_ON_ERROR);
+        $teams = $data['data']['signing_teams'] ?? null;
+        if (!is_array($teams)) return ['status'=>'refresh_required','teams'=>[],'checked_at_utc'=>null,'discovery_action'=>'ios.capabilities'];
+        $checked = strtotime($row['finished_at'].' UTC');
+        $age = $checked === false ? PHP_INT_MAX : time()-$checked;
+        return ['status'=>$age>=0 && $age<=900?'current':'stale','teams'=>$teams,
+            'checked_at_utc'=>$checked===false?null:gmdate('Y-m-d\TH:i:s\Z',$checked),'discovery_action'=>'ios.capabilities'];
     }
 
     public function start(string $project, string $action, array $arguments = []): array
