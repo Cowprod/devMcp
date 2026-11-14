@@ -74,6 +74,14 @@ if (isset($_GET['adb_log'])) {
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 // Same HTTPS session boundary as the administration page.
 // The Web process invokes only the existing local MCP action, never systemctl.
+if(isset($_GET['deployment_job'])){
+    header('Content-Type: application/json; charset=utf-8');header('X-Content-Type-Options: nosniff');
+    if(!in_array($_SERVER['REQUEST_METHOD']??'GET',['GET','HEAD'],true)){http_response_code(405);header('Allow: GET, HEAD');echo '{"error":"method_not_allowed"}';exit;}
+    try{$jobDb=DatabaseConnection::connect((string)$config['dsn'],(string)$config['username'],(string)$config['password']);echo json_encode((new \Cowprod\DevMcp\Project\DeploymentService($jobDb,'web-admin'))->job((string)$_GET['deployment_job']),JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);}
+    catch(InvalidArgumentException $e){http_response_code(404);echo '{"error":"unknown_deployment_job"}';}
+    catch(Throwable $e){http_response_code(503);error_log('devmcp-deployment-job: '.get_class($e));echo '{"error":"deployment_job_unavailable"}';}
+    exit;
+}
 if (isset($_GET['project_service_api'])) {
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
@@ -232,7 +240,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
         $writer = DatabaseConnection::connect((string) $config['dsn'], (string) $config['writer_username'], (string) $config['writer_password']);
         $editor = new RegistryEditor($writer);
+        $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,'web-admin');
+        $instanceConfiguration=static function():array{
+            $configuration=[];
+            if(isset($_POST['instance_port']))$configuration['port']=trim((string)$_POST['instance_port'])===''?null:(int)$_POST['instance_port'];
+            $text=trim((string)($_POST['instance_variables']??''));
+            if($text!==''){
+                $object=json_decode($text,false,32,JSON_THROW_ON_ERROR);
+                if(!$object instanceof \stdClass)throw new InvalidArgumentException('Les variables doivent être un objet JSON.');
+                $configuration['variables']=(array)$object;
+            }
+            return $configuration;
+        };
         switch ($_POST['operation'] ?? '') {
+            case 'instance.register':
+                $instances->add((string)($_POST['project_id']??''),(string)($_POST['machine_id']??''),trim((string)($_POST['workspace_path']??''))?:null,$instanceConfiguration(),(string)($_POST['confirmation']??''));
+                break;
+            case 'instance.configure':
+                $instances->configure((string)($_POST['deployment_id']??''),(int)($_POST['revision']??0),$instanceConfiguration(),trim((string)($_POST['workspace_path']??''))?:null);
+                break;
+            case 'instance.action':
+                $started=$instances->start((string)($_POST['deployment_id']??''),(string)($_POST['instance_action']??''),trim((string)($_POST['commit']??''))?:null,trim((string)($_POST['runtime']??''))?:null);
+                break;
             case 'machine.create':
                 $editor->createMachine((string) ($_POST['name'] ?? ''), (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''), \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::fromPost($_POST));
                 break;
@@ -304,6 +333,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'project.runtime.select' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
+                'instance.register','instance.configure','instance.action' => 'deployments',
                 'remote.readonly.enqueue' => 'projects', default => 'dashboard'
             };
             $location = '/?created=1';
@@ -512,10 +542,18 @@ foreach ($projectRows as &$projectRow) {
         ? 'http://' . $urlIp . ':' . $port : '';
 }
 unset($projectRow);
+$instanceReader=new \Cowprod\DevMcp\Project\DeploymentService($db,'web-admin');
+$managedInstances=$instanceReader->list();$managedTargets=$instanceReader->targets()['machines'];
 $managedProjects = $db->query('SELECT p.project_id,p.metadata_json,p.ready,p.workspace_path,m.name AS machine FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id')->fetchAll(PDO::FETCH_ASSOC);
+$managedCounts=array_count_values(array_column($managedProjects,'project_id'));
 foreach ($managedProjects as $managed) {
     $id = $managed['project_id'];
     if (!isset($projectRows[$id])) continue;
+    if(in_array($id,array_column($localSnapshot['projects'],'id'),true))continue;
+    if($managedCounts[$id]>1){
+        $projectRows[$id]['provisioning_machine']='Plusieurs machines';$projectRows[$id]['workspace']='';$projectRows[$id]['preview_url']='';
+        $projectRows[$id]['runtime_configurable']=false;$projectRows[$id]['service_control_available']=false;continue;
+    }
     $meta = $managed['metadata_json'] === null ? [] : json_decode($managed['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
     $projectRows[$id]['workspace'] = $managed['workspace_path'];
     $projectRows[$id]['provisioning_machine'] = $managed['machine'];
@@ -785,6 +823,43 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="input-group mb-3"><span class="input-group-text">Répertoire absolu</span><input class="form-control" name="workspace_path" placeholder="/home/user/project" maxlength="1024" required></div>
 <div class="btn-group"><button class="btn btn-success" type="submit" <?= !$projects || !$machines ? 'disabled' : '' ?>>Associer (exécution désactivée)</button></div>
 </form><small class="text-secondary">Association enregistrée sans démarrage de jobs. Le répertoire sera vérifié sur l'agent avant toute activation.</small>
+</div></section>
+<section class="card mb-4"><div class="card-body">
+<h2 class="h5">Instances gérées par machine</h2>
+<p class="small text-secondary">Un projet GitHub commun, un déploiement indépendant par machine. Les installations existantes ne sont jamais adoptées ni écrasées automatiquement.</p>
+<details class="mb-3"><summary>Ajouter une instance</summary>
+<form method="post" action="/" class="mt-3">
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="instance.register"><input type="hidden" name="confirmation" value="ADD_DEPLOYMENT">
+<label class="form-label">Projet</label><select class="form-select mb-2" name="project_id" required><?php foreach($projects as $p): ?><option value="<?= e($p['id']) ?>"><?= e($p['id']) ?></option><?php endforeach ?></select>
+<label class="form-label">Machine</label><select class="form-select mb-2" name="machine_id" required><?php foreach($managedTargets as $m): ?><option value="<?= e($m['machine_id']) ?>"><?= e($m['name']) ?></option><?php endforeach ?></select>
+<label class="form-label">Chemin (facultatif, sous la racine d’hébergement autorisée)</label><input class="form-control mb-2" name="workspace_path">
+<label class="form-label">Port (12000–19999, vide pour attribution sur l’agent)</label><input class="form-control mb-2" name="instance_port" type="number" min="12000" max="19999">
+<label class="form-label">Variables JSON (facultatif)</label><textarea class="form-control mb-2" name="instance_variables" autocomplete="off" spellcheck="false" placeholder='{"APP_MODE":"lab"}'></textarea>
+<button class="btn btn-success" type="submit" <?= !$managedTargets?'disabled':'' ?>>Déclarer cette instance</button>
+</form></details>
+<?php foreach($managedInstances as $instance): $instanceDetail=$instanceReader->describe($instance['deployment_id']); ?>
+<div class="border rounded p-3 mb-3">
+<h3 class="h6"><?= e($instance['project_id']) ?> · <?= e($instance['machine']) ?></h3>
+<div class="small text-secondary mb-2">ID <code><?= e($instance['deployment_id']) ?></code><br>Chemin <code><?= e($instance['workspace_path']) ?></code><br>
+État observé : <?= e($instance['service_state']??'Non contrôlé') ?> · <?= e($instance['checked_at_utc']??'Jamais') ?> UTC<br>
+Configuration demandée / appliquée : <?= e($instance['configuration_revision']) ?> / <?= e($instance['applied_configuration_revision']??'Non contrôlée') ?><br>
+Version préparée : <code><?= e($instance['revision']??'—') ?></code><br>Version déployée : <code><?= e($instance['active_revision']??'—') ?></code></div>
+<?php if($instance['url']): ?><a class="btn btn-outline-info btn-sm mb-2" href="<?= e($instance['url']) ?>" target="_blank" rel="noopener">Ouvrir l’instance</a><?php endif ?>
+<details class="mb-2"><summary>Configuration propre à cette machine</summary>
+<form method="post" action="/" class="mt-2"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="instance.configure"><input type="hidden" name="deployment_id" value="<?= e($instance['deployment_id']) ?>"><input type="hidden" name="revision" value="<?= e($instance['configuration_revision']) ?>">
+<label class="form-label">Port demandé</label><input class="form-control mb-2" name="instance_port" type="number" min="12000" max="19999" value="<?= e($instance['configured_port']??'') ?>">
+<label class="form-label">Nouvelles variables JSON : vide conserve les valeurs, {} les efface</label><textarea class="form-control mb-2" name="instance_variables" autocomplete="off" spellcheck="false"></textarea>
+<p class="small">Variables enregistrées : <?= e(implode(', ',$instance['variable_names'])) ?>. Les valeurs ne sont jamais réaffichées. Un déploiement applique la nouvelle configuration.</p>
+<button class="btn btn-success btn-sm">Enregistrer (révision <?= e($instance['configuration_revision']) ?>)</button></form></details>
+<form method="post" action="/" class="mb-2"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="instance.action"><input type="hidden" name="deployment_id" value="<?= e($instance['deployment_id']) ?>">
+<label class="form-label">Action</label><select name="instance_action" class="form-select mb-2"><option value="create">Créer le workspace</option><option value="sync">Préparer une version</option><option value="deploy">Déployer</option></select>
+<label class="form-label">Commit exact (40 caractères)</label><input class="form-control mb-2" name="commit" pattern="[a-f0-9]{40}" required>
+<label class="form-label">Runtime (pour Déployer uniquement)</label><select class="form-select mb-2" name="runtime"><option value="">—</option><option value="static">Statique</option><option value="php">PHP</option><option value="node">Node</option></select><button class="btn btn-success btn-sm">Mettre en file sur <?= e($instance['machine']) ?></button></form>
+<div class="d-flex flex-wrap gap-2">
+<?php foreach(['status'=>'Actualiser l’état','logs'=>'Lire les journaux','restart'=>'Redémarrer','stop'=>'Arrêter'] as $action=>$label): ?><form method="post" action="/" <?php if($action==='stop'): ?>onsubmit="return confirm('Arrêter cette instance uniquement ?')"<?php endif ?>>
+<input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="instance.action"><input type="hidden" name="deployment_id" value="<?= e($instance['deployment_id']) ?>"><input type="hidden" name="instance_action" value="<?= e($action) ?>"><button class="btn btn-sm <?= $action==='stop'?'btn-danger':'btn-outline-info' ?>" <?= !$instance['ready']?'disabled':'' ?>><?= e($label) ?></button></form><?php endforeach ?></div>
+<?php if($instanceDetail['jobs']): ?><div class="table-responsive mt-2"><table class="table table-sm"><thead><tr><th>Job</th><th>Action</th><th>État</th><th>Fin UTC</th></tr></thead><tbody><?php foreach($instanceDetail['jobs'] as $j): ?><tr><td><code><?= e($j['id']) ?></code></td><td><?= e($j['operation']) ?></td><td><?= e($j['state']) ?></td><td><?= e($j['finished_at']??'—') ?><br><button type="button" class="btn btn-sm btn-outline-info" data-instance-result="<?= e($j['id']) ?>">Résultat</button><pre class="small mt-2 d-none" id="instance-result-<?= e($j['id']) ?>"></pre></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
+</div><?php endforeach ?>
 </div></section>
 <h2 class="h5">Affectations</h2>
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover"><thead><tr><th>Projet</th><th>Machine</th><th>Répertoire</th><th>Exécution</th><th>Diagnostic</th><th>Branche</th><th>Commit</th><th>Contrôle UTC</th></tr></thead><tbody>
@@ -1809,5 +1884,19 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   }
   window.setInterval(pollRemoteJobs,15000);
 })();
+
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-instance-result]');if(!button)return;
+  const id=button.dataset.instanceResult,target=document.getElementById('instance-result-'+id);if(!target)return;
+  target.classList.remove('d-none');target.textContent='Chargement…';button.disabled=true;
+  try{
+    let response;
+    try{response=await fetch('/?deployment_job='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'});}
+    catch{target.textContent='Erreur réseau lors du chargement du résultat.';return;}
+    if(!response.ok){target.textContent='Résultat indisponible (HTTP '+response.status+').';return;}
+    if(!(response.headers.get('content-type')||'').includes('application/json')){target.textContent='Réponse inattendue : vérifier la session administrative.';return;}
+    const data=await response.json();if(data.state&&button.closest('tr'))button.closest('tr').children[2].textContent=data.state;target.textContent=data.log!==undefined?data.log:JSON.stringify(data,null,2);
+  }catch{target.textContent='Le serveur a renvoyé un résultat illisible.';}finally{button.disabled=false;}
+});
 </script>
 </body></html>

@@ -20,6 +20,8 @@ $database = $match[1] ?? '';
 if ($database==='' || strlen($database)>64 || str_contains($database,"\0")) throw new RuntimeException('Database name unavailable');
 $quotedDatabase='`'.str_replace('`','``',$database).'`';
 $root = new PDO('mysql:unix_socket=/run/mysqld/mysqld.sock;charset=utf8mb4', 'root', '', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$root->exec('USE '.$quotedDatabase);
+\Cowprod\DevMcp\Project\MultiDeploymentMigration::apply($root);
 foreach (array_unique([$admin['writer_username'], $runtime['writer_username']]) as $user) {
     $query = $root->prepare('SELECT Host FROM mysql.user WHERE User=?');$query->execute([$user]);
     $hosts=$query->fetchAll(PDO::FETCH_COLUMN);

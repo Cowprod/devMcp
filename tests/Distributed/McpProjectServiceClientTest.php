@@ -33,7 +33,7 @@ final class McpProjectServiceClientTest extends TestCase
             array_column(array_column($calls, 0), 'method'));
         self::assertSame('action_start', $calls[2][0]['params']['name']);
         self::assertSame([
-            'project' => 'chattrackme', 'action' => 'project.service',
+            'project' => 'chattrackme', 'action' => 'project.service','deployment_id'=>'local',
             'arguments' => ['operation' => 'restart'],
         ], $calls[2][0]['params']['arguments']);
         self::assertNull($calls[0][1]);

@@ -63,6 +63,12 @@ final class MobileProjectCatalogueTest extends TestCase
         $old=$this->job(1,'ios','succeeded');$this->job(8,'ios','succeeded','old-machine');
         foreach(['missing','unverified'] as $state){$p=$this->catalogue($state)->enrich($this->inventory())[0];self::assertSame($old,$p['mobile_builds']['ios']['job_id']);self::assertSame($state,$p['mobile_builds']['ios']['availability']);self::assertSame([],$p['artifacts']);}
     }
+    public function testLatestBuildAcrossRegisteredDeploymentsIsDeterministic():void
+    {
+        $this->job(1,'ios','succeeded');$this->db->exec("INSERT INTO dm_remote_project VALUES ('counter','machine-b')");
+        $latest=$this->job(8,'ios','succeeded','machine-b');
+        $project=$this->catalogue()->enrich($this->inventory())[0];self::assertSame($latest,$project['mobile_builds']['ios']['job_id']);
+    }
     public function testLocalDeclarationsDoNotDependOnBuildActionsOrMachineCapabilities():void
     {
         $root=$this->root.'/local';mkdir($root.'/.devmcp',0700,true);file_put_contents($root.'/.devmcp/android.json',json_encode(['kind'=>'cordova','path'=>'.','toolchain'=>'machine']));

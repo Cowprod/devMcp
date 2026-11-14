@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 
 use RuntimeException;
+require_once __DIR__.'/DeploymentConfiguration.php';
 
 /** Fixed project operations executed by the enrolled machine's root broker. */
 class RemoteProjectRuntime
 {
+    protected static ?array $instanceVariables=null;
     protected static function workspaceRoot(array $policy): string
     {
         return RemoteProjectPackage::ROOT;
@@ -25,9 +27,17 @@ class RemoteProjectRuntime
             || preg_match('/^[a-f0-9]{32}$/D', $job['id'] ?? '') !== 1) {
             throw new RuntimeException('Project agent is not enabled for this machine');
         }
+        static::$instanceVariables=null;
+        $instance=($job['operation']??'')==='instance';
+        if($instance){
+            if(!preg_match('/^[a-f0-9]{32}$/D',$job['deployment_id']??'')||!is_int($job['configuration_revision']??null)||$job['configuration_revision']<1)throw new RuntimeException('Invalid instance identity/configuration revision');
+            $instanceConfig=DeploymentConfiguration::validate($job['configuration']??[]);
+            $job['operation']=$job['instance_action']??'';
+            if(!in_array($job['operation'],['create','sync','deploy','status','logs','stop','restart','list','read','stat','find','head'],true))throw new RuntimeException('Unknown instance operation');
+        }
         $project = RemoteProjectPackage::projectId($job['project_id'] ?? '');
         $operation = $job['operation'] ?? '';
-        if (!in_array($operation, ['create', 'sync', 'deploy', 'status', 'logs', 'list', 'read', 'stat', 'find', 'head'], true)) {
+        if (!in_array($operation, ['create', 'sync', 'deploy', 'status', 'logs', 'list', 'read', 'stat', 'find', 'head', 'stop', 'restart'], true)) {
             throw new RuntimeException('Unknown project operation');
         }
         if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
@@ -46,6 +56,10 @@ class RemoteProjectRuntime
                 return static::json($resultPath);
             }
             $workspace = $root . '/' . $project;
+            if($instance){
+                $workspace=$job['workspace_path']??'';
+                if(!is_string($workspace)||$workspace!==$root.'/'.basename($workspace)||dirname($workspace)!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($workspace)))throw new RuntimeException('Instance workspace outside approved hosting root');
+            }
             $metaPath = $workspace . '/.project.json';
             if (!file_exists($workspace)) {
                 if ($operation !== 'create') {
@@ -57,10 +71,27 @@ class RemoteProjectRuntime
                 $meta = ['project_id' => $project, 'repository' => $job['package']['repository'] ?? '',
                     'workspace_path' => $workspace, 'revision' => null, 'active_revision' => null,
                     'port' => null, 'runtime' => null, 'url' => null];
+                if($instance)$meta['deployment_id']=$job['deployment_id'];
                 static::writeJson($metaPath, $meta);
             } else {
                 static::directory($workspace);
                 $meta = static::json($metaPath);
+            }
+            if($instance){
+                if(!isset($meta['deployment_id'])&&($job['allow_legacy_workspace']??false)!==true)throw new RuntimeException('Unmanaged existing workspace; explicit adoption is not implemented and no files were changed');
+                if(($meta['project_id']??null)!==$project||isset($meta['deployment_id'])&&$meta['deployment_id']!==$job['deployment_id'])throw new RuntimeException('Workspace belongs to another deployment');
+                $meta['deployment_id']=$job['deployment_id'];
+                if($operation==='deploy'){
+                    static::$instanceVariables=$instanceConfig['variables'];
+                    if($instanceConfig['port']!==null){
+                        static::assertInstancePort($root,$workspace,$instanceConfig['port']);
+                        if(($meta['port']??null)!==$instanceConfig['port']){
+                            $socket=@stream_socket_server('tcp://'.($policy['bind_ipv4']??'').':'.$instanceConfig['port']);
+                            if(!is_resource($socket))throw new RuntimeException('Requested instance port is already in use; no service was changed');fclose($socket);
+                        }
+                        $meta['port']=$instanceConfig['port'];
+                    }
+                }
             }
             if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
                 $package = RemoteProjectPackage::validate($job['package'] ?? []);
@@ -71,15 +102,23 @@ class RemoteProjectRuntime
                 $meta['revision'] = $package['revision'];
                 if ($operation === 'deploy') {
                     $meta = static::deploy($workspace, $meta, $job['runtime'] ?? '', $policy['bind_ipv4'] ?? '');
+                    $meta['service_state']='running';
+                    if($instance)$meta['applied_configuration_revision']=$job['configuration_revision'];
                 }
                 static::writeJson($metaPath, $meta);
                 $result = $meta + ['workspace_created' => true, 'deployment_complete' => $operation === 'deploy'];
+            } elseif(in_array($operation,['stop','restart'],true)) {
+                if(!$instance)throw new RuntimeException('Service changes require an explicit instance request');
+                $result=static::control($workspace,$meta,$operation,$policy['bind_ipv4']??'');
+                $meta=$result;static::writeJson($metaPath,$meta);
             } else {
                 $result = static::inspect($workspace, $meta, $operation, $job['arguments'] ?? []);
             }
+            if($instance){$result['deployment_id']=$job['deployment_id'];$result['instance_checked_at_utc']=gmdate('Y-m-d\TH:i:s\Z');$result['configuration_revision']=$job['configuration_revision'];}
             static::writeJson($resultPath, $result);
             return $result;
         } finally {
+            static::$instanceVariables=null;
             flock($lock, LOCK_UN);
             fclose($lock);
         }
@@ -155,6 +194,10 @@ class RemoteProjectRuntime
         if (is_link($unitPath) || ($previousUnit !== null && !str_starts_with($previousUnit, '# devMcp project ' . $meta['project_id'] . "\n"))) {
             throw new RuntimeException('Foreign systemd unit at project service path');
         }
+        $envPath=$workspace.'/.instance-variables.env';
+        if(is_link($envPath))throw new RuntimeException('Instance environment must not be a link');
+        $previousEnvironment=is_file($envPath)?file_get_contents($envPath):null;
+        if(static::$instanceVariables!==null){$body='';foreach(static::$instanceVariables as $key=>$value)$body.=$key.'="'.strtr($value,['\\'=>'\\\\','"'=>'\\"']).'"'."\n";static::write($envPath,$body,0600);}
         $link = $workspace . '/.current-' . bin2hex(random_bytes(6));
         symlink('releases/' . $meta['revision'], $link);
         rename($link, $current);
@@ -167,6 +210,7 @@ class RemoteProjectRuntime
             'node' => '/usr/bin/node ' . $current . '/server.js',
         };
         $unit = '# devMcp project ' . $meta['project_id'] . "\n[Unit]\nAfter=network-online.target zerotier-one.service\nWants=network-online.target\nStartLimitIntervalSec=0\n[Service]\nType=simple\nDynamicUser=yes\nStateDirectory=$state\nWorkingDirectory=$current\n{$prepare}ExecStart=$command\nEnvironment=HOST=$ip\nEnvironment=PORT=$port\nEnvironment=DATA_DIR=/var/lib/$state\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n";
+        if(is_file($envPath))$unit=str_replace("\nNoNewPrivileges=", "\nEnvironmentFile=$envPath\nNoNewPrivileges=",$unit);
         static::write($unitPath, $unit, 0644);
         try {
             static::command(['/usr/bin/systemctl', 'daemon-reload']);
@@ -186,6 +230,7 @@ class RemoteProjectRuntime
                 throw new RuntimeException('Project did not return HTTP 200 after startup');
             }
         } catch (\Throwable $error) {
+            if($previousEnvironment!==null)static::write($envPath,$previousEnvironment,0600);elseif(is_file($envPath))unlink($envPath);
             static::command(['/usr/bin/systemctl', 'stop', $service], [0, 5]);
             if ($old !== null && $previousUnit !== null) {
                 $restore = $workspace . '/.restore-' . bin2hex(random_bytes(6));
@@ -194,7 +239,7 @@ class RemoteProjectRuntime
                 static::write($unitPath, $previousUnit, 0644);
                 static::command(['/usr/bin/systemctl', 'daemon-reload']);
                 static::command(['/usr/bin/systemctl', 'start', $service]);
-                static::awaitHttp('http://' . $ip . ':' . $port . '/');
+                static::awaitHttp('http://' . $ip . ':' . (static::json($workspace.'/.project.json')['port']??$port) . '/');
             } elseif ($previousUnit === null) {
                 static::command(['/usr/bin/systemctl', 'disable', $service]);
             }
@@ -202,6 +247,26 @@ class RemoteProjectRuntime
         }
         return array_replace($meta, ['runtime' => $runtime, 'port' => $port,
             'url' => 'http://' . $ip . ':' . $port, 'active_revision' => $meta['revision']]);
+    }
+
+    protected static function assertInstancePort(string $root,string $workspace,int $port): void
+    {
+        foreach(glob($root.'/*/.project.json')?:[] as $file){if(dirname($file)===$workspace)continue;if((static::json($file)['port']??null)===$port)throw new RuntimeException('Port reserved by another project instance');}
+    }
+
+    protected static function control(string $workspace,array $meta,string $operation,string $ip): array
+    {
+        $service='devmcp-app-'.$meta['project_id'].'.service';$unit='/etc/systemd/system/'.$service;
+        if(!is_file($unit)||is_link($unit)||!str_starts_with(file_get_contents($unit),'# devMcp project '.$meta['project_id']."\n"))throw new RuntimeException('Managed service is unavailable');
+        if($operation==='stop'){
+            static::command(['/usr/bin/systemctl','disable','--now',$service]);
+            $meta['service_state']='stopped';
+        }else{
+            if(empty($meta['active_revision']))throw new RuntimeException('No successful deployment to restart');
+            static::command(['/usr/bin/systemctl','enable',$service]);static::command(['/usr/bin/systemctl','restart',$service]);
+            static::awaitHttp('http://'.$ip.':'.$meta['port'].'/','Restarted deployment did not respond');$meta['service_state']='running';
+        }
+        return $meta+['workspace_created'=>true,'deployment_complete'=>!empty($meta['active_revision'])];
     }
 
     protected static function awaitHttp(string $url, string $failure = 'Previous project service could not be restored'): void
@@ -245,7 +310,7 @@ class RemoteProjectRuntime
         }
         $service = 'devmcp-app-' . $meta['project_id'] . '.service';
         if ($operation === 'status') {
-            return $meta + ['service_state' => trim(static::command(['/usr/bin/systemctl', 'is-active', $service], [0, 3, 4]))];
+            return array_replace($meta,['service_state'=>trim(static::command(['/usr/bin/systemctl','is-active',$service],[0,3,4]))]);
         }
         if ($operation === 'logs') {
             return ['content' => static::command(['/usr/bin/journalctl', '--no-pager', '-o', 'cat', '-n', '40', '-u', $service])];
@@ -329,7 +394,7 @@ class RemoteProjectRuntime
         }
         $temporary = $path . '.tmp-' . bin2hex(random_bytes(8));
         $handle = fopen($temporary, 'xb');
-        if (!is_resource($handle) || fwrite($handle, $body) !== strlen($body)) {
+        if (!is_resource($handle) || !chmod($temporary,$mode) || fwrite($handle, $body) !== strlen($body)) {
             throw new RuntimeException('Cannot write project state');
         }
         fflush($handle);

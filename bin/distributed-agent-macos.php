@@ -35,6 +35,12 @@ try {
     };
     $hello=$post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
     if(($hello['ok']??false)!==true)throw new RuntimeException('Central ping rejected');
+    $advertisedVersion='projects-v1:'.$revision;
+    if(($hello['instance_protocol']??null)===1){
+        $advertisedVersion.=':inst1';
+        $announced=$post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>$advertisedVersion]);
+        if(($announced['ok']??false)!==true)throw new RuntimeException('Instance protocol announcement rejected');
+    }
     if(($hello['machine_status']??null)==='pending'){echo "devMcp macOS: awaiting machine approval in admin\n";exit(0);}
     if(($hello['zerotier_address_supported']??false)===true){
         $reply=$post('/v1/agent/ping',['protocol_version'=>1,'zerotier_ipv4'=>$config['bind_ipv4']]);
@@ -53,8 +59,8 @@ try {
         $job=$reply['project_jobs'][0];
         if(($job['machine_id']??null)!==$config['machine_id']||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Project job identity mismatch');
         try{
-            $heartbeat=static function()use($post,$job,$revision):void{
-                $post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>'projects-v1:'.$revision]);
+            $heartbeat=static function()use($post,$job,$revision,$advertisedVersion):void{
+                $post('/v1/agent/ping',['protocol_version'=>1,'agent_version'=>$advertisedVersion]);
                 $post('/v1/agent/job-result',['protocol_version'=>1,'queue'=>$job['operation']==='android_build'?'mobile-heartbeat':'ios-heartbeat','job_id'=>$job['id'],'result'=>['running'=>true]]);
             };
             $buildStart=static function()use($post,$job):void{

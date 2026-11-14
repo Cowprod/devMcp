@@ -43,7 +43,7 @@ jobs:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4
           DEVMCP_TEST_MYSQL_USER: devmcp_test
           DEVMCP_TEST_MYSQL_PASSWORD: testpass
-        run: vendor/bin/phpunit tests/Distributed/RemoteProjectCreationMySqlTest.php
+        run: vendor/bin/phpunit tests/Distributed/RemoteProjectCreationMySqlTest.php tests/Distributed/MultiDeploymentMySqlTest.php
       - name: Hosting schema 006/007 migration, resumption and idempotency
         env:
           DEVMCP_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=devmcp_test;charset=utf8mb4

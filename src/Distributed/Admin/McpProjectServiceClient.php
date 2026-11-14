@@ -52,7 +52,7 @@ final class McpProjectServiceClient
         }
         $result = $this->callTool('action_start', [
             'project' => $projectId,
-            'action' => 'project.service',
+            'action' => 'project.service','deployment_id'=>'local',
             'arguments' => ['operation' => $operation],
         ]);
         if (($result['project'] ?? null) !== $projectId

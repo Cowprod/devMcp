@@ -5,7 +5,7 @@ try {
     if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
         throw new RuntimeException('Project broker requires root');
     }
-    foreach (['RemoteProjectPackage.php', 'RemoteProjectRuntime.php'] as $file) {
+    foreach (['DeploymentConfiguration.php','RemoteProjectPackage.php', 'RemoteProjectRuntime.php'] as $file) {
         $path = __DIR__ . '/' . $file;
         $stat = lstat($path);
         if (!is_array($stat) || ($stat['mode'] & 0170000) !== 0100000

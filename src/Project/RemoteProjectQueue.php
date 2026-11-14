@@ -10,7 +10,7 @@ use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 
 final class RemoteProjectQueue
 {
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(private readonly PDO $db, private readonly ?string $deploymentId=null) {}
 
     public function assertReady(): void
     {
@@ -42,10 +42,18 @@ final class RemoteProjectQueue
         if (!$this->hasSchema()) {
             return null;
         }
-        $q = $this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=?');
-        $q->execute([$project]);
-        $row = $q->fetch(PDO::FETCH_ASSOC);
-        return $row === false ? null : $row;
+        $q = $this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=?'.($this->deploymentId===null?'':' AND p.deployment_id=?'));
+        $q->execute($this->deploymentId===null?[$project]:[$project,$this->deploymentId]);
+        $rows=$q->fetchAll(PDO::FETCH_ASSOC);
+        if(count($rows)>1)DeploymentRegistry::ambiguous($project,(new DeploymentRegistry($this->db))->list($project));
+        return $rows[0]??null;
+    }
+
+    public function instances(string $project): array
+    {
+        if(!$this->hasSchema())return [];
+        $q=$this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=? ORDER BY m.name');
+        $q->execute([$project]);return $q->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function workspacePath(string $project, string $machine): string
@@ -96,8 +104,17 @@ final class RemoteProjectQueue
         $id = bin2hex(random_bytes(16));
         $request = ['id' => $id, 'machine_id' => $record['machine_id'],
             'project_id' => $project, 'operation' => $operation] + $details;
-        $this->db->prepare('INSERT INTO dm_remote_project_job (id,project_id,machine_id,operation,request_json,expires_at) VALUES (?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE))')
-            ->execute([$id, $project, $record['machine_id'], $operation, json_encode($request, JSON_THROW_ON_ERROR)]);
+        if(($record['config_json']??null)!==null){
+            $agent=$this->db->prepare('SELECT agent_version FROM dm_machine WHERE id=?');$agent->execute([$record['machine_id']]);
+            if(!preg_match('/^projects-v1:[a-f0-9]{40}:inst1$/D',$agent->fetchColumn()?:''))throw new \Mcp\Exception\ToolCallException('Instance-aware agent update required');
+            $request['workspace_path']=$record['workspace_path'];$request['deployment_id']=$record['deployment_id'];
+            if(in_array($operation,['status','logs','list','read','stat','find','head'],true)){
+                $request['instance_action']=$operation;$request['operation']='instance';$request['configuration_revision']=(int)$record['config_revision'];
+                $request['configuration']=['port'=>null,'variables'=>[]];$request['allow_legacy_workspace']=(bool)$record['ready'];
+            }
+        }
+        $this->db->prepare('INSERT INTO dm_remote_project_job (id,project_id,machine_id,deployment_id,operation,request_json,expires_at) VALUES (?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 10 MINUTE))')
+            ->execute([$id, $project, $record['machine_id'], $record['deployment_id'], $operation, json_encode($request, JSON_THROW_ON_ERROR)]);
         return ['job_id' => $id, 'project' => $project, 'action' => $operation, 'target' => 'remote', 'status' => 'queued'];
     }
 
@@ -106,13 +123,13 @@ final class RemoteProjectQueue
         if (!$this->hasSchema()) {
             return null;
         }
-        $q = $this->db->prepare('SELECT id,project_id,operation,state,created_at,claimed_at,finished_at,result_json FROM dm_remote_project_job WHERE id=?');
+        $q = $this->db->prepare('SELECT id,project_id,deployment_id,operation,state,created_at,claimed_at,finished_at,result_json FROM dm_remote_project_job WHERE id=?');
         $q->execute([$id]);
         $r = $q->fetch(PDO::FETCH_ASSOC);
         if ($r === false) {
             return null;
         }
-        return ['job_id' => $r['id'], 'project' => $r['project_id'], 'action' => $r['operation'],
+        return ['job_id' => $r['id'], 'project' => $r['project_id'],'deployment_id'=>$r['deployment_id'], 'action' => $r['operation'],
             'target' => 'remote', 'status' => $r['state'], 'created_at' => $r['created_at'],
             'started_at' => $r['claimed_at'], 'finished_at' => $r['finished_at'],
             'result' => $r['result_json'] === null ? null : json_decode($r['result_json'], true, 32, JSON_THROW_ON_ERROR)];
@@ -122,8 +139,10 @@ final class RemoteProjectQueue
     {
         $this->db->beginTransaction();
         try {
-            $this->db->prepare("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE machine_id=? AND state IN ('queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)")->execute([$machine]);
-            $q = $this->db->prepare("SELECT j.id,j.request_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id JOIN dm_deployment d ON d.id=p.deployment_id JOIN dm_machine m ON m.id=j.machine_id WHERE j.machine_id=? AND m.status='active' AND d.enabled=1 AND (j.state='queued' OR (j.state='claimed' AND j.claimed_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 180 SECOND))) AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE");
+            // Late jobs from an older central process retain their exact project+machine binding.
+            $this->db->prepare('UPDATE dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id SET j.deployment_id=p.deployment_id WHERE j.machine_id=? AND j.deployment_id IS NULL')->execute([$machine]);
+            $this->db->prepare("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE machine_id=? AND state IN ('preparing','queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)")->execute([$machine]);
+            $q = $this->db->prepare("SELECT j.id,j.request_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id AND p.machine_id=j.machine_id JOIN dm_deployment d ON d.id=p.deployment_id AND d.project_id=j.project_id AND d.machine_id=j.machine_id JOIN dm_machine m ON m.id=j.machine_id WHERE j.machine_id=? AND m.status='active' AND d.enabled=1 AND (j.state='queued' OR (j.state='claimed' AND j.claimed_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 180 SECOND))) AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE");
             $q->execute([$machine]);
             $r = $q->fetch(PDO::FETCH_ASSOC);
             if ($r !== false) {
@@ -141,7 +160,7 @@ final class RemoteProjectQueue
     {
         $this->db->beginTransaction();
         try {
-            $q = $this->db->prepare('SELECT project_id,operation,state,result_json FROM dm_remote_project_job WHERE id=? AND machine_id=? FOR UPDATE');
+            $q = $this->db->prepare('SELECT project_id,deployment_id,operation,state,result_json,request_json FROM dm_remote_project_job WHERE id=? AND machine_id=? FOR UPDATE');
             $q->execute([$id, $machine]);
             $r = $q->fetch(PDO::FETCH_ASSOC);
             if ($r === false) {
@@ -157,9 +176,11 @@ final class RemoteProjectQueue
             if ($r['state'] !== 'claimed') {
                 throw new RuntimeException('Remote project job was not claimed');
             }
+            $request=json_decode($r['request_json'],true,32,JSON_THROW_ON_ERROR);
+            if(($result['ok']??null)===true&&($request['operation']??null)==='instance'&&(($result['data']['deployment_id']??null)!==$r['deployment_id']||($result['data']['configuration_revision']??null)!==$request['configuration_revision']))throw new RuntimeException('Instance result has the wrong deployment or configuration identity');
             if (($result['ok'] ?? null) === true && in_array($r['operation'], ['create', 'sync', 'deploy'], true)) {
                 $data = $result['data'] ?? null;
-                $p = $this->project($r['project_id']);
+                $p = (new self($this->db,$r['deployment_id']))->project($r['project_id']);
                 if (!is_array($data) || ($data['project_id'] ?? null) !== $r['project_id']
                     || ($data['repository'] ?? null) !== $p['repository']
                     || ($data['workspace_path'] ?? null) !== $p['workspace_path']
@@ -179,10 +200,16 @@ final class RemoteProjectQueue
                     $data['central_http_verified'] = true;
                     $data['preview_http_checked_at_utc'] = gmdate('Y-m-d\TH:i:s\Z');
                 }
-                $this->db->prepare('UPDATE dm_remote_project SET ready=1,metadata_json=? WHERE project_id=?')
-                    ->execute([json_encode($data, JSON_THROW_ON_ERROR), $r['project_id']]);
+                $this->db->prepare('UPDATE dm_remote_project SET ready=1,metadata_json=? WHERE deployment_id=?')
+                    ->execute([json_encode($data, JSON_THROW_ON_ERROR), $r['deployment_id']]);
                 $this->db->prepare("UPDATE dm_project_provisioning SET state='active',workspace_path=?,actions_enabled=1,revision=revision+1 WHERE project_id=? AND machine=? AND state='machine_assigned'")
                     ->execute([$p['workspace_path'], $r['project_id'], $machine]);
+            }
+            if(($result['ok']??null)===true&&in_array($r['operation'],['status','stop','restart'],true)&&isset($result['data']['deployment_id'])){
+                $p=(new self($this->db,$r['deployment_id']))->project($r['project_id']);$data=$result['data'];
+                if($data['deployment_id']!==$r['deployment_id']||($data['project_id']??null)!==$r['project_id']||($data['workspace_path']??null)!==$p['workspace_path'])throw new RuntimeException('Instance result identity mismatch');
+                $data['central_http_verified']=false;
+                $this->db->prepare('UPDATE dm_remote_project SET metadata_json=? WHERE deployment_id=?')->execute([json_encode($data,JSON_THROW_ON_ERROR),$r['deployment_id']]);
             }
             $this->db->prepare('UPDATE dm_remote_project_job SET state=?,result_json=?,finished_at=UTC_TIMESTAMP(6) WHERE id=?')
                 ->execute([($result['ok'] ?? false) === true ? 'succeeded' : 'failed', json_encode($result, JSON_THROW_ON_ERROR), $id]);

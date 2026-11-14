@@ -18,11 +18,21 @@ use Mcp\Exception\ToolCallException;
  */
 final class RemoteTools
 {
-    public function __construct(private readonly PDO $db, private readonly string $sourceRoot = '/var/lib/devmcp/remote-sources') {}
+    public function __construct(private readonly PDO $db, private readonly string $sourceRoot = '/var/lib/devmcp/remote-sources',private readonly ?string $deploymentId=null) {}
+
+    public function forDeployment(string $project,string $id): self
+    {
+        $row=(new \Cowprod\DevMcp\Project\DeploymentRegistry($this->db))->get($id);
+        if($row['project_id']!==$project)throw new InvalidArgumentException('Deployment belongs to another project');
+        return new self($this->db,$this->sourceRoot,$id);
+    }
+
+    public function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
+    {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot);}
 
     public function projectQueue(): \Cowprod\DevMcp\Project\RemoteProjectQueue
     {
-        return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db);
+        return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db,$this->deploymentId);
     }
 
     public function createRemoteWorkspace(string $project): array
@@ -48,6 +58,7 @@ final class RemoteTools
         if($operation==='android_build'&&$record['os_family']!=='macos')throw new InvalidArgumentException('Managed Cordova Android builds currently require a macOS agent');
         $q->assertOperationAllowed($record,$operation);
         $this->action($project, $action);
+        if(($record['config_json']??null)!==null&&in_array($operation,['create','sync','deploy'],true))self::reject('INSTANCE_ACTION_REQUIRED','Use deployment_action_start for an instance with deployment-specific configuration.',['deployment_id'=>$record['deployment_id']]);
         if ((int) $record['ready'] !== 1 && $operation !== 'create') {
             throw new RuntimeException('Wait for the workspace creation job before using this project');
         }
@@ -208,6 +219,13 @@ final class RemoteTools
 
     public function describe(string $project): array
     {
+        $instances=$this->projectQueue()->instances($project);
+        if($this->deploymentId===null&&count($instances)>1){
+            $rows=(new \Cowprod\DevMcp\Project\DeploymentRegistry($this->db))->list($project);
+            return ['id'=>$project,'description'=>'Projet avec plusieurs déploiements','target'=>'remote','repository'=>$instances[0]['repository'],
+                'machine'=>null,'workspace'=>null,'preview_port'=>null,'provisioning_state'=>'multiple_deployments',
+                'deployment_required'=>true,'deployments'=>array_map(\Cowprod\DevMcp\Project\DeploymentRegistry::publicRecord(...),$rows),'action_count'=>0];
+        }
         $managed = $this->projectQueue()->project($project);
         if ($managed !== null) {
             $meta = $managed['metadata_json'] === null ? [] : json_decode($managed['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
