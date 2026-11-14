@@ -109,7 +109,7 @@ final class AdminRegistryOperations
         if(preg_match('~^/deployments/([a-f0-9]{32})/jobs/([a-f0-9]{32})$~D',$path,$m)){
             $job=$service->job($m[2]);if($job['deployment_id']!==$m[1])throw new AdminReadApiError(404,'not_found');
             // No arbitrary agent log content on the mobile route: apps may log secrets.
-            return ['job'=>array_intersect_key($job,array_flip(['id','deployment_id','operation','state','created_at','claimed_at','finished_at','ok','error','data']))];
+            return ['job'=>array_intersect_key($job,array_flip(['id','deployment_id','operation','state','created_at','claimed_at','finished_at','ok','data']))];
         }
         throw new AdminReadApiError(405,'operation_not_supported');
     }
