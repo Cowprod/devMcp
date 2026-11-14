@@ -51,6 +51,7 @@ final class PublicProjectCatalogue
                 'mobile_configuration'=>$project['mobile_configuration']??['known'=>false,'revision'=>null,'errors'=>[]],
                 'mobile_builds'=>$project['mobile_builds']??[],
                 'artifacts'=>$project['artifacts']??[],
+                'deployments'=>array_map(static fn($d)=>array_intersect_key($d,array_flip(['deployment_id','machine_id','machine','ready','runtime','port','url','revision','active_revision','service_state','checked_at_utc'])),$project['deployments']??[]),
             ];
         }
         usort($rows,static fn($a,$b)=>strcmp($a['id'],$b['id']));

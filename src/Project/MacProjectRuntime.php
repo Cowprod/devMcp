@@ -13,9 +13,14 @@ final class MacProjectRuntime extends RemoteProjectRuntime
             ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Invalid iOS agent identity');
         require_once __DIR__.'/MacIosRuntime.php';
         $project=RemoteProjectPackage::projectId($job['project_id']??'');
-        $workspace=static::workspaceRoot($policy).'/'.$project;
+        $root=static::workspaceRoot($policy);$workspace=$root.'/'.$project;
+        if(isset($job['workspace_path'])){
+            if(!is_string($job['workspace_path'])||dirname($job['workspace_path'])!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($job['workspace_path']))||!preg_match('/^[a-f0-9]{32}$/D',$job['deployment_id']??''))throw new RuntimeException('Invalid mobile build deployment workspace');
+            $workspace=$job['workspace_path'];
+        }
         static::directory($workspace);
         $meta=static::json($workspace.'/.project.json');
+        if(isset($job['deployment_id'],$meta['deployment_id'])&&$job['deployment_id']!==$meta['deployment_id'])throw new RuntimeException('Mobile workspace belongs to another deployment');
         if(($meta['project_id']??null)!==$project)throw new RuntimeException('iOS project identity mismatch');
         if($job['operation']==='ios_capabilities')return MacIosRuntime::capabilities();
         $package=RemoteProjectPackage::validate($job['package']??[]);
@@ -95,13 +100,14 @@ final class MacProjectRuntime extends RemoteProjectRuntime
         if(!is_executable($config['launcher']??''))throw new RuntimeException('Named devMcp launcher is unavailable; update the agent');
         $args=[$config['launcher'],...$args];
         $definition=['Label'=>self::label($meta),'AssociatedBundleIdentifiers'=>['net.cowprod.devmcp'],'ProgramArguments'=>$args,'WorkingDirectory'=>$current,
-            'EnvironmentVariables'=>['HOST'=>$ip,'PORT'=>(string)$port,'DATA_DIR'=>$data,'MOBILE_RELEASES_FILE'=>$workspace.'/mobile-artifacts/releases.json'],
+            'EnvironmentVariables'=>['HOST'=>$ip,'PORT'=>(string)$port,'DATA_DIR'=>$data,'MOBILE_RELEASES_FILE'=>$workspace.'/mobile-artifacts/releases.json']+(static::$instanceVariables??[]),
             'RunAtLoad'=>true,'KeepAlive'=>true,'ThrottleInterval'=>5,'Umask'=>63,
             'StandardOutPath'=>$workspace.'/stdout.log','StandardErrorPath'=>$workspace.'/stderr.log'];
         $body="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- devMcp ".$meta['project_id']." -->\n<plist version=\"1.0\">".self::xml($definition).'</plist>';
         try{
             static::write($plist,$body,0600);
             static::command(['/usr/bin/plutil','-lint',$plist]);
+            static::command(['/bin/launchctl','enable',self::target($meta)]);
             static::command(['/bin/launchctl','bootstrap','gui/'.posix_geteuid(),$plist]);
             static::awaitHttp('http://'.$ip.':'.$port.'/', 'Project did not return HTTP 200 after startup');
         }catch(\Throwable $error){
@@ -109,15 +115,32 @@ final class MacProjectRuntime extends RemoteProjectRuntime
             if($old!==null&&$oldPlist!==null){
                 $restore=$workspace.'/.restore-'.bin2hex(random_bytes(6));symlink($old,$restore);rename($restore,$current);
                 static::write($plist,$oldPlist,0600);
-                if($wasLoaded){static::command(['/bin/launchctl','bootstrap','gui/'.posix_geteuid(),$plist]);static::awaitHttp('http://'.$ip.':'.$port.'/');}
+                if($wasLoaded){static::command(['/bin/launchctl','bootstrap','gui/'.posix_geteuid(),$plist]);static::awaitHttp('http://'.$ip.':'.(static::json($workspace.'/.project.json')['port']??$port).'/');}
             }elseif($oldPlist===null&&is_file($plist)){unlink($plist);}
             throw $error;
         }
         return array_replace($meta,['runtime'=>$runtime,'port'=>$port,'url'=>'http://'.$ip.':'.$port,'active_revision'=>$meta['revision']]);
     }
+    protected static function control(string $workspace,array $meta,string $operation,string $ip): array
+    {
+        $plist=self::agents().'/'.self::label($meta).'.plist';
+        if(!is_file($plist)||is_link($plist)||!str_contains(file_get_contents($plist),'<!-- devMcp '.$meta['project_id'].' -->'))throw new RuntimeException('Managed LaunchAgent unavailable');
+        if($operation==='stop'){
+            if(self::loaded($meta))static::command(['/bin/launchctl','bootout',self::target($meta)]);
+            static::command(['/bin/launchctl','disable',self::target($meta)]);$meta['service_state']='stopped';
+        }else{
+            if(empty($meta['active_revision']))throw new RuntimeException('No successful deployment to restart');
+            static::command(['/bin/launchctl','enable',self::target($meta)]);
+            if(self::loaded($meta))static::command(['/bin/launchctl','kickstart','-k',self::target($meta)]);
+            else static::command(['/bin/launchctl','bootstrap','gui/'.posix_geteuid(),$plist]);
+            static::awaitHttp('http://'.$ip.':'.$meta['port'].'/','Restarted deployment did not respond');$meta['service_state']='running';
+        }
+        return $meta+['workspace_created'=>true,'deployment_complete'=>!empty($meta['active_revision'])];
+    }
+
     protected static function inspect(string $workspace,array $meta,string $operation,array $args): array
     {
-        if($operation==='status')return $meta+['service_state'=>self::loaded($meta)?'loaded':'unloaded','supervisor'=>'launchd'];
+        if($operation==='status')return array_replace($meta,['service_state'=>self::loaded($meta)?'loaded':'unloaded','supervisor'=>'launchd']);
         if($operation==='logs'){
             $logs=[];foreach(['stdout','stderr'] as $name){$path=$workspace.'/'.$name.'.log';$logs[$name]=is_file($path)?file_get_contents($path,false,null,max(0,filesize($path)-12000)):'';}
             return $logs;

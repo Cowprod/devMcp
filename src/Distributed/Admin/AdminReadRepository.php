@@ -83,13 +83,16 @@ final class AdminReadRepository
             $projects[$id]['runtime_type']=$runtime['runtime_type'];
             $projects[$id]['desired_state']=$runtime['desired_state'];
         }
+        $managedCounts=[];
         foreach ($this->db->query('SELECT project_id, machine_id, metadata_json FROM dm_remote_project')->fetchAll(PDO::FETCH_ASSOC) as $row) {
             if (!isset($projects[$row['project_id']])) continue;
             $meta = $row['metadata_json']===null?[]:json_decode($row['metadata_json'],true,32,JSON_THROW_ON_ERROR);
-            $projects[$row['project_id']]['runtime_type']=is_string($meta['runtime']??null)?$meta['runtime']:null;
+            $managedCounts[$row['project_id']]=($managedCounts[$row['project_id']]??0)+1;
+            $projects[$row['project_id']]['runtime_type']=$managedCounts[$row['project_id']]===1&&is_string($meta['runtime']??null)?$meta['runtime']:null;
             if (isset($machines[$row['machine_id']])) {
                 $entry=$projects[$row['project_id']]['assignments'][$row['machine_id']]??['machine_id'=>$row['machine_id'],'sources'=>[],'deployment_id'=>null,'enabled'=>null];
                 $entry['sources'][]='remote_project';
+                foreach(['runtime','port','url','revision','active_revision','service_state','instance_checked_at_utc'] as $key)$entry[$key]=$meta[$key]??null;
                 $projects[$row['project_id']]['assignments'][$row['machine_id']]=$entry;
             }
         }

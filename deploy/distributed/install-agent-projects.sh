@@ -30,6 +30,7 @@ bundle="$root/project-bundles/$revision"
 if [[ ! -e "$bundle" ]]; then
   stage="$(mktemp -d "$root/project-bundles/.stage.XXXXXXXX")"
   trap 'rm -rf -- "$stage"' EXIT
+  install -o root -g root -m0644 "$checkout/src/Project/DeploymentConfiguration.php" "$stage/DeploymentConfiguration.php"
   install -o root -g root -m0644 "$checkout/src/Project/RemoteProjectPackage.php" "$stage/RemoteProjectPackage.php"
   install -o root -g root -m0644 "$checkout/src/Project/RemoteProjectRuntime.php" "$stage/RemoteProjectRuntime.php"
   install -o root -g root -m0644 "$checkout/bin/devmcp-agent-project-broker.php" "$stage/devmcp-agent-project-broker.php"
@@ -40,6 +41,7 @@ if [[ ! -e "$bundle" ]]; then
   mv "$stage" "$bundle"
   trap - EXIT
 else
+  cmp "$checkout/src/Project/DeploymentConfiguration.php" "$bundle/DeploymentConfiguration.php"
   cmp "$checkout/src/Project/RemoteProjectPackage.php" "$bundle/RemoteProjectPackage.php"
   cmp "$checkout/src/Project/RemoteProjectRuntime.php" "$bundle/RemoteProjectRuntime.php"
   cmp "$checkout/bin/devmcp-agent-project-broker.php" "$bundle/devmcp-agent-project-broker.php"

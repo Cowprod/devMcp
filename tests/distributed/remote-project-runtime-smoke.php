@@ -22,7 +22,7 @@ try {
         [$path,$body]=match($runtime){
             'static'=>['public/index.html','<!doctype html><h1>'.$marker.'</h1>'],
             'php'=>['public/index.php','<?php if (!session_start()) { http_response_code(500); exit; } $_SESSION["counter"]=($_SESSION["counter"]??0)+1; echo '.var_export($marker,true).'."|session=".$_SESSION["counter"];'],
-            'node'=>['server.js','require("node:http").createServer((q,r)=>r.end('.json_encode($marker).')).listen(Number(process.env.PORT),process.env.HOST);'],
+            'node'=>['server.js','require("node:http").createServer((q,r)=>r.end('.json_encode($marker).'+"|"+String(process.env.INSTANCE_MARKER))).listen(Number(process.env.PORT),process.env.HOST);'],
         };
         $package=['project_id'=>$project,'repository'=>'Cowprod/'.$project,'revision'=>sha1($body),
             'files'=>[['path'=>$path,'mode'=>'100644','base64'=>base64_encode($body),'object'=>sha1('blob '.strlen($body)."\0".$body)]]];
@@ -35,6 +35,7 @@ try {
         $job['id']=bin2hex(random_bytes(16));$job['operation']='deploy';$job['runtime']=$runtime;
         $live=RemoteProjectRuntime::run($job,$policy);$results[]=$job['id'];
         assert($live['deployment_complete']===true);
+        if($runtime==='static')$staticLive=$live;
         assert(str_contains(file_get_contents($live['url'].'/'),$marker));
         echo "PASS: $runtime created from an absent workspace, deployed through the agent runtime, HTTP verified\n";
         if($runtime==='php'){
@@ -51,12 +52,27 @@ try {
             echo "PASS: unmodified PHP session_start persists across HTTP requests and service redeployment\n";
         }
         if($runtime==='node'){
-            $failed=$job;$failed['id']=bin2hex(random_bytes(16));
+            $instance=$job;$instance['id']=bin2hex(random_bytes(16));$instance['operation']='instance';$instance['instance_action']='deploy';
+            $instance['deployment_id']=bin2hex(random_bytes(16));$instance['workspace_path']=$live['workspace_path'];$instance['allow_legacy_workspace']=true;
+            $instance['configuration_revision']=1;$literal='alpha$% "quoted" \\ path';$instance['configuration']=['port'=>null,'variables'=>['INSTANCE_MARKER'=>$literal]];
+            $configured=RemoteProjectRuntime::run($instance,$policy);$results[]=$instance['id'];
+            assert(str_ends_with(file_get_contents($live['url'].'/'),'|'.$literal));
+            assert((fileperms($live['workspace_path'].'/.instance-variables.env')&0777)===0600);
+            assert(!str_contains(file_get_contents('/etc/systemd/system/devmcp-app-'.$project.'.service'),$literal));
+            $stop=$instance;$stop['id']=bin2hex(random_bytes(16));$stop['instance_action']='stop';unset($stop['package'],$stop['runtime']);
+            assert(RemoteProjectRuntime::run($stop,$policy)['service_state']==='stopped');$results[]=$stop['id'];
+            assert(str_contains(file_get_contents($staticLive['url'].'/'),'created-by-agent-static'));
+            $restart=$stop;$restart['id']=bin2hex(random_bytes(16));$restart['instance_action']='restart';
+            assert(RemoteProjectRuntime::run($restart,$policy)['service_state']==='running');$results[]=$restart['id'];
+            assert(str_ends_with(file_get_contents($live['url'].'/'),'|'.$literal));
+            echo "PASS: private instance environment preserved literally, isolated stop/restart, other service unchanged\n";
+            $failed=$instance;$failed['configuration']['variables']['INSTANCE_MARKER']='failed-new-variable';$failed['id']=bin2hex(random_bytes(16));
             $bad='process.exit(1);';$failed['package']['revision']=sha1($bad);
             $failed['package']['files']=[['path'=>'server.js','mode'=>'100644','object'=>sha1('blob '.strlen($bad)."\0".$bad),'base64'=>base64_encode($bad)]];
             try {RemoteProjectRuntime::run($failed,$policy);throw new RuntimeException('Failed service was accepted');}
             catch(RuntimeException $e){assert($e->getMessage()==='Project did not return HTTP 200 after startup');}
             assert(str_contains(file_get_contents($live['url'].'/'),$marker));
+            assert(str_ends_with(file_get_contents($live['url'].'/'),'|'.$literal));
             echo "PASS: failed Node deployment restores the previous working service\n";
         }
     }

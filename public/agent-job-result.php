@@ -48,7 +48,7 @@ try {
     if($buildStart){
         (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
         if($payload['result']!==['starting'=>true])throw new RuntimeException('Invalid build start');
-        $query=$db->prepare("SELECT j.project_id,j.operation FROM dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation IN ('ios_build','android_build') AND p.machine_id=j.machine_id");
+        $query=$db->prepare("SELECT j.project_id,j.operation FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation IN ('ios_build','android_build') AND p.machine_id=j.machine_id");
         $query->execute([$payload['job_id'],$machineId]);$job=$query->fetch(PDO::FETCH_ASSOC);
         if(!is_array($job))throw new RuntimeException('Unknown claimed build');
         $count=(new \Cowprod\DevMcp\Project\IosArtifactStore())->discardPrevious($machineId,$job['project_id'],$job['operation']==='android_build'?'android':'ios',$payload['job_id']);
@@ -64,7 +64,7 @@ try {
     }
     if($iosUpload){
         (new AgentAuthenticator($db))->authenticate($machineId,$matches[1]);
-        $query=$db->prepare("SELECT j.project_id,j.operation,j.request_json FROM dm_remote_project_job j JOIN dm_machine m ON m.id=j.machine_id JOIN dm_remote_project p ON p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation IN ('ios_build','android_build') AND m.os_family='macos' AND p.machine_id=j.machine_id");
+        $query=$db->prepare("SELECT j.project_id,j.operation,j.request_json FROM dm_remote_project_job j JOIN dm_machine m ON m.id=j.machine_id JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id WHERE j.id=? AND j.machine_id=? AND j.state='claimed' AND j.operation IN ('ios_build','android_build') AND m.os_family='macos' AND p.machine_id=j.machine_id");
         $query->execute([$payload['job_id'],$machineId]);$job=$query->fetch(PDO::FETCH_ASSOC);
         if(!is_array($job))throw new RuntimeException('Unknown mobile build job');
         $request=json_decode($job['request_json'],true,32,JSON_THROW_ON_ERROR);

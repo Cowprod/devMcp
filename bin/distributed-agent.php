@@ -185,6 +185,10 @@ if (($data['zerotier_address_supported'] ?? false) === true
     }
 }
 if (is_file(__DIR__ . '/remote-project-queue.php')) {
+    if(($data['instance_protocol']??null)===1&&isset($projectRelease)&&is_file('/opt/devmcp-agent/project-active/DeploymentConfiguration.php')){
+        $announcement=$post('/v1/agent/ping',json_encode(['protocol_version'=>1,'agent_version'=>'projects-v1:'.$projectRelease.':inst1'],JSON_THROW_ON_ERROR));
+        if(($announcement['ok']??false)!==true)throw new RuntimeException('Instance protocol announcement rejected');
+    }
     require_once __DIR__ . '/remote-project-queue.php';
     try {
         remoteProjectPoll($post, $config);

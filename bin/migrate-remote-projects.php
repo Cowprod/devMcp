@@ -14,6 +14,7 @@ $sql = file_get_contents(dirname(__DIR__) . '/database/migrations/008_remote_pro
 foreach (explode(';', $sql) as $statement) {
     if (trim($statement) !== '') $migration->exec($statement);
 }
+\Cowprod\DevMcp\Project\MultiDeploymentMigration::apply($migration);
 // Both FPM and the MCP runtime use these tables. Grant existing accounts only.
 preg_match('/(?:^|;)dbname=([^;]+)/', $admin['dsn'], $match);
 $database = $match[1] ?? '';

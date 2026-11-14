@@ -66,7 +66,7 @@ final class MobileProjectCatalogue
             JSON_UNQUOTE(JSON_EXTRACT(j.request_json,'$.arguments.target')) AS requested_target
             FROM dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id
             WHERE j.operation IN ('ios_build','android_build') AND NOT EXISTS (
-                SELECT 1 FROM dm_remote_project_job n WHERE n.project_id=j.project_id AND n.machine_id=j.machine_id AND n.operation=j.operation
+                SELECT 1 FROM dm_remote_project_job n JOIN dm_remote_project np ON np.project_id=n.project_id AND np.machine_id=n.machine_id WHERE n.project_id=j.project_id AND n.operation=j.operation
                 AND (n.created_at>j.created_at OR (n.created_at=j.created_at AND n.id>j.id)))";
         $rows=[];
         foreach($this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $row){
@@ -82,7 +82,7 @@ final class MobileProjectCatalogue
         $sql="SELECT j.project_id,JSON_UNQUOTE(JSON_EXTRACT(j.request_json,'$.package.revision')) AS revision
             FROM dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id
             WHERE JSON_EXTRACT(j.request_json,'$.package.revision') IS NOT NULL AND NOT EXISTS (
-                SELECT 1 FROM dm_remote_project_job n WHERE n.project_id=j.project_id AND n.machine_id=j.machine_id
+                SELECT 1 FROM dm_remote_project_job n JOIN dm_remote_project np ON np.project_id=n.project_id AND np.machine_id=n.machine_id WHERE n.project_id=j.project_id
                 AND JSON_EXTRACT(n.request_json,'$.package.revision') IS NOT NULL
                 AND (n.created_at>j.created_at OR (n.created_at=j.created_at AND n.id>j.id)))";
         return array_column($this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC),'revision','project_id');

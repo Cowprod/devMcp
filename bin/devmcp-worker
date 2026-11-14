@@ -45,8 +45,10 @@ if (in_array('--once', $argv, true)) {
 // completed job. Never recycle during a running job. The SQL registry remains
 // authoritative and no failed action is replayed implicitly.
 $runtimeBornAt = hrtime(true);
+$nextDeploymentPreparation=0;
 while (true) {
     $processed = $worker->runOnce();
+    if(!$processed&&hrtime(true)>=$nextDeploymentPreparation){$processed=$runtime->tools->prepareDeploymentJobs();$nextDeploymentPreparation=hrtime(true)+2_000_000_000;}
     if ($processed || hrtime(true) - $runtimeBornAt >= 60_000_000_000) {
         $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
         $worker = new JobWorker(

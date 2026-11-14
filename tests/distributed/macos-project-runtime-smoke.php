@@ -23,7 +23,7 @@ try{
   $created=MacProjectRuntime::run($job,$policy);assert($created['workspace_created']===true);
   assert(MacProjectRuntime::run($job,$policy)===$created);
   $job['id']=bin2hex(random_bytes(16));$job['operation']='deploy';$job['runtime']=$runtime;
-  $live=MacProjectRuntime::run($job,$policy);assert($live['deployment_complete']===true);
+  $live=MacProjectRuntime::run($job,$policy);assert($live['deployment_complete']===true);if($runtime==='static')$staticLive=$live;
   $text=file_get_contents($live['url'].'/');assert(str_contains($text,$runtime==='node'?'devMcp':$marker));
   echo "PASS: macOS $runtime created, launchd deployed, HTTP verified\n";
   if($runtime==='php'){
@@ -43,6 +43,18 @@ try{
    fwrite($socket,"\x81".chr(128+strlen($text)).$mask.$masked);$reply='';while(strlen($reply)<2+strlen($text)){$reply.=fread($socket,2+strlen($text)-strlen($reply));if(feof($socket))break;}
    assert($reply==="\x81".chr(strlen($text)).$text);fclose($socket);
    echo "PASS: macOS Node WebSocket upgrade and echo\n";
+   $instance=$job;$instance['id']=bin2hex(random_bytes(16));$instance['operation']='instance';$instance['instance_action']='deploy';
+   $instance['deployment_id']=bin2hex(random_bytes(16));$instance['workspace_path']=$live['workspace_path'];$instance['allow_legacy_workspace']=true;
+   $instance['configuration_revision']=1;$instance['configuration']=['port'=>null,'variables'=>['INSTANCE_MARKER'=>'mac "quoted" $% value']];
+   MacProjectRuntime::run($instance,$policy);
+   $account=posix_getpwuid(posix_geteuid());$plist=$account['dir'].'/Library/LaunchAgents/net.cowprod.devmcp.app.'.$project.'.plist';
+   $p=proc_open(['/usr/bin/plutil','-convert','json','-o','-',$plist],[0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['file','/dev/null','w']],$pipes);
+   $definition=json_decode(stream_get_contents($pipes[1]),true,32,JSON_THROW_ON_ERROR);fclose($pipes[1]);assert(proc_close($p)===0);
+   assert($definition['EnvironmentVariables']['INSTANCE_MARKER']===$instance['configuration']['variables']['INSTANCE_MARKER']);assert((fileperms($plist)&0777)===0600);
+   $stop=$instance;$stop['id']=bin2hex(random_bytes(16));$stop['instance_action']='stop';unset($stop['package'],$stop['runtime']);
+   assert(MacProjectRuntime::run($stop,$policy)['service_state']==='stopped');assert(str_contains(file_get_contents($staticLive['url'].'/'),'devMcp-mac-static'));
+   $restart=$stop;$restart['id']=bin2hex(random_bytes(16));$restart['instance_action']='restart';assert(MacProjectRuntime::run($restart,$policy)['service_state']==='running');
+   assert(str_contains(file_get_contents($live['url'].'/'),'devMcp'));echo "PASS: private instance variables, isolated stop/restart, other LaunchAgent unchanged\n";
    $failed=$job;$failed['id']=bin2hex(random_bytes(16));$bad='process.exit(1);';
    $failed['package']['revision']=sha1($bad);$failed['package']['files']=[['path'=>'server.js','mode'=>'100644','object'=>sha1('blob '.strlen($bad)."\0".$bad),'base64'=>base64_encode($bad)]];
    try{MacProjectRuntime::run($failed,$policy);throw new RuntimeException('Broken Node deployment accepted');}

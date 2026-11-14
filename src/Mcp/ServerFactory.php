@@ -26,6 +26,7 @@ final class ServerFactory
                     'type' => 'string',
                     'description' => 'Identifiant public exact fourni par action_list, par exemple ios.build (jamais ios_build, nom interne de job). Appeler action_describe pour les paramètres et ios.capabilities pour les équipes Apple.',
                 ],
+                'deployment_id'=>['type'=>['string','null'],'pattern'=>'^(local|[a-f0-9]{32})$','description'=>'Cible explicite si plusieurs déploiements : ID issu de deployment_list, ou local pour le projet local existant.'],
                 'arguments' => [
                     'type' => 'object',
                     'description' => 'Arguments nommés strictement validés par la définition de l’action.',
@@ -142,6 +143,18 @@ final class ServerFactory
             ],
             'required' => ['action'], 'additionalProperties' => false,
         ];
+        $instanceConfigSchema=['type'=>'object','properties'=>['port'=>['type'=>['integer','null'],'minimum'=>12000,'maximum'=>19999],
+            'variables'=>['type'=>'object','additionalProperties'=>['type'=>'string']]],'additionalProperties'=>false];
+        $instanceRegisterSchema=['type'=>'object','properties'=>['project'=>['type'=>'string'],'machine_id'=>['type'=>'string','pattern'=>'^[a-f0-9]{32}$'],
+            'confirmation'=>['type'=>'string','enum'=>['ADD_DEPLOYMENT']],'workspace_path'=>['type'=>['string','null']],
+            'configuration'=>$instanceConfigSchema],'required'=>['project','machine_id','confirmation'],'additionalProperties'=>false];
+        $instanceConfigureSchema=['type'=>'object','properties'=>['deployment_id'=>['type'=>'string','pattern'=>'^[a-f0-9]{32}$'],
+            'revision'=>['type'=>'integer','minimum'=>1],'configuration'=>$instanceConfigSchema,'workspace_path'=>['type'=>['string','null']]],
+            'required'=>['deployment_id','revision','configuration'],'additionalProperties'=>false];
+        $instanceActionSchema=['type'=>'object','properties'=>['deployment_id'=>['type'=>'string','pattern'=>'^[a-f0-9]{32}$'],
+            'action'=>['type'=>'string','enum'=>['create','sync','deploy','status','logs','stop','restart']],
+            'commit'=>['type'=>['string','null'],'pattern'=>'^[a-f0-9]{40}$'],'runtime'=>['type'=>['string','null'],'enum'=>['static','php','node',null]]],
+            'required'=>['deployment_id','action'],'additionalProperties'=>false];
         $builder = Server::builder()
             ->setServerInfo(
                 'devMcp',
@@ -200,6 +213,12 @@ final class ServerFactory
                 description: 'Valide un plan de création local ou distant et de dépôt GitHub, sans écriture ni permission nouvelle.',
                 inputSchema: $projectPreviewSchema,
             )
+            ->addTool([$tools,'deploymentTargets'],'deployment_targets',description:'Machines actives avec agent de projets et hébergement déclaré ; renvoie machine_id, nom, OS et architecture pour deployment_register.')
+            ->addTool([$tools,'deploymentList'],'deployment_list',description:'Liste les instances gérées par projet, machine et deployment_id. Ne duplique jamais le projet GitHub.')
+            ->addTool([$tools,'deploymentDescribe'],'deployment_describe',description:'État, configuration publique, versions et jobs d’une instance précise ; aucune valeur de variable sensible.')
+            ->addTool([$tools,'deploymentRegister'],'deployment_register',description:'Déclare une instance sur une machine active avec agent projets ; confirmation ADD_DEPLOYMENT. Ne touche aucun dossier existant. Puis deployment_action_start create avec un commit exact, et deploy avec le runtime.',inputSchema:$instanceRegisterSchema)
+            ->addTool([$tools,'deploymentConfigure'],'deployment_configure',description:'Modifie la configuration propre à une instance avec sa révision actuelle : port 12000..19999, variables. Les valeurs ne sont jamais relues. Nécessite ensuite deploy pour application ; chemin immuable après le premier job.',inputSchema:$instanceConfigureSchema)
+            ->addTool([$tools,'deploymentActionStart'],'deployment_action_start',description:'Action ciblée par deployment_id : create, sync, deploy, status, logs, stop, restart. create/sync/deploy exigent un commit exact ; deploy exige runtime static/php/node. Aucun choix implicite de machine. Retourne job_id à suivre avec job_status.',inputSchema:$instanceActionSchema)
             ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
             ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée, ses paramètres et contraintes. Pour ios.build : schéma JSON et équipes de signature détectées ; actualiser avec ios.capabilities si nécessaire.')
             ->addTool(

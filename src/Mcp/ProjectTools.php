@@ -86,8 +86,9 @@ final class ProjectTools
             }
         }
         foreach ($projects as &$entry) {
-            if ($this->remoteTools !== null && $this->remoteTools->projectQueue()->project($entry['id']) !== null) {
-                $entry = array_replace($entry, $this->remoteTools->describe($entry['id']));
+            if ($this->remoteTools !== null && $this->remoteTools->projectQueue()->instances($entry['id']) !== []) {
+                if(isset($this->projects->all()[$entry['id']])){$entry['deployments']=$this->deploymentService()->list($entry['id']);$entry['local_deployment_id']='local';$entry['deployment_required']=true;}
+                else $entry = array_replace($entry, $this->remoteTools->describe($entry['id']));
             }
             if($probeLocalPreviews&&$entry['id']!==$servingProject)$entry = $this->withLocalPreviewStatus($entry);
         }
@@ -626,6 +627,7 @@ final class ProjectTools
     public function projectDescribe(string $project): array
     {
         $description=$this->describeProject($project);
+        if(isset($this->projects->all()[$project])&&($this->remoteTools?->projectQueue()->instances($project)??[])!==[]){$description['deployments']=$this->deploymentService()->list($project);$description['local_deployment_id']='local';$description['deployment_required']=true;}
         return $this->mobileCatalogue===null?$description:$this->mobileCatalogue->enrich([$description])[0];
     }
 
@@ -647,11 +649,49 @@ final class ProjectTools
     /**
      * @return array{project: string, actions: list<array<string, mixed>>}
      */
-    public function actionList(string $project): array
+    private function selectedRemote(string $project,?string $deployment): ?RemoteTools
     {
-        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
-            return $this->remoteTools->actions($project);
+        $local=isset($this->projects->all()[$project]);
+        if($deployment==='local'){
+            if(!$local)throw new \Mcp\Exception\ToolCallException('No local deployment for this project');
+            return null;
         }
+        if($deployment!==null){
+            try{if($this->remoteTools===null)throw new InvalidArgumentException('Distributed registry unavailable');return $this->remoteTools->forDeployment($project,$deployment);}
+            catch(InvalidArgumentException $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+        }
+        $rows=$this->remoteTools?->projectQueue()->instances($project)??[];
+        if(count($rows)>1||$local&&$rows!==[]){
+            $choices=$this->deploymentService()->list($project);
+            if($local)$choices[]=['deployment_id'=>'local','project_id'=>$project,'machine'=>gethostname()];
+            throw new \Mcp\Exception\ToolCallException(json_encode(['code'=>'DEPLOYMENT_REQUIRED','message'=>'Select deployment_id explicitly. Use local for the existing local project, or a managed deployment ID.','deployments'=>$choices],JSON_THROW_ON_ERROR));
+        }
+        return !$local&&$this->remoteTools?->hasProject($project)?$this->remoteTools:null;
+    }
+
+    private function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
+    {
+        if($this->remoteTools===null)throw new \InvalidArgumentException('Distributed registry unavailable');
+        return $this->remoteTools->deploymentService();
+    }
+    public function deploymentTargets(): array{return $this->deploymentCall(fn()=>$this->deploymentService()->targets());}
+    public function deploymentList(?string $project=null): array{return $this->deploymentCall(fn()=>['deployments'=>$this->deploymentService()->list($project)]);}
+    public function deploymentDescribe(string $deployment_id): array{return $this->deploymentCall(fn()=>$this->deploymentService()->describe($deployment_id));}
+    public function deploymentRegister(string $project,string $machine_id,string $confirmation,?string $workspace_path=null,array $configuration=[]): array
+    {return $this->deploymentCall(fn()=>$this->deploymentService()->add($project,$machine_id,$workspace_path,$configuration,$confirmation));}
+    public function deploymentConfigure(string $deployment_id,int $revision,array $configuration,?string $workspace_path=null): array
+    {return $this->deploymentCall(fn()=>$this->deploymentService()->configure($deployment_id,$revision,$configuration,$workspace_path));}
+    public function deploymentActionStart(string $deployment_id,string $action,?string $commit=null,?string $runtime=null): array
+    {return $this->deploymentCall(fn()=>$this->deploymentService()->start($deployment_id,$action,$commit,$runtime));}
+    private function deploymentCall(callable $call): array
+    {try{return $call();}catch(\InvalidArgumentException $e){throw new \Mcp\Exception\ToolCallException(json_encode(['code'=>'INVALID_DEPLOYMENT_REQUEST','message'=>$e->getMessage()],JSON_THROW_ON_ERROR));}}
+    /** Worker-only entrypoint; deliberately not exposed as an MCP tool. */
+    public function prepareDeploymentJobs(): bool{return $this->remoteTools?->deploymentService()->prepareNext()??false;}
+
+    public function actionList(string $project,?string $deployment_id=null): array
+    {
+        $remote=$this->selectedRemote($project,$deployment_id);
+        if($remote!==null)return $remote->actions($project);
         if ($this->provisioning !== null && !isset($this->projects->all()[$project])) {
             try {
                 $record = $this->provisioning->get($project);
@@ -678,11 +718,10 @@ final class ProjectTools
     /**
      * @return array<string, mixed>
      */
-    public function actionDescribe(string $project, string $action): array
+    public function actionDescribe(string $project, string $action,?string $deployment_id=null): array
     {
-        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
-            return $this->remoteTools->action($project, $action);
-        }
+        $remote=$this->selectedRemote($project,$deployment_id);
+        if($remote!==null)return $remote->action($project,$action);
         return $this->projects->get($project)->getAction($action)->toPublicArray();
     }
 
@@ -695,9 +734,10 @@ final class ProjectTools
         string $project,
         string $action,
         array $arguments = [],
+        ?string $deployment_id=null,
     ): array
     {
-        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
+        if ($this->selectedRemote($project,$deployment_id)!==null) {
             throw new InvalidArgumentException('Remote actions require action_start');
         }
         $projectDefinition = $this->projects->get($project);
@@ -728,10 +768,10 @@ final class ProjectTools
         string $project,
         string $action,
         array $arguments = [],
+        ?string $deployment_id=null,
     ): array {
-        if ($this->remoteTools !== null && $this->remoteTools->hasProject($project) && !isset($this->projects->all()[$project])) {
-            return $this->remoteTools->start($project, $action, $arguments);
-        }
+        $remote=$this->selectedRemote($project,$deployment_id);
+        if($remote!==null)return $remote->start($project,$action,$arguments);
         $this->remoteTools?->assertLocalMachineAction($action);
         return $this->jobs->start($project, $action, $arguments);
     }

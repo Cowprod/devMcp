@@ -31,7 +31,7 @@ try {
     }
     $claim = $payload['preview_port_claim'] ?? null;
     if (isset($payload['agent_version']) && (!is_string($payload['agent_version'])
-        || preg_match('/^projects-v1:[a-f0-9]{40}$/D', $payload['agent_version']) !== 1)) {
+        || preg_match('/^projects-v1:[a-f0-9]{40}(?::inst1)?$/D', $payload['agent_version']) !== 1)) {
         throw new RuntimeException('agent_version');
     }
     $reportedIp = $payload['zerotier_ipv4'] ?? null;
@@ -88,11 +88,13 @@ try {
     }
 
     if (isset($payload['agent_version'])) {
-        $db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$payload['agent_version'], $machineId]);
+        $version=$payload['agent_version'];
+        if(str_ends_with($version,':inst1'))$db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$version,$machineId]);
+        else $db->prepare("UPDATE dm_machine SET agent_version=CASE WHEN agent_version=CONCAT(?,':inst1') THEN agent_version ELSE ? END WHERE id=?")->execute([$version,$version,$machineId]);
     }
     $machineState = $db->prepare('SELECT status FROM dm_machine WHERE id=?');
     $machineState->execute([$machineId]);
-    $response = ['protocol_version' => 1, 'ok' => true, 'deployments' => $deployments, 'machine_status' => $machineState->fetchColumn()];
+    $response = ['instance_protocol'=>1,'protocol_version' => 1, 'ok' => true, 'deployments' => $deployments, 'machine_status' => $machineState->fetchColumn()];
     // Capability is advertised only after the migration is readable.
     $response['zerotier_address_supported'] = false;
     try {
