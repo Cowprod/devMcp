@@ -69,6 +69,13 @@ final class MultiDeploymentRegistryTest extends TestCase
         $this->db->prepare("INSERT INTO dm_remote_project_job(id,deployment_id,state) VALUES ('job',?,'preparing')")->execute([$a['deployment_id']]);
         try{$this->service->configure($a['deployment_id'],1,['port'=>12345]);self::fail('Changed queued configuration');}catch(InvalidArgumentException $e){self::assertStringContainsString('in-flight',$e->getMessage());}
     }
+    public function testJobResultNeverReturnsPrivateRequestOrUnknownResultFields():void
+    {
+        $a=$this->add($this->a);$id=str_repeat('d',32);
+        $this->db->prepare("INSERT INTO dm_remote_project_job(id,deployment_id,machine_id,project_id,operation,state,request_json,result_json) VALUES (?,?,?,'shared-app','deploy','succeeded',?,?)")->execute([$id,$a['deployment_id'],$this->a,json_encode(['variables'=>['PRIVATE'=>'request-secret']]),json_encode(['ok'=>true,'data'=>['active_revision'=>str_repeat('f',40),'sql_password'=>'result-secret']])]);
+        $result=$this->service->job($id);self::assertTrue($result['ok']);self::assertSame(str_repeat('f',40),$result['data']['active_revision']);
+        self::assertStringNotContainsString('request-secret',json_encode($result));self::assertStringNotContainsString('result-secret',json_encode($result));
+    }
     public static function forbiddenConfigurations():array{return [[['port'=>80]],[['port'=>20000]],[['variables'=>['PORT'=>'12345']]],[['variables'=>['LD_PRELOAD'=>'/tmp/code.so']]],[['variables'=>['PRIVATE'=>'one'."\n".'two']]],[['variables'=>['bad-name'=>'value']]],[['variables'=>['VALID'=>[]]]]];}
     #[\PHPUnit\Framework\Attributes\DataProvider('forbiddenConfigurations')]
     public function testRejectsUnsafeConfiguration(array $configuration):void{self::expectException(InvalidArgumentException::class);DeploymentConfiguration::validate($configuration);}

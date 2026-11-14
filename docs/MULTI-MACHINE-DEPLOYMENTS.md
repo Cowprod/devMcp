@@ -32,7 +32,7 @@ A source-bearing job first enters `preparing`. The existing central worker uses 
 
 ## Web administration
 
-The existing Assignments panel includes an instance section using the same DeploymentService as MCP. It provides registration, per-machine configuration, exact-commit deployment, status/log requests, stop/restart and individual job history. Existing Web sessions and CSRF checks protect every write. Secret values are never preloaded into forms. Existing local service controls and inactive assignment declarations remain separate and preserved.
+The existing Assignments panel includes an instance section using the same DeploymentService as MCP. It provides registration, per-machine configuration, exact-commit deployment, status/log requests, stop/restart and individual job history. The Result button reads the authenticated job result or requested log; raw requests, Git blobs and variable values are never returned by this endpoint. Existing Web sessions and CSRF checks protect every write. Secret values are never preloaded into forms. Existing local service controls and inactive assignment declarations remain separate and preserved.
 
 The catalogue adds a `deployments` collection without removing existing single-instance fields. A multi-remote project has no implicitly chosen machine URL. Per-machine metadata is retained in administrative associations; one instance cannot overwrite another's version or state.
 

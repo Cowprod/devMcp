@@ -15,7 +15,7 @@ final class MacProjectRuntime extends RemoteProjectRuntime
         $project=RemoteProjectPackage::projectId($job['project_id']??'');
         $root=static::workspaceRoot($policy);$workspace=$root.'/'.$project;
         if(isset($job['workspace_path'])){
-            if(!is_string($job['workspace_path'])||dirname($job['workspace_path'])!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($job['workspace_path']))||!preg_match('/^[a-f0-9]{32}$/D',$job['deployment_id']??''))throw new RuntimeException('Invalid mobile build deployment workspace');
+            if(!is_string($job['workspace_path'])||$job['workspace_path']!==$root.'/'.basename($job['workspace_path'])||dirname($job['workspace_path'])!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($job['workspace_path']))||!preg_match('/^[a-f0-9]{32}$/D',$job['deployment_id']??''))throw new RuntimeException('Invalid mobile build deployment workspace');
             $workspace=$job['workspace_path'];
         }
         static::directory($workspace);

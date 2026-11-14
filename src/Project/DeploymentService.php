@@ -13,7 +13,7 @@ final class DeploymentService
     {
         $rows=$this->db->query("SELECT id,name,os_family,architecture,agent_version FROM dm_machine WHERE status='active' ORDER BY name,id")->fetchAll(PDO::FETCH_ASSOC);$out=[];
         foreach($rows as $r){$caps=(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($r['id']);
-            if(!str_ends_with($r['agent_version']??'',':inst1')||!$caps['hosting']||!in_array($r['os_family'],['linux','macos'],true))continue;
+            if(!preg_match('/^projects-v1:[a-f0-9]{40}:inst1$/D',$r['agent_version']??'')||!$caps['hosting']||!in_array($r['os_family'],['linux','macos'],true))continue;
             $out[]=['machine_id'=>$r['id'],'name'=>$r['name'],'os'=>$r['os_family'],'architecture'=>$r['architecture']];}
         return ['machines'=>$out];
     }
@@ -24,6 +24,18 @@ final class DeploymentService
         $jsonRevision=$this->db->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?"COALESCE(JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.package.revision')),JSON_UNQUOTE(JSON_EXTRACT(request_json,'$.source.revision')))":"COALESCE(json_extract(request_json,'$.package.revision'),json_extract(request_json,'$.source.revision'))";
         $q=$this->db->prepare('SELECT id,operation,state,created_at,claimed_at,finished_at,'.$jsonRevision.' AS requested_revision FROM dm_remote_project_job WHERE deployment_id=? ORDER BY created_at DESC,id DESC LIMIT 10');
         $q->execute([$id]);return $record+['jobs'=>$q->fetchAll(PDO::FETCH_ASSOC)];
+    }
+    public function job(string $id):array
+    {
+        if(!preg_match('/^[a-f0-9]{32}$/D',$id))throw new InvalidArgumentException('Invalid job ID');
+        $q=$this->db->prepare('SELECT j.id,j.deployment_id,j.operation,j.state,j.created_at,j.claimed_at,j.finished_at,j.result_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.machine_id=j.machine_id AND p.project_id=j.project_id WHERE j.id=?');
+        $q->execute([$id]);$row=$q->fetch(PDO::FETCH_ASSOC);if($row===false)throw new InvalidArgumentException('Unknown deployment job');
+        $result=$row['result_json']===null?null:json_decode($row['result_json'],true,32,JSON_THROW_ON_ERROR);unset($row['result_json']);
+        if($result!==null){$row['ok']=($result['ok']??null)===true;$row['error']=is_string($result['error']??null)?$result['error']:null;
+            $row['data']=array_intersect_key($result['data']??[],array_flip(['deployment_id','project_id','revision','active_revision','port','runtime','url','service_state','instance_checked_at_utc','applied_configuration_revision']));
+            if($row['operation']==='logs'&&is_string($result['data']['content']??null))$row['log']=substr($result['data']['content'],0,32768);
+        }
+        return $row;
     }
     public function add(string $project,string $machine,?string $workspace,array $configuration,string $confirmation): array
     {
@@ -134,7 +146,7 @@ final class DeploymentService
     }
     private static function workspace(string $path,string $canonical): void
     {
-        if(dirname($path)!==dirname($canonical)||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($path)))throw new InvalidArgumentException('Workspace must be a direct project directory under this agent approved hosting root');
+        if($path!==dirname($canonical).'/'.basename($path)||dirname($path)!==dirname($canonical)||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($path)))throw new InvalidArgumentException('Workspace must be a direct project directory under this agent approved hosting root');
     }
     private function audit(string $event,string $id): void
     {

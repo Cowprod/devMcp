@@ -105,7 +105,8 @@ final class RemoteProjectQueue
         $request = ['id' => $id, 'machine_id' => $record['machine_id'],
             'project_id' => $project, 'operation' => $operation] + $details;
         if(($record['config_json']??null)!==null){
-            if(!preg_match('/^projects-v1:[a-f0-9]{40}:inst1$/D',$this->db->query('SELECT agent_version FROM dm_machine WHERE id='.$this->db->quote($record['machine_id']))->fetchColumn()?:''))throw new RuntimeException('Instance-aware agent update required');
+            $agent=$this->db->prepare('SELECT agent_version FROM dm_machine WHERE id=?');$agent->execute([$record['machine_id']]);
+            if(!preg_match('/^projects-v1:[a-f0-9]{40}:inst1$/D',$agent->fetchColumn()?:''))throw new \Mcp\Exception\ToolCallException('Instance-aware agent update required');
             $request['workspace_path']=$record['workspace_path'];$request['deployment_id']=$record['deployment_id'];
             if(in_array($operation,['status','logs','list','read','stat','find','head'],true)){
                 $request['instance_action']=$operation;$request['operation']='instance';$request['configuration_revision']=(int)$record['config_revision'];
@@ -141,7 +142,7 @@ final class RemoteProjectQueue
             // Late jobs from an older central process retain their exact project+machine binding.
             $this->db->prepare('UPDATE dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id SET j.deployment_id=p.deployment_id WHERE j.machine_id=? AND j.deployment_id IS NULL')->execute([$machine]);
             $this->db->prepare("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE machine_id=? AND state IN ('preparing','queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)")->execute([$machine]);
-            $q = $this->db->prepare("SELECT j.id,j.request_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id AND p.machine_id=j.machine_id JOIN dm_deployment d ON d.id=p.deployment_id JOIN dm_machine m ON m.id=j.machine_id WHERE j.machine_id=? AND m.status='active' AND d.enabled=1 AND (j.state='queued' OR (j.state='claimed' AND j.claimed_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 180 SECOND))) AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE");
+            $q = $this->db->prepare("SELECT j.id,j.request_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id AND p.machine_id=j.machine_id JOIN dm_deployment d ON d.id=p.deployment_id AND d.project_id=j.project_id AND d.machine_id=j.machine_id JOIN dm_machine m ON m.id=j.machine_id WHERE j.machine_id=? AND m.status='active' AND d.enabled=1 AND (j.state='queued' OR (j.state='claimed' AND j.claimed_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 180 SECOND))) AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE");
             $q->execute([$machine]);
             $r = $q->fetch(PDO::FETCH_ASSOC);
             if ($r !== false) {

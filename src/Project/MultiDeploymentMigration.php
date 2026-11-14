@@ -34,7 +34,7 @@ final class MultiDeploymentMigration
         $handle=fopen($file,'xb');if(!is_resource($handle))throw new RuntimeException('Migration backup unavailable');chmod($file,0600);
         $write=static function(string $sql)use($handle):void{if(fwrite($handle,$sql)!==strlen($sql))throw new RuntimeException('Incomplete migration backup; schema not changed');};
         try{
-            $write("SET FOREIGN_KEY_CHECKS=0;\n");
+            $write("SET @OLD_SQL_MODE=@@SQL_MODE;\nSET SQL_MODE=".$db->quote((string)$db->query('SELECT @@SESSION.sql_mode')->fetchColumn()).";\nSET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS;\nSET FOREIGN_KEY_CHECKS=0;\n");
             foreach(['dm_deployment','dm_remote_project','dm_remote_project_job'] as $table){
                 $create=$db->query('SHOW CREATE TABLE `'.$table.'`')->fetch(PDO::FETCH_NUM)[1];
                 $write('DROP TABLE IF EXISTS `'.$table.'`;'."\n".$create.";\n");
@@ -45,7 +45,7 @@ final class MultiDeploymentMigration
                     $write('INSERT INTO `'.$table.'` ('.$keys.') VALUES ('.$values.");\n");
                 }
             }
-            $write("SET FOREIGN_KEY_CHECKS=1;\n");if(!fflush($handle)||!fsync($handle))throw new RuntimeException('Migration backup could not be synchronized');
+            $write("SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;\nSET SQL_MODE=@OLD_SQL_MODE;\n");if(!fflush($handle)||!fsync($handle))throw new RuntimeException('Migration backup could not be synchronized');
         }finally{fclose($handle);}
     }
 

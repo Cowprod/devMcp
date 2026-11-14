@@ -74,6 +74,14 @@ if (isset($_GET['adb_log'])) {
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 // Same HTTPS session boundary as the administration page.
 // The Web process invokes only the existing local MCP action, never systemctl.
+if(isset($_GET['deployment_job'])){
+    header('Content-Type: application/json; charset=utf-8');header('X-Content-Type-Options: nosniff');
+    if(!in_array($_SERVER['REQUEST_METHOD']??'GET',['GET','HEAD'],true)){http_response_code(405);header('Allow: GET, HEAD');echo '{"error":"method_not_allowed"}';exit;}
+    try{$jobDb=DatabaseConnection::connect((string)$config['dsn'],(string)$config['username'],(string)$config['password']);echo json_encode((new \Cowprod\DevMcp\Project\DeploymentService($jobDb,'web-admin'))->job((string)$_GET['deployment_job']),JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);}
+    catch(InvalidArgumentException $e){http_response_code(404);echo '{"error":"unknown_deployment_job"}';}
+    catch(Throwable $e){http_response_code(503);error_log('devmcp-deployment-job: '.get_class($e));echo '{"error":"deployment_job_unavailable"}';}
+    exit;
+}
 if (isset($_GET['project_service_api'])) {
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
@@ -850,7 +858,7 @@ Version préparée : <code><?= e($instance['revision']??'—') ?></code><br>Vers
 <div class="d-flex flex-wrap gap-2">
 <?php foreach(['status'=>'Actualiser l’état','logs'=>'Lire les journaux','restart'=>'Redémarrer','stop'=>'Arrêter'] as $action=>$label): ?><form method="post" action="/" <?php if($action==='stop'): ?>onsubmit="return confirm('Arrêter cette instance uniquement ?')"<?php endif ?>>
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><input type="hidden" name="operation" value="instance.action"><input type="hidden" name="deployment_id" value="<?= e($instance['deployment_id']) ?>"><input type="hidden" name="instance_action" value="<?= e($action) ?>"><button class="btn btn-sm <?= $action==='stop'?'btn-danger':'btn-outline-info' ?>" <?= !$instance['ready']?'disabled':'' ?>><?= e($label) ?></button></form><?php endforeach ?></div>
-<?php if($instanceDetail['jobs']): ?><div class="table-responsive mt-2"><table class="table table-sm"><thead><tr><th>Job</th><th>Action</th><th>État</th><th>Fin UTC</th></tr></thead><tbody><?php foreach($instanceDetail['jobs'] as $j): ?><tr><td><code><?= e($j['id']) ?></code></td><td><?= e($j['operation']) ?></td><td><?= e($j['state']) ?></td><td><?= e($j['finished_at']??'—') ?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
+<?php if($instanceDetail['jobs']): ?><div class="table-responsive mt-2"><table class="table table-sm"><thead><tr><th>Job</th><th>Action</th><th>État</th><th>Fin UTC</th></tr></thead><tbody><?php foreach($instanceDetail['jobs'] as $j): ?><tr><td><code><?= e($j['id']) ?></code></td><td><?= e($j['operation']) ?></td><td><?= e($j['state']) ?></td><td><?= e($j['finished_at']??'—') ?><br><button type="button" class="btn btn-sm btn-outline-info" data-instance-result="<?= e($j['id']) ?>">Résultat</button><pre class="small mt-2 d-none" id="instance-result-<?= e($j['id']) ?>"></pre></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
 </div><?php endforeach ?>
 </div></section>
 <h2 class="h5">Affectations</h2>
@@ -1876,5 +1884,19 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   }
   window.setInterval(pollRemoteJobs,15000);
 })();
+
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-instance-result]');if(!button)return;
+  const id=button.dataset.instanceResult,target=document.getElementById('instance-result-'+id);if(!target)return;
+  target.classList.remove('d-none');target.textContent='Chargement…';button.disabled=true;
+  try{
+    let response;
+    try{response=await fetch('/?deployment_job='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store'});}
+    catch{target.textContent='Erreur réseau lors du chargement du résultat.';return;}
+    if(!response.ok){target.textContent='Résultat indisponible (HTTP '+response.status+').';return;}
+    if(!(response.headers.get('content-type')||'').includes('application/json')){target.textContent='Réponse inattendue : vérifier la session administrative.';return;}
+    const data=await response.json();if(data.state&&button.closest('tr'))button.closest('tr').children[2].textContent=data.state;target.textContent=data.log!==undefined?data.log:JSON.stringify(data,null,2);
+  }catch{target.textContent='Le serveur a renvoyé un résultat illisible.';}finally{button.disabled=false;}
+});
 </script>
 </body></html>

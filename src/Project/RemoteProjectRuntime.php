@@ -58,7 +58,7 @@ class RemoteProjectRuntime
             $workspace = $root . '/' . $project;
             if($instance){
                 $workspace=$job['workspace_path']??'';
-                if(!is_string($workspace)||dirname($workspace)!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($workspace)))throw new RuntimeException('Instance workspace outside approved hosting root');
+                if(!is_string($workspace)||$workspace!==$root.'/'.basename($workspace)||dirname($workspace)!==$root||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',basename($workspace)))throw new RuntimeException('Instance workspace outside approved hosting root');
             }
             $metaPath = $workspace . '/.project.json';
             if (!file_exists($workspace)) {
