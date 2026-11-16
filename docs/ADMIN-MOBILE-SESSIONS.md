@@ -55,3 +55,32 @@ Data writes require an explicitly granted `admin:write` scope. A valid old/read-
 Unsupported deletion, machine disable/revoke, deployment start/restart, integrated project creation, agent diagnostics and build dispatch are not exposed as arbitrary operations. The Web admin currently has no shared deletion/disable service, and its legacy HTTP MCP bridge does not listen on this host. These require subsequent coherent service/transport batches; unsupported methods fail explicitly. No test may delete or disable a real machine/project.
 
 CORS now permits PATCH and PUT in addition to the previous methods, still only on the same exact local Cordova origins. HTTPS, ZeroTier-only binding, Web session/CSRF guards and agent authentication are preserved. The deploy checker uses a legacy read token and now expects 403 on a supported write route.
+
+## Explicit multi-machine deployments (API v1)
+
+Every call uses the existing TLS and rotating mobile bearer session. Reads require admin:read;
+writes require the explicitly granted admin:write scope. DeploymentService is shared with
+the Web UI and MCP tools; no project-level implicit machine selection occurs.
+
+| Method | Path | Result |
+|---|---|---|
+| GET | /deployment-targets | Instance-protocol-eligible machines |
+| GET | /deployments | Managed deployments list, secret-free |
+| GET | /deployments/{deployment_id} | Instance detail with recent jobs |
+| GET | /deployments/{deployment_id}/jobs/{job_id} | Sanitized result scoped to the instance |
+| POST | /deployments | Register instance, HTTP 201 |
+| PATCH | /deployments/{deployment_id} | Update desired configuration with current revision |
+| POST | /deployments/{deployment_id}/actions | Start a typed action on exactly one instance |
+
+Registration requires project_id, machine_id and confirmation ADD_DEPLOYMENT.
+Optional configuration and workspace_path obey the shared business validations.
+Configuration requires deployment_id matching the URL and integer revision.
+Omitting variables preserves existing secret values; configuration.clear_variables=true clears them.
+Actions require deployment_id matching the URL, action from create/sync/deploy/status/logs/stop/restart,
+commit of exactly 40 hex characters for create/sync/deploy, and runtime static/php/node only for deploy.
+Stop additionally requires confirmation STOP_DEPLOYMENT. No free-form execution endpoint exists.
+
+Responses return variable names, not values. Raw agent logs are intentionally omitted on the mobile
+job-result route because application logs can contain sensitive data.
+The authenticated Web administration remains the existing log viewer.
+Invalid/mismatched instance IDs or stale revisions are rejected; clients must not choose a machine implicitly.

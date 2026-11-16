@@ -76,7 +76,7 @@ final class AdminReadApi
                 if($method!=='GET')self::requireWrite($principal);
                 $data=$method==='GET'?[]:self::jsonBody($headers,$body);
                 $result=($this->operations)($method,$relative,$data,$principal);
-                return ['status'=>in_array($method,['POST'],true)&&in_array($relative,['/machines','/projects','/assignments'],true)?201:200,'headers'=>$responseHeaders,'body'=>['api_version'=>1]+$result];
+                return ['status'=>in_array($method,['POST'],true)&&in_array($relative,['/machines','/projects','/assignments','/deployments'],true)?201:200,'headers'=>$responseHeaders,'body'=>['api_version'=>1]+$result];
             }
             if ($method!=='GET') throw new AdminReadApiError(405,'operation_not_supported');
             if($path===self::PREFIX.'/projects'){
