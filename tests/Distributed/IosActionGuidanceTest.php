@@ -84,4 +84,28 @@ final class IosActionGuidanceTest extends TestCase
             if(is_dir($root.'/jobs'))rmdir($root.'/jobs');rmdir($root);
         }
     }
+    public function testSourceFailureIsAnExplicitSafeMcpResultWithoutCreatingAJob(): void
+    {
+        $this->snapshot();
+        $root=realpath(sys_get_temp_dir()).'/devmcp-ios-source-error-'.bin2hex(random_bytes(6));
+        mkdir($root,0700);mkdir($root.'/source');mkdir($root.'/source/app');
+        try {
+            $registry=ProjectRegistry::fromConfig(['projects'=>[]]);$audit=new AuditLogger($root.'/audit.jsonl');
+            $jobs=new JobManager($registry,new FileJobStore($root.'/jobs'),new ArtifactService(),$audit);
+            $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),new RemoteTools($this->db,$root.'/source'));
+            foreach(['stdio','legacy','http'] as $transport){
+                $input=['project'=>'app','action'=>'ios.build','arguments'=>['target'=>'device','commit'=>str_repeat('a',40),'team_id'=>'FB3A74YU84','method'=>'debugging']];
+                $reply=$transport==='http'?McpWireClient::callHttp($tools,'action_start',$input):McpWireClient::call($tools,'action_start',$input,$transport==='legacy'?'2025-03-26':'2026-07-28');
+                self::assertArrayNotHasKey('error',$reply);self::assertTrue($reply['result']['isError']);
+                $error=json_decode($reply['result']['content'][0]['text'],true,flags:JSON_THROW_ON_ERROR);
+                self::assertSame('SOURCE_OPERATION_FAILED',$error['code']);self::assertFalse($error['job_created']);
+                self::assertStringNotContainsString($root,json_encode($reply));
+                self::assertSame(1,(int)$this->db->query('SELECT COUNT(*) FROM dm_remote_project_job')->fetchColumn());
+            }
+        } finally {
+            $it=new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root,\FilesystemIterator::SKIP_DOTS),\RecursiveIteratorIterator::CHILD_FIRST);
+            foreach($it as $file){if($file->isDir())rmdir($file->getPathname());else unlink($file->getPathname());}rmdir($root);
+        }
+    }
+
 }
