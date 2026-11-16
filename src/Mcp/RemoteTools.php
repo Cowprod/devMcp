@@ -95,8 +95,17 @@ final class RemoteTools
                     }
                 }
             }
-            $details['package'] = (new \Cowprod\DevMcp\Project\RemoteProjectSource($this->sourceRoot))
-                ->snapshot($project, $record['repository'], $commit);
+            try {
+                $details['package'] = (new \Cowprod\DevMcp\Project\RemoteProjectSource($this->sourceRoot))
+                    ->snapshot($project, $record['repository'], $commit, in_array($operation, ['ios_build', 'android_build'], true));
+            } catch (\Cowprod\DevMcp\Project\RemoteProjectSourceException $error) {
+                error_log('devmcp-source-preparation: ' . $error->errorCode . ' project=' . $project . ' operation=' . $operation);
+                self::reject($error->errorCode, $error->getMessage(), ['job_created'=>false]);
+            } catch (\Throwable $error) {
+                // Never relay filesystem paths, Git stderr or credential-bearing exceptions.
+                error_log('devmcp-source-preparation: ' . get_class($error));
+                self::reject('SOURCE_PREPARATION_FAILED', 'Repository source preparation failed; inspect central server diagnostics.', ['job_created'=>false]);
+            }
         } else {
             $path = $arguments['path'] ?? '.';
             if (!is_string($path)) {
@@ -320,7 +329,7 @@ final class RemoteTools
                     $entry['guidance'] = 'Call action_start with action ios.capabilities and await job_status to discover actual signing teams. Use their id, never certificate CN identifiers. Then action_start ios.build with target and exact commit. No team is selected implicitly; an explicit project team_id may be used.';
                     $entry['arguments_schema'] = ['type'=>'object','properties'=>[
                         'target'=>['type'=>'string','enum'=>['simulator','device']],
-                        'commit'=>['type'=>'string','pattern'=>'^[a-f0-9]{40}$'],
+                        'commit'=>['type'=>'string','pattern'=>'^[a-f0-9]{40}$','description'=>'Exact commit reachable from an existing branch of the registered repository; feature branches are supported.'],
                         'team_id'=>['type'=>'string','pattern'=>'^[A-Z0-9]{10}$','description'=>'Apple Team ID from ios.capabilities.signing_teams[].id; optional only when configured explicitly in the project.'],
                         'method'=>['type'=>'string','enum'=>['debugging','release-testing']],
                     ],'required'=>['target','commit'],'additionalProperties'=>false];

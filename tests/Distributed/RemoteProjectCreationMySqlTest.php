@@ -253,4 +253,34 @@ final class RemoteProjectCreationMySqlTest extends TestCase
         $q=$this->db->prepare('SELECT COUNT(*) FROM dm_deployment WHERE project_id=?');$q->execute([$this->project]);
         self::assertSame(1,(int)$q->fetchColumn());
     }
+    public function testIosFeatureBranchBuildReturnsAJobOverMcpAndKeepsCapabilityReadsWorking(): void
+    {
+        $this->db->prepare("UPDATE dm_machine SET os_family='macos',architecture='aarch64' WHERE id=?")->execute([$this->machine]);
+        (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($this->machine,'macos',['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>true]);
+        $deployment=bin2hex(random_bytes(16));$workspace=RemoteProjectPackage::workspacePath($this->project,'macos',$this->machine);
+        $this->db->prepare('INSERT INTO dm_project(id,description,repository_url) VALUES (?,?,?)')->execute([$this->project,'iOS source fixture','https://github.com/Cowprod/'.$this->project]);
+        $this->db->prepare('INSERT INTO dm_deployment(id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,1)')->execute([$deployment,$this->project,$this->machine,$workspace]);
+        $this->db->prepare('INSERT INTO dm_remote_project(project_id,deployment_id,machine_id,repository,workspace_path,ready) VALUES (?,?,?,?,?,1)')->execute([$this->project,$deployment,$this->machine,'Cowprod/'.$this->project,$workspace]);
+        $this->git(['switch','-c','feat/mobile-build'],$this->root.'/work');
+        file_put_contents($this->root.'/work/config.xml','<widget version="0.2.24"/>');
+        $this->git(['add','.'],$this->root.'/work');$this->git(['commit','-m','Feature branch app'],$this->root.'/work');
+        $revision=trim((new Process(['git','rev-parse','HEAD'],$this->root.'/work'))->mustRun()->getOutput());
+        $this->git(['push',$this->root.'/remote.git','HEAD:refs/heads/feat/mobile-build'],$this->root.'/work');
+        $registry=ProjectRegistry::fromConfig(['projects'=>[]]);$audit=new AuditLogger($this->root.'/audit');
+        $jobs=new JobManager($registry,new FileJobStore($this->root.'/jobs'),new ArtifactService(),$audit);
+        $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools(),new RemoteTools($this->db,$this->root.'/sources'));
+        $queue=new RemoteProjectQueue($this->db);
+        $caps=\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,'action_start',['project'=>$this->project,'action'=>'ios.capabilities']);
+        self::assertArrayNotHasKey('error',$caps);$capJob=$queue->claim($this->machine);self::assertSame('ios_capabilities',$capJob['operation']);
+        $queue->finish($this->machine,$capJob['id'],['ok'=>true,'data'=>['signing_teams'=>[['id'=>'FB3A74YU84','name'=>'Listee','signing_certificate_count'=>1]]]]);
+        self::assertSame('succeeded',$tools->jobStatus($capJob['id'])['status']);
+        $input=['project'=>$this->project,'action'=>'ios.build','arguments'=>['target'=>'device','commit'=>$revision,'team_id'=>'FB3A74YU84','method'=>'debugging']];
+        $reply=\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,'action_start',$input);
+        self::assertArrayNotHasKey('error',$reply,json_encode($reply));self::assertFalse($reply['result']['isError']??false,json_encode($reply));
+        $created=$reply['result']['structuredContent'];self::assertMatchesRegularExpression('/^[a-f0-9]{32}$/',$created['job_id']);self::assertSame('queued',$created['status']);
+        $claimed=$queue->claim($this->machine);self::assertSame($created['job_id'],$claimed['id']);self::assertSame('ios_build',$claimed['operation']);
+        self::assertSame($revision,$claimed['package']['revision']);self::assertSame($input['arguments']['team_id'],$claimed['arguments']['team_id']);
+        self::assertSame(2,(int)$this->db->query("SELECT COUNT(*) FROM dm_remote_project_job WHERE project_id=".$this->db->quote($this->project))->fetchColumn());
+    }
+
 }
