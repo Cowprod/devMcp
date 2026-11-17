@@ -28,6 +28,16 @@ final class RuntimeMaintenanceToolsTest extends TestCase
         }
     }
 
+    public function testUpdateStatusHasOnlyOperationalMetadata(): void
+    {
+        $status = (new RuntimeMaintenanceTools())->updateStatus();
+        self::assertArrayHasKey('last_update', $status);
+        self::assertArrayHasKey('installed_commit', $status);
+        self::assertArrayHasKey('update_request_pending', $status);
+        self::assertFalse($status['runtime_process_revision_verified']);
+        self::assertArrayNotHasKey('environment', $status);
+    }
+
     public function testUpdateRequestRejectsMissingConfirmationWithoutWriting(): void
     {
         $this->expectException(\InvalidArgumentException::class);
