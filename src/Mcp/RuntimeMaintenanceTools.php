@@ -23,7 +23,7 @@ final class RuntimeMaintenanceTools
         $release = $releaseDate !== null && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/D', $releaseDate) === 1 ? $releaseDate : null;
 
         $last = null;
-        if ($updateStatus !== null && preg_match('/\Aexit_code=(\d+)\nstage=([a-z-]+)\nfinished_utc=([0-9T:Z-]+)\n\z/D', $updateStatus, $m) === 1) {
+        if ($updateStatus !== null && preg_match('/\Aexit_code=(\d+)\nstage=([a-z-]+)\nfinished_utc=([0-9T:Z-]+)\z/D', $updateStatus, $m) === 1) {
             $last = ['exit_code' => (int) $m[1], 'stage' => $m[2], 'finished_utc' => $m[3]];
         }
 
