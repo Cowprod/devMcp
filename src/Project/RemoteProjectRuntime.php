@@ -82,7 +82,6 @@ class RemoteProjectRuntime
                 if(($meta['project_id']??null)!==$project||isset($meta['deployment_id'])&&$meta['deployment_id']!==$job['deployment_id'])throw new RuntimeException('Workspace belongs to another deployment');
                 $meta['deployment_id']=$job['deployment_id'];
                 if($operation==='deploy'){
-                    static::$instanceVariables=$instanceConfig['variables'];
                     if($instanceConfig['port']!==null){
                         static::assertInstancePort($root,$workspace,$instanceConfig['port']);
                         if(($meta['port']??null)!==$instanceConfig['port']){
@@ -101,6 +100,14 @@ class RemoteProjectRuntime
                 static::stage($workspace, $package);
                 $meta['revision'] = $package['revision'];
                 if ($operation === 'deploy') {
+                    if ($instance) {
+                        // Public engine identity comes from the authenticated deployment job,
+                        // never from user-configured environment variables.
+                        static::$instanceVariables = array_merge($instanceConfig['variables'], [
+                            'DEVMCP_DEPLOYMENT_ID' => $job['deployment_id'],
+                            'DEVMCP_SOURCE_COMMIT' => $package['revision'],
+                        ]);
+                    }
                     $meta = static::deploy($workspace, $meta, $job['runtime'] ?? '', $policy['bind_ipv4'] ?? '');
                     $meta['service_state']='running';
                     if($instance)$meta['applied_configuration_revision']=$job['configuration_revision'];
