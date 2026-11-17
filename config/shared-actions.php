@@ -2,7 +2,27 @@
 
 declare(strict_types=1);
 
-return [
+$androidDiagnostics=[];
+foreach(['device_info','storage','files','storage_report','logcat'] as $operation){
+    $definition=[
+        'description'=>'Diagnostic Android en lecture seule : '.$operation.'. Appareil issu de la politique android.install du projet ; aucune commande libre.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-diagnostics',['project'=>'id'],$operation,['param'=>'device']],
+        'cwd'=>'.','timeout'=>50,'target'=>'local','sync'=>true,
+        'parameters'=>['device'=>['type'=>'android_serial','description'=>'Numéro ADB explicitement autorisé par android.install de ce projet.']],
+    ];
+    if($operation==='files'){
+        $definition['parameters']['location']=['type'=>'enum','values'=>['public_dcim','public_movies','app_external','app_private'],'description'=>'Destination déclarée ; aucun chemin libre.'];
+        $definition['parameters']['limit']=['type'=>'integer','minimum'=>1,'maximum'=>100,'description'=>'Nombre maximal d’entrées, parcours sans liens limité à huit niveaux.'];
+        $definition['argv'][]=['param'=>'location'];$definition['argv'][]=['param'=>'limit'];
+    }
+    if($operation==='logcat'){
+        $definition['parameters']['filter']=['type'=>'enum','values'=>['multicam','app','camera','storage','transfer'],'description'=>'Filtre fixe ; app/multicam/transfer nécessitent un processus actif.'];
+        $definition['parameters']['lines']=['type'=>'integer','minimum'=>1,'maximum'=>500,'description'=>'Lignes récentes, sans suivi continu ni effacement.'];
+        $definition['argv'][]=['param'=>'filter'];$definition['argv'][]=['param'=>'lines'];
+    }
+    $androidDiagnostics['android.'.$operation]=$definition;
+}
+return $androidDiagnostics + [
     'android.install'=>[
         'description'=>'Installe un APK debug publié par un build Android local réussi sur une tablette ADB explicitement choisie, lance l’app et capture son écran.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install',['param'=>'project_id'],['param'=>'build_id'],['param'=>'device']],

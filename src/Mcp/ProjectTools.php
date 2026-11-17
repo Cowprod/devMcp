@@ -741,6 +741,7 @@ final class ProjectTools
             throw new InvalidArgumentException('Remote actions require action_start');
         }
         $projectDefinition = $this->projects->get($project);
+        $this->validateAndroidDiagnostics($projectDefinition,$action,$arguments);
         $actionDefinition = $projectDefinition->getAction($action);
 
         if (!$actionDefinition->syncAllowed) {
@@ -772,8 +773,16 @@ final class ProjectTools
     ): array {
         $remote=$this->selectedRemote($project,$deployment_id);
         if($remote!==null)return $remote->start($project,$action,$arguments);
+        if(in_array($action,\Cowprod\DevMcp\Android\Diagnostics::ACTIONS,true))$this->validateAndroidDiagnostics($this->projects->get($project),$action,$arguments);
         $this->remoteTools?->assertLocalMachineAction($action);
         return $this->jobs->start($project, $action, $arguments);
+    }
+
+    private function validateAndroidDiagnostics(\Cowprod\DevMcp\Project\ProjectDefinition $project,string $action,array $arguments): void
+    {
+        if(!in_array($action,\Cowprod\DevMcp\Android\Diagnostics::ACTIONS,true))return;
+        try{$project->getAction($action)->normalizeArguments($arguments);}
+        catch(\InvalidArgumentException){throw new \Mcp\Exception\ToolCallException('{"code":"INVALID_ANDROID_DIAGNOSTIC_ARGUMENTS","message":"Use action_describe for required parameters, destinations, filters and numeric limits."}');}
     }
 
     /**
