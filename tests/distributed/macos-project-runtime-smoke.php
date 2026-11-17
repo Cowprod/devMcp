@@ -51,6 +51,8 @@ try{
    $p=proc_open(['/usr/bin/plutil','-convert','json','-o','-',$plist],[0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['file','/dev/null','w']],$pipes);
    $definition=json_decode(stream_get_contents($pipes[1]),true,32,JSON_THROW_ON_ERROR);fclose($pipes[1]);assert(proc_close($p)===0);
    assert($definition['EnvironmentVariables']['INSTANCE_MARKER']===$instance['configuration']['variables']['INSTANCE_MARKER']);assert((fileperms($plist)&0777)===0600);
+   assert($definition['EnvironmentVariables']['DEVMCP_DEPLOYMENT_ID']===$instance['deployment_id']);
+   assert($definition['EnvironmentVariables']['DEVMCP_SOURCE_COMMIT']===$instance['package']['revision']);
    $stop=$instance;$stop['id']=bin2hex(random_bytes(16));$stop['instance_action']='stop';unset($stop['package'],$stop['runtime']);
    assert(MacProjectRuntime::run($stop,$policy)['service_state']==='stopped');assert(str_contains(file_get_contents($staticLive['url'].'/'),'devMcp-mac-static'));
    $restart=$stop;$restart['id']=bin2hex(random_bytes(16));$restart['instance_action']='restart';assert(MacProjectRuntime::run($restart,$policy)['service_state']==='running');
