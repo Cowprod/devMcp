@@ -52,7 +52,7 @@ final class ProjectRegistry
             // Validate all templates, including unused ones, with a safe placeholder.
             $validation = $actionData;
             foreach ($validation['argv'] ?? [] as $index => $argument) {
-                if (is_array($argument) && isset($argument['project']) && in_array($argument['project'], ['node.cwd', 'service.name', 'service.entry', 'service.port', 'service.health_path'], true)) {
+                if (is_array($argument) && isset($argument['project']) && in_array($argument['project'], ['id', 'node.cwd', 'service.name', 'service.entry', 'service.port', 'service.health_path'], true)) {
                     if ($index === 0) { throw new InvalidArgumentException('Executable de projet interdit'); }
                     $validation['argv'][$index] = 'validation';
                     continue;
@@ -128,6 +128,7 @@ final class ProjectRegistry
      */
     private static function resolveProjectSetting(array $data, string $key, string $id): string
     {
+        if ($key === 'id') { return $id; }
         $node = $data['node'] ?? [];
         $service = $data['service'] ?? [];
         $value = match ($key) {

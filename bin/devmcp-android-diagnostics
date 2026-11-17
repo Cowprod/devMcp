@@ -1,0 +1,35 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Android\{Diagnostics,DiagnosticException,ProjectPolicy};
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
+use Cowprod\DevMcp\Mcp\RemoteTools;
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+use Symfony\Component\Process\Process;
+try{
+    if($argc<4||$argc>6)throw new DiagnosticException('invalid_parameters');
+    [$script,$projectId,$operation,$device]=$argv;$action='android.'.$operation;
+    if(!in_array($action,Diagnostics::ACTIONS,true))throw new DiagnosticException('unknown_action');
+    $config=require(getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
+    $runtime=RuntimeFactory::fromConfig($config,dirname(__DIR__).'/var');$project=$runtime->projects->get($projectId);
+    if(realpath(getcwd())!==$project->root)throw new DiagnosticException('invalid_project_context');
+    $declared=$project->getAction($action);
+    $arguments=['device'=>$device];
+    if(in_array($operation,['files','logcat'],true)){
+        if($argc!==6||!ctype_digit($argv[5]))throw new DiagnosticException('invalid_parameters');
+        $arguments+=[$operation==='files'?'location':'filter'=>$argv[4],$operation==='files'?'limit':'lines'=>(int)$argv[5]];
+    }elseif($argc!==4)throw new DiagnosticException('invalid_parameters');
+    $declared->normalizeArguments($arguments);
+    $db=RemoteTools::fromConfig($config)?->sqlProjectConfiguration();
+    if($db===null||!$db->isReady())throw new DiagnosticException('registry_unavailable');
+    $raw=$db->load()['projects'][$projectId]??null;
+    if(!is_array($raw))throw new DiagnosticException('invalid_project_context');
+    $p=new Process(['/usr/bin/adb','devices','-l'],null,null,null,5);$p->mustRun();
+    $allowed=ProjectPolicy::allowedDevices($project,AndroidSnapshot::parseDevices($p->getOutput()));
+    $service=new Diagnostics($allowed,$raw['android_diagnostics']??[]);
+    unset($arguments['device']);$result=$service->execute($action,$device,$arguments);
+    echo json_encode($result,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES),"\n";
+}catch(DiagnosticException $e){echo json_encode(['status'=>$e->reason,'read_only'=>true],JSON_THROW_ON_ERROR),"\n";exit(1);}
+catch(\InvalidArgumentException){echo '{"status":"invalid_parameters","read_only":true}',"\n";exit(1);}
+catch(Throwable $e){fwrite(STDERR,'android-diagnostics: '.get_class($e)."\n");echo '{"status":"diagnostic_unavailable","read_only":true}',"\n";exit(1);}

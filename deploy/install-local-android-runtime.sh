@@ -2,6 +2,8 @@
 # Machine-scoped Cordova prerequisites and persistent ADB access, never a project build as root.
 set -euo pipefail
 [[ $(id -u) == 0 ]] || { echo 'Root required' >&2;exit 1; }
+# Read-only diagnostics reuse existing per-project installation device policies.
+/usr/bin/php /opt/devmcp/bin/migrate-android-diagnostics.php --execute MIGRATE_ANDROID_DIAGNOSTICS
 enabled=$(/usr/bin/php -r 'require "/opt/devmcp/vendor/autoload.php";$g=require "/etc/devmcp/global.php";$r=\Cowprod\DevMcp\Mcp\RemoteTools::fromConfig($g);if($r===null)exit(1);$s=$g["distributed"]["config_path"]??"/etc/devmcp/mcp-distributed.php";$c=require $s;$d=\Cowprod\DevMcp\Distributed\Registry\DatabaseConnection::connect($c["dsn"],$c["writer_username"],$c["writer_password"]);echo (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($d))->get("local")["cordova_android"]?"yes":"no";')
 [[ $enabled == yes ]] || { echo 'LOCAL_ANDROID_DISABLED: no toolchain or ADB changes';exit 0; }
 for tool in /usr/bin/node /usr/bin/npm /usr/bin/python3 /usr/bin/curl /usr/bin/javac;do [[ -x $tool ]] || { echo "Missing Android prerequisite: $tool" >&2;exit 1; };done

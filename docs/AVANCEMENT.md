@@ -37,3 +37,9 @@ Le test réel workspace.sync sur touchDeck a terminé succeeded avec code 0 et t
 - worker unique par target, pas un worker par projet ;
 - accès série via dialout, sans sudo accordé à devMcp ;
 - GitHub reste le plan de contrôle du code, devMcp le plan d’exécution local.
+
+## Diagnostics Android ADB — 17 novembre 2026
+
+Implémentation commune des actions `android.device_info`, `android.storage`, `android.files`, `android.storage_report`, `android.logcat`, avec la politique d’appareils de l’action d’installation existante. Profil MultiCam déclaré dans le registre central uniquement ; aucun changement dans son dépôt. Migration transactionnelle et idempotente, commandes en lecture seule, sorties/délais bornés, accès privé exclusivement par `run-as`. Voir [ANDROID-DIAGNOSTICS.md](ANDROID-DIAGNOSTICS.md).
+
+Validation locale : tests de stockage sans double comptage, autorisation, refus de paramètres, droits privés, absence de résultats inventés, candidats doublons, bornes et transport MCP. Qualification physique du helper réalisée sur les cinq tablettes : quatre Xiaomi `24075RP89G` et une Samsung `SM-X110`, API 36. Découverte, système, stockage, quatre emplacements et quatre filtres logcat exercés en lecture seule. `DCIM/MultiCam` est absent sur les cinq appareils ; `run-as` MultiCam est autorisé sur les cinq. MultiCam est arrêté sur Samsung : les filtres applicatifs renvoient `app_not_running`, sans lancer l’application. Les preuves de CI, de migration SQL et d’appels via le serveur MCP actif sont consignées dans le compte rendu de livraison/PR ; une qualification du helper seule ne suffit pas à les établir.
