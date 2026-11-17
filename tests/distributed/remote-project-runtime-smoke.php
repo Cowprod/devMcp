@@ -58,6 +58,9 @@ try {
             $configured=RemoteProjectRuntime::run($instance,$policy);$results[]=$instance['id'];
             assert(str_ends_with(file_get_contents($live['url'].'/'),'|'.$literal));
             assert((fileperms($live['workspace_path'].'/.instance-variables.env')&0777)===0600);
+            $instanceEnv=file_get_contents($live['workspace_path'].'/.instance-variables.env');
+            assert(str_contains($instanceEnv,'DEVMCP_DEPLOYMENT_ID="'.$instance['deployment_id'].'"'));
+            assert(str_contains($instanceEnv,'DEVMCP_SOURCE_COMMIT="'.$instance['package']['revision'].'"'));
             assert(!str_contains(file_get_contents('/etc/systemd/system/devmcp-app-'.$project.'.service'),$literal));
             $stop=$instance;$stop['id']=bin2hex(random_bytes(16));$stop['instance_action']='stop';unset($stop['package'],$stop['runtime']);
             assert(RemoteProjectRuntime::run($stop,$policy)['service_state']==='stopped');$results[]=$stop['id'];
