@@ -15,6 +15,7 @@ final class ServerFactory
         ?HostTools $hostTools = null,
     ): Server {
         $hostTools ??= new HostTools();
+        $maintenance = new RuntimeMaintenanceTools();
         $actionInputSchema = [
             'type' => 'object',
             'properties' => [
@@ -166,6 +167,8 @@ final class ServerFactory
                 description: 'POC conversationnel MyTrackMe simule. Lire le catalogue, creer une base fictive, enregistrer des tours, finaliser et consulter le plan. Aucune operation MyTrackMe reelle.',
                 inputSchema: $myTrackMePocSchema)
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
+            ->addTool([$maintenance, 'status'], 'runtime_status', description: 'Version du serveur, commit installé, date et heure du commit, dernière révision rechargée et dernier auto-update. Ne prouve pas la révision du processus en mémoire.')
+            ->addTool([$maintenance, 'requestUpdate'], 'runtime_update_request', description: 'Demande une mise à jour devMcp au timer systemd ; peut redémarrer le tunnel et les services devMcp, sans toucher aux déploiements applicatifs. Confirmation obligatoire.', inputSchema: ['type'=>'object','properties'=>['confirmation'=>['type'=>'string','enum'=>['REQUEST_DEVMCP_UPDATE']]],'required'=>['confirmation'],'additionalProperties'=>false])
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
                 [$tools, 'projectCreate'], 'project_create',
