@@ -1,7 +1,7 @@
 name: Distributed agent bootstrap checks
 on:
   push:
-    branches: [feat/distributed-architecture]
+    branches: [main, feat/distributed-architecture]
     paths:
       - 'deploy/distributed/**'
       - 'bin/distributed-agent.php'
@@ -11,6 +11,12 @@ on:
       - '.github/workflows/distributed-agent.yml'
   # Run on every PR: changes to the MCP facade can affect agent-facing safety.
   pull_request:
+
+# Cancel obsolete runs for the same workflow and ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   bootstrap:
     runs-on: ubuntu-24.04
