@@ -55,4 +55,12 @@ final class DiagnosticsIntegrationTest extends TestCase
             self::assertArrayNotHasKey('error',$reply);self::assertTrue($reply['result']['isError']);self::assertStringContainsString('INVALID_ANDROID_DIAGNOSTIC_ARGUMENTS',$reply['result']['content'][0]['text']);
         }
     }
+    public function testLoadingSharedConfigurationCannotOverwriteTheCliOperation(): void
+    {
+        $operation='device_info';$definition='caller-definition';$androidDiagnostics='caller-context';
+        $loaded=require dirname(__DIR__,2).'/config/shared-actions.php';
+        self::assertSame('device_info',$operation);self::assertSame('caller-definition',$definition);self::assertSame('caller-context',$androidDiagnostics);
+        self::assertArrayHasKey('android.device_info',$loaded);
+    }
+
 }

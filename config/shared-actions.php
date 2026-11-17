@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+return (static function(): array {
 $androidDiagnostics=[];
 foreach(['device_info','storage','files','storage_report','logcat'] as $operation){
     $definition=[
@@ -419,3 +420,4 @@ return $androidDiagnostics + [
         ],
     ],
 ];
+})();
