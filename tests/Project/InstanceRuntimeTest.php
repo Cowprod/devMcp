@@ -58,7 +58,7 @@ final class InstanceRuntimeTest extends TestCase
             $forged=$this->job($this->a,$id,'deploy');
             $forged['configuration']['variables'][$name]='forged';
             try{$this->executeJob($forged);self::fail('Engine environment was user-overridable: '.$name);}
-            catch(\\InvalidArgumentException $exception){self::assertStringContainsString('reserved',$exception->getMessage());}
+            catch(\InvalidArgumentException $exception){self::assertStringContainsString('reserved',$exception->getMessage());}
         }
         self::assertSame($deployed['active_revision'],json_decode(file_get_contents($deployed['workspace_path'].'/.project.json'),true)['active_revision']);
     }
