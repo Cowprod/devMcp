@@ -40,6 +40,19 @@ final class RuntimeMaintenanceTools
         ];
     }
 
+    public function updateStatus(): array
+    {
+        $status = $this->status();
+        return [
+            'update_request_pending' => $status['update_request_pending'],
+            'last_update' => $status['last_update'],
+            'installed_commit' => $status['installed_commit'],
+            'last_reloaded_commit' => $status['last_reloaded_commit'],
+            'installed_matches_last_reload' => $status['installed_matches_last_reload'],
+            'runtime_process_revision_verified' => false,
+        ];
+    }
+
     public function requestUpdate(string $confirmation): array
     {
         if ($confirmation !== 'REQUEST_DEVMCP_UPDATE') {
