@@ -52,3 +52,13 @@ Le formulaire intégré appelle `http://127.0.0.1:8765/mcp` via `McpProjectCreat
 2. Vérifier `project_provisioning_list` puis `project_create_preview` et examiner le champ `next_step`.
 3. En cas de panne, consulter `journalctl -u devmcp-tunnel.service` sur touchdeck sans publier de secrets.
 4. N'effectuer un `project_create` qu'après contrôle des prérequis et de l'absence d'effets partiels d'un essai précédent.
+
+## Synchronisation d’un projet depuis MCP
+
+`workspace.sync` est asynchrone : utiliser `action_start` avec `project`,
+`action="workspace.sync"` et `arguments={"commit":"<SHA Git complet de 40 caractères>"}`,
+puis consulter `job_status` et `job_output`. Résoudre d’abord la branche distante en SHA.
+Un appel via `action_run` renvoie `ASYNC_ACTION_REQUIRED` avec `next_tool=action_start`
+et une trace `action_rejected`, sans exécuter de commande.
+La synchronisation vérifie origin, refuse les fichiers suivis modifiés et utilise
+un checkout sans force. La HEAD détachée sur le commit demandé est intentionnelle.
