@@ -19,12 +19,12 @@ try {
     $devices=AndroidSnapshot::parseDevices($list->getOutput());
     if (!in_array($device,ProjectPolicy::allowedDevices($project,$devices),true)) throw new RuntimeException('device_not_authorized');
     $package='fr.cowprod.multicamstoragelab';
-    $command=new Process(['/usr/bin/adb','-s',$device,'shell','run-as',$package,'sh','-c','tail -c 32768 files/storage-lab.log'],null,null,null,12);
+    $command=new Process(['/usr/bin/adb','-s',$device,'shell','run-as',$package,'sh','-c','tail -c 32768 /sdcard/Android/data/fr.cowprod.multicamstoragelab/files/storage-lab.log'],null,null,null,12);
     $command->run();
     if (!$command->isSuccessful()) throw new RuntimeException('log_unavailable: '.substr(trim($command->getErrorOutput().$command->getOutput()),0,300));
     $log=$command->getOutput();
     if(strlen($log)>32768)$log=substr($log,-32768);
-    echo json_encode(['status'=>'ok','device'=>$device,'package'=>$package,'path'=>'files/storage-lab.log','max_bytes'=>32768,'log'=>$log],JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES),"\n";
+    echo json_encode(['status'=>'ok','device'=>$device,'package'=>$package,'path'=>'/sdcard/Android/data/fr.cowprod.multicamstoragelab/files/storage-lab.log','max_bytes'=>32768,'log'=>$log],JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES),"\n";
 } catch(Throwable $e) {
     echo json_encode(['status'=>'error','reason'=>substr($e->getMessage(),0,400)],JSON_INVALID_UTF8_SUBSTITUTE),"\n";
     exit(1);
