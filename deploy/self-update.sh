@@ -31,9 +31,6 @@ git merge-base --is-ancestor "$old" "$new" || { echo "Non fast-forward update: a
 git diff --name-only "$old" "$new" | grep -Eq '^(config/|src/|bin/|public/|vendor/|composer\.(json|lock)|deploy/)' || echo "Documentation-only update"
 git merge --ff-only "$new"
 fi
-if [ -f /opt/devmcp/bin/devmcp-touchdeck-ota ]; then
-    /bin/sh /opt/devmcp/deploy/install-touchdeck-ota.sh
-fi
 /usr/bin/php -l /etc/devmcp/global.php
 /usr/bin/php -l /opt/devmcp/config/shared-actions.php
 update_stage=dependencies
@@ -56,6 +53,10 @@ esac
 # No application is started by registering an action.
 update_stage=local-android-action
 /usr/bin/php /opt/devmcp/bin/migrate-local-android-action.php --execute MIGRATE_LOCAL_ANDROID
+update_stage=admin-update-action
+/usr/bin/php /opt/devmcp/bin/migrate-admin-update.php --execute MIGRATE_ADMIN_UPDATE
+update_stage=android-diagnostics
+/usr/bin/php /opt/devmcp/bin/migrate-android-diagnostics.php --execute MIGRATE_ANDROID_DIAGNOSTICS
 update_stage=project-service-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-service-action.php --execute MIGRATE_PROJECT_SERVICE
 update_stage=project-test-action

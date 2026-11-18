@@ -702,7 +702,7 @@ final class ProjectTools
                 // Not a provisioning project; retain legacy lookup behavior.
             }
         }
-        $definition = $this->projects->get($project);
+        $definition = $this->localActionProject($project);
         $actions = [];
 
         foreach ($definition->getActions() as $action) {
@@ -722,7 +722,7 @@ final class ProjectTools
     {
         $remote=$this->selectedRemote($project,$deployment_id);
         if($remote!==null)return $remote->action($project,$action);
-        return $this->projects->get($project)->getAction($action)->toPublicArray();
+        return $this->localActionDefinition($this->localActionProject($project), $action)->toPublicArray();
     }
 
     /**
@@ -740,9 +740,9 @@ final class ProjectTools
         if ($this->selectedRemote($project,$deployment_id)!==null) {
             throw new InvalidArgumentException('Remote actions require action_start');
         }
-        $projectDefinition = $this->projects->get($project);
+        $projectDefinition = $this->localActionProject($project);
+        $actionDefinition = $this->localActionDefinition($projectDefinition, $action);
         $this->validateAndroidDiagnostics($projectDefinition,$action,$arguments);
-        $actionDefinition = $projectDefinition->getAction($action);
 
         if (!$actionDefinition->syncAllowed) {
             throw new InvalidArgumentException(
@@ -773,9 +773,38 @@ final class ProjectTools
     ): array {
         $remote=$this->selectedRemote($project,$deployment_id);
         if($remote!==null)return $remote->start($project,$action,$arguments);
-        if(in_array($action,\Cowprod\DevMcp\Android\Diagnostics::ACTIONS,true))$this->validateAndroidDiagnostics($this->projects->get($project),$action,$arguments);
+        $definition = $this->localActionProject($project);
+        $this->localActionDefinition($definition, $action);
+        $this->validateAndroidDiagnostics($definition, $action, $arguments);
         $this->remoteTools?->assertLocalMachineAction($action);
         return $this->jobs->start($project, $action, $arguments);
+    }
+
+    private function localActionProject(string $project): \Cowprod\DevMcp\Project\ProjectDefinition
+    {
+        // Do not turn configuration/SQL failures into a misleading lookup error.
+        if (!isset($this->projects->all()[$project])) {
+            $this->rejectActionLookup($project, null, 'PROJECT_UNAVAILABLE');
+        }
+        return $this->projects->get($project);
+    }
+
+    private function localActionDefinition(\Cowprod\DevMcp\Project\ProjectDefinition $project, string $action): \Cowprod\DevMcp\Project\ActionDefinition
+    {
+        if (!isset($project->getActions()[$action])) {
+            $this->rejectActionLookup($project->id, $action, 'ACTION_UNAVAILABLE');
+        }
+        return $project->getAction($action);
+    }
+
+    private function rejectActionLookup(string $project, ?string $action, string $code): never
+    {
+        $this->audit->append(['event' => 'action_rejected', 'project' => $project,
+            'action' => $action, 'reason' => $code]);
+        throw new \Mcp\Exception\ToolCallException(json_encode([
+            'code' => $code, 'project' => $project, 'action' => $action,
+            'message' => 'Use project_list, then action_list for the selected project. No action was executed.',
+        ], JSON_THROW_ON_ERROR));
     }
 
     private function validateAndroidDiagnostics(\Cowprod\DevMcp\Project\ProjectDefinition $project,string $action,array $arguments): void
