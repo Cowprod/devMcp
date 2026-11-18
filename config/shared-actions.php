@@ -22,8 +22,12 @@ foreach(['device_info','storage','files','storage_report','logcat','log_file'] a
         $definition['argv'][]=['param'=>'filter'];$definition['argv'][]=['param'=>'lines'];
     }
     if($operation==='log_file'){
-        $definition['parameters']['bytes']=['type'=>'integer','minimum'=>256,'maximum'=>32768,'description'=>'Nombre maximal d’octets de fin du journal déclaré dans le profil du projet.'];
+        $definition['parameters']['bytes']=['type'=>'integer','minimum'=>256,'maximum'=>32768,'description'=>'Nombre maximal d’octets du journal.'];
+        $definition['parameters']['package']=['type'=>'text','description'=>'Package Android cible (validé côté serveur).'];
+        $definition['parameters']['filename']=['type'=>'text','description'=>'Nom du fichier journal dans les fichiers externes de l’application (validé côté serveur).'];
         $definition['argv'][]=['param'=>'bytes'];
+        $definition['argv'][]=['param'=>'package'];
+        $definition['argv'][]=['param'=>'filename'];
     }
     $androidDiagnostics['android.'.$operation]=$definition;
 }
