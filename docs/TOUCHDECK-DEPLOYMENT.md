@@ -18,9 +18,10 @@ Dernière observation : 31 octobre 2026, sortie de `systemctl list-units --type=
 
 ## Auto-update du serveur MCP
 
-Le serveur expose `devmcp.update` sur le projet d'administration `devmcp-admin` :
-`action_run(project="devmcp-admin", action="devmcp.update")`.
+Le serveur expose `devmcp.update` sur le projet unique `devmcp` :
+`action_run(project="devmcp", action="devmcp.update")`.
 Le projet applicatif TouchDeck est un projet ordinaire, sans rôle dans la mise à jour du serveur.
+Le serveur et son administration partagent désormais ce seul projet ; l’ancien identifiant `devmcp-admin` est retiré du registre, sans alias.
 La migration SQL retire le grant historique d'auto-update des projets applicatifs.
 La réponse confirme uniquement la mise en file ; vérifier ensuite `action_list` et les journaux de déploiement.
 L'updater synchronise les diagnostics Android dans le registre SQL avant le redémarrage du runtime.

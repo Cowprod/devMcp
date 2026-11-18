@@ -27,11 +27,41 @@ final class AdminUpdateMigrationTest extends TestCase
         self::assertSame(['project_present'=>true,'grant_added'=>true,'grants_removed'=>['ordinary-app']],AdminUpdateMigration::apply($db,$templates));
         self::assertSame(['project_present'=>true,'grant_added'=>false,'grants_removed'=>[]],AdminUpdateMigration::apply($db,$templates));
         $loaded=(new SqlProjectConfiguration($db))->load();
-        self::assertSame(['devmcp.update'],$loaded['projects']['devmcp-admin']['shared_actions']);
+        self::assertSame(['devmcp.update'],$loaded['projects']['devmcp']['shared_actions']);
         $application['shared_actions']=[];
         self::assertSame($application,$loaded['projects']['ordinary-app']);
+        self::assertArrayNotHasKey('devmcp-admin',$loaded['projects']);
+        self::assertCount(2,$loaded['projects']);
         self::assertSame($templates['devmcp.update'],$loaded['shared_actions']['devmcp.update']);
     }
+    public function testExistingCanonicalAndLegacyProjectsMergeTheirActions(): void
+    {
+        $db=$this->database();
+        $insert=$db->prepare('INSERT INTO dm_local_project_config VALUES (?,?)');
+        $insert->execute(['devmcp-admin',json_encode(['root'=>sys_get_temp_dir(),'shared_actions'=>['workspace.read'],'actions'=>['legacy'=>['argv'=>['/bin/true']]]])]);
+        $insert->execute(['devmcp',json_encode(['root'=>sys_get_temp_dir(),'shared_actions'=>['git.head'],'actions'=>['canonical'=>['argv'=>['/bin/true']]]])]);
+        AdminUpdateMigration::apply($db,require dirname(__DIR__,2).'/config/shared-actions.php');
+        $projects=(new SqlProjectConfiguration($db))->load()['projects'];
+        self::assertSame(['devmcp'],array_keys($projects));
+        self::assertEqualsCanonicalizing(['git.head','workspace.read','devmcp.update'],$projects['devmcp']['shared_actions']);
+        self::assertSame(['canonical','legacy'],array_keys($projects['devmcp']['actions']));
+    }
+    public function testConflictingWorkspacesRollBackWithoutLosingEitherProject(): void
+    {
+        $db=$this->database();
+        $insert=$db->prepare('INSERT INTO dm_local_project_config VALUES (?,?)');
+        $insert->execute(['devmcp-admin',json_encode(['root'=>'/legacy'])]);
+        $insert->execute(['devmcp',json_encode(['root'=>'/canonical'])]);
+        try {
+            AdminUpdateMigration::apply($db,require dirname(__DIR__,2).'/config/shared-actions.php');
+            self::fail('Conflicting workspaces must not be silently discarded');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Conflicting development project configuration',$error->getMessage());
+        }
+        self::assertCount(2,(new SqlProjectConfiguration($db))->load()['projects']);
+        self::assertFalse($db->inTransaction());
+    }
+
     public function testCustomUpdaterIsNeverOverwrittenOrRevoked(): void
     {
         $db=$this->database();

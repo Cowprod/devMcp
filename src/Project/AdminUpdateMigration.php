@@ -21,11 +21,44 @@ final class AdminUpdateMigration
             $query = 'SELECT project_id, config_json FROM dm_local_project_config ORDER BY project_id';
             if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') $query .= ' FOR UPDATE';
             $rows = $db->query($query)->fetchAll(PDO::FETCH_KEY_PAIR);
-            if (!isset($rows['devmcp-admin'])) {
+            // One development project for the server and its web administration.
+            // Preserve permissions and configuration while retiring the legacy ID.
+            if (isset($rows['devmcp-admin'])) {
+                $legacy = json_decode($rows['devmcp-admin'], true, 512, JSON_THROW_ON_ERROR);
+                $canonical = isset($rows['devmcp'])
+                    ? json_decode($rows['devmcp'], true, 512, JSON_THROW_ON_ERROR) : [];
+                foreach ($legacy as $key => $value) {
+                    if ($key === 'shared_actions') {
+                        $canonical[$key] = array_values(array_unique([...($canonical[$key] ?? []), ...$value]));
+                    } elseif ($key === 'actions') {
+                        foreach ($value as $name => $action) {
+                            if (isset($canonical[$key][$name]) && $canonical[$key][$name] !== $action) {
+                                throw new RuntimeException('Conflicting development project action');
+                            }
+                            $canonical[$key][$name] = $action;
+                        }
+                        $canonical[$key] ??= [];
+                    } elseif (!array_key_exists($key, $canonical)) {
+                        $canonical[$key] = $value;
+                    } elseif ($canonical[$key] !== $value && $key !== 'description') {
+                        throw new RuntimeException('Conflicting development project configuration');
+                    }
+                }
+                $canonical['description'] = 'devMCP — serveur, administration et outils de développement génériques';
+                $json = json_encode($canonical, JSON_THROW_ON_ERROR);
+                $write = isset($rows['devmcp'])
+                    ? 'UPDATE dm_local_project_config SET config_json=? WHERE project_id=?'
+                    : 'INSERT INTO dm_local_project_config(config_json,project_id) VALUES (?,?)';
+                $db->prepare($write)->execute([$json, 'devmcp']);
+                $db->prepare('DELETE FROM dm_local_project_config WHERE project_id=?')->execute(['devmcp-admin']);
+                unset($rows['devmcp-admin']);
+                $rows['devmcp'] = $json;
+            }
+            if (!isset($rows['devmcp'])) {
                 $db->commit();
                 return ['project_present' => false, 'grant_added' => false, 'grants_removed' => []];
             }
-            $project = json_decode($rows['devmcp-admin'], true, 512, JSON_THROW_ON_ERROR);
+            $project = json_decode($rows['devmcp'], true, 512, JSON_THROW_ON_ERROR);
             if (isset($project['actions']['devmcp.update'])) {
                 throw new RuntimeException('Refusing to overwrite a project-specific updater');
             }
@@ -43,12 +76,12 @@ final class AdminUpdateMigration
             if ($added) {
                 $project['shared_actions'][] = 'devmcp.update';
                 $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')
-                    ->execute([json_encode($project, JSON_THROW_ON_ERROR), 'devmcp-admin']);
+                    ->execute([json_encode($project, JSON_THROW_ON_ERROR), 'devmcp']);
             }
             // The server updater belongs to administration, never an application.
             $removed = [];
             foreach ($rows as $id => $raw) {
-                if ($id === 'devmcp-admin') continue;
+                if ($id === 'devmcp') continue;
                 $item = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
                 if (!in_array('devmcp.update', $item['shared_actions'] ?? [], true)) continue;
                 $item['shared_actions'] = array_values(array_diff($item['shared_actions'], ['devmcp.update']));
