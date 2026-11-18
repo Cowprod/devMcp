@@ -457,7 +457,7 @@ final class ProjectTools
             return ['project' => $record, 'state' => $record['state'], 'provisioning_succeeded' => false,
                 'failure' => ['stage' => 'target_selection', 'code' => 'remote_machine_requires_remote_provisioning'],
                 'next_tool' => 'project_provision_remote', 'next_action' => 'project.provision.remote',
-                'action_project' => 'devmcp-admin'];
+                'action_project' => 'devmcp'];
         }
         if ($record['revision'] !== $revision || $record['state'] !== 'machine_assigned') {
             throw new InvalidArgumentException('Projet non affecte a cet hote ou revision obsolete');

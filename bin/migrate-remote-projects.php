@@ -44,10 +44,10 @@ try {
     foreach (['project.create.remote', 'project.provision.remote', 'admin.password.bootstrap', 'machine.capabilities.set', 'android.install', 'android.devices'] as $id) {
     $db->prepare('INSERT INTO dm_shared_action_config (action_id,config_json) VALUES (?,?) ON DUPLICATE KEY UPDATE config_json=VALUES(config_json)')
         ->execute([$id,json_encode($actions[$id],JSON_THROW_ON_ERROR)]);
-    $q=$db->prepare('SELECT config_json FROM dm_local_project_config WHERE project_id=? FOR UPDATE');$q->execute(['devmcp-admin']);
+    $q=$db->prepare('SELECT config_json FROM dm_local_project_config WHERE project_id=? FOR UPDATE');$q->execute(['devmcp']);
     $raw=$q->fetchColumn();
     if($raw!==false){$p=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!in_array($id,$p['shared_actions'],true))$p['shared_actions'][]=$id;
-        $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')->execute([json_encode($p,JSON_THROW_ON_ERROR),'devmcp-admin']);}
+        $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')->execute([json_encode($p,JSON_THROW_ON_ERROR),'devmcp']);}
     }
     $db->commit();
 }catch(Throwable $e){$db->rollBack();throw $e;}
