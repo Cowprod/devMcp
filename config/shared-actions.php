@@ -24,6 +24,12 @@ foreach(['device_info','storage','files','storage_report','logcat'] as $operatio
     $androidDiagnostics['android.'.$operation]=$definition;
 }
 return $androidDiagnostics + [
+    'android.storage_lab_log'=>[
+        'description'=>'Lit uniquement le journal natif Storage Lab sur une tablette ADB autorisée, sans chemin ni commande arbitraire.',
+        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-storage-lab-log',['param'=>'device']],
+        'cwd'=>'.','timeout'=>25,'target'=>'local','sync'=>true,
+        'parameters'=>['device'=>['type'=>'android_serial','description'=>'Tablette Android connectée et autorisée.']],
+    ],
     'android.install'=>[
         'description'=>'Installe un APK debug publié par un build Android local réussi sur une tablette ADB explicitement choisie, lance l’app et capture son écran.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install',['param'=>'project_id'],['param'=>'build_id'],['param'=>'device']],
