@@ -738,22 +738,18 @@ final class ProjectTools
     ): array
     {
         if ($this->selectedRemote($project,$deployment_id)!==null) {
-            throw new InvalidArgumentException('Remote actions require action_start');
+            $this->rejectSynchronousAction($project, $action);
         }
         $projectDefinition = $this->localActionProject($project);
         $actionDefinition = $this->localActionDefinition($projectDefinition, $action);
         $this->validateAndroidDiagnostics($projectDefinition,$action,$arguments);
 
         if (!$actionDefinition->syncAllowed) {
-            throw new InvalidArgumentException(
-                "L'action {$action} n'autorise pas l'exécution synchrone ; utiliser action_start."
-            );
+            $this->rejectSynchronousAction($project, $action);
         }
 
         if ($actionDefinition->target !== 'local') {
-            throw new InvalidArgumentException(
-                "L'action {$action} cible {$actionDefinition->target} ; utiliser action_start."
-            );
+            $this->rejectSynchronousAction($project, $action);
         }
 
         $this->remoteTools?->assertLocalMachineAction($action);
@@ -778,6 +774,17 @@ final class ProjectTools
         $this->validateAndroidDiagnostics($definition, $action, $arguments);
         $this->remoteTools?->assertLocalMachineAction($action);
         return $this->jobs->start($project, $action, $arguments);
+    }
+
+    private function rejectSynchronousAction(string $project, string $action): never
+    {
+        $this->audit->append(['event' => 'action_rejected', 'project' => $project,
+            'action' => $action, 'reason' => 'ASYNC_ACTION_REQUIRED']);
+        throw new \Mcp\Exception\ToolCallException(json_encode([
+            'code' => 'ASYNC_ACTION_REQUIRED', 'project' => $project, 'action' => $action,
+            'next_tool' => 'action_start',
+            'message' => 'Use action_start with the same project, action and arguments, then job_status/job_output. No action was executed.',
+        ], JSON_THROW_ON_ERROR));
     }
 
     private function localActionProject(string $project): \Cowprod\DevMcp\Project\ProjectDefinition

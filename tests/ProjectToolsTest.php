@@ -71,7 +71,8 @@ final class ProjectToolsTest extends TestCase
             ],
         ]);
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\Mcp\Exception\ToolCallException::class);
+        $this->expectExceptionMessage('ASYNC_ACTION_REQUIRED');
         $tools->actionRun('demo', 'mutate.local');
     }
 
@@ -86,8 +87,34 @@ final class ProjectToolsTest extends TestCase
             ],
         ]);
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\Mcp\Exception\ToolCallException::class);
+        $this->expectExceptionMessage('ASYNC_ACTION_REQUIRED');
         $tools->actionRun('demo', 'remote.read');
+    }
+
+    public function testAsyncActionRefusalIsAnAuditedMcpToolErrorAndCanStillBeQueued(): void
+    {
+        $tools=$this->tools(['workspace.sync'=>[
+            'description'=>'Worker synchronization fixture',
+            'argv'=>[PHP_BINARY,'-r','file_put_contents("executed", "yes");'],
+        ]]);
+        foreach (['2026-07-28','2025-03-26'] as $protocol) {
+            $reply=\Cowprod\DevMcp\Tests\Support\McpWireClient::call($tools,'action_run',
+                ['project'=>'demo','action'=>'workspace.sync'],$protocol);
+            self::assertArrayNotHasKey('error',$reply);
+            self::assertTrue($reply['result']['isError']);
+            $error=json_decode($reply['result']['content'][0]['text'],true,512,JSON_THROW_ON_ERROR);
+            self::assertSame('ASYNC_ACTION_REQUIRED',$error['code']);
+            self::assertSame('action_start',$error['next_tool']);
+        }
+        self::assertFileDoesNotExist($this->root.'/executed');
+        $records=(new AuditLogger($this->root.'/audit.jsonl'))->tail('demo',10);
+        self::assertCount(2,$records);
+        self::assertSame('action_rejected',$records[0]['event']);
+        self::assertSame('ASYNC_ACTION_REQUIRED',$records[0]['reason']);
+        $job=$tools->actionStart('demo','workspace.sync');
+        self::assertSame('queued',$job['status']);
+        self::assertFileDoesNotExist($this->root.'/executed');
     }
 
     public function testNewLocalProjectCanBePreviewedButNotCreated(): void
