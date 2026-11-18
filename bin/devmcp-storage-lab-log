@@ -1,0 +1,31 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Runtime\RuntimeFactory;
+use Cowprod\DevMcp\Android\ProjectPolicy;
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
+use Symfony\Component\Process\Process;
+header_remove();
+try {
+    if ($argc!==2 || !AndroidSnapshot::validSerial($argv[1])) throw new RuntimeException('invalid_device');
+    $device=$argv[1];
+    $config=require(getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
+    $runtime=RuntimeFactory::fromConfig($config,dirname(__DIR__).'/var');
+    $project=$runtime->projects->get('devmcp-admin');
+    if (realpath(getcwd())!==$project->root) throw new RuntimeException('invalid_project_context');
+    $list=new Process(['/usr/bin/adb','devices','-l'],null,null,null,5);
+    $list->mustRun();
+    $devices=AndroidSnapshot::parseDevices($list->getOutput());
+    if (!in_array($device,ProjectPolicy::allowedDevices($project,$devices),true)) throw new RuntimeException('device_not_authorized');
+    $package='fr.cowprod.multicamstoragelab';
+    $command=new Process(['/usr/bin/adb','-s',$device,'shell','run-as',$package,'sh','-c','tail -c 32768 files/storage-lab.log'],null,null,null,12);
+    $command->run();
+    if (!$command->isSuccessful()) throw new RuntimeException('log_unavailable: '.substr(trim($command->getErrorOutput().$command->getOutput()),0,300));
+    $log=$command->getOutput();
+    if(strlen($log)>32768)$log=substr($log,-32768);
+    echo json_encode(['status'=>'ok','device'=>$device,'package'=>$package,'path'=>'files/storage-lab.log','max_bytes'=>32768,'log'=>$log],JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES),"\n";
+} catch(Throwable $e) {
+    echo json_encode(['status'=>'error','reason'=>substr($e->getMessage(),0,400)],JSON_INVALID_UTF8_SUBSTITUTE),"\n";
+    exit(1);
+}
