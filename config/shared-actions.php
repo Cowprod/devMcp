@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return (static function(): array {
 $androidDiagnostics=[];
-foreach(['device_info','storage','files','storage_report','logcat'] as $operation){
+foreach(['device_info','storage','files','storage_report','logcat','log_file'] as $operation){
     $definition=[
         'description'=>'Diagnostic Android en lecture seule : '.$operation.'. Appareil issu de la politique android.install du projet ; aucune commande libre.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-diagnostics',['project'=>'id'],$operation,['param'=>'device']],
@@ -21,15 +21,13 @@ foreach(['device_info','storage','files','storage_report','logcat'] as $operatio
         $definition['parameters']['lines']=['type'=>'integer','minimum'=>1,'maximum'=>500,'description'=>'Lignes récentes, sans suivi continu ni effacement.'];
         $definition['argv'][]=['param'=>'filter'];$definition['argv'][]=['param'=>'lines'];
     }
+    if($operation==='log_file'){
+        $definition['parameters']['bytes']=['type'=>'integer','minimum'=>256,'maximum'=>32768,'description'=>'Nombre maximal d’octets de fin du journal déclaré dans le profil du projet.'];
+        $definition['argv'][]=['param'=>'bytes'];
+    }
     $androidDiagnostics['android.'.$operation]=$definition;
 }
 return $androidDiagnostics + [
-    'android.storage_lab_log'=>[
-        'description'=>'Lit uniquement le journal natif Storage Lab sur une tablette ADB autorisée, sans chemin ni commande arbitraire.',
-        'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-storage-lab-log',['param'=>'device']],
-        'cwd'=>'.','timeout'=>25,'target'=>'local','sync'=>true,
-        'parameters'=>['device'=>['type'=>'android_serial','description'=>'Tablette Android connectée et autorisée.']],
-    ],
     'android.install'=>[
         'description'=>'Installe un APK debug publié par un build Android local réussi sur une tablette ADB explicitement choisie, lance l’app et capture son écran.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install',['param'=>'project_id'],['param'=>'build_id'],['param'=>'device']],
