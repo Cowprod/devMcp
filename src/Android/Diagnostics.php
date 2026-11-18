@@ -28,11 +28,11 @@ final class Diagnostics
         $this->deadline=microtime(true)+40;
         if(!in_array($action,self::ACTIONS,true))throw new DiagnosticException('unknown_action');
         if(!AndroidSnapshot::validSerial($device)||!in_array($device,$this->allowedDevices,true))throw new DiagnosticException('device_not_authorized');
-        $expected=match($action){'android.files'=>['location','limit'],'android.logcat'=>['filter','lines'],'android.log_file'=>['bytes'],default=>[]};
+        $expected=match($action){'android.files'=>['location','limit'],'android.logcat'=>['filter','lines'],'android.log_file'=>['bytes','package','filename'],default=>[]};
         if(array_diff(array_keys($args),$expected)||array_diff($expected,array_keys($args)))throw new DiagnosticException('invalid_parameters');
         if($action==='android.files'&&(!in_array($args['location'],self::LOCATIONS,true)||!is_int($args['limit'])||$args['limit']<1||$args['limit']>100))throw new DiagnosticException('invalid_parameters');
         if($action==='android.logcat'&&(!in_array($args['filter'],self::FILTERS,true)||!is_int($args['lines'])||$args['lines']<1||$args['lines']>500))throw new DiagnosticException('invalid_parameters');
-        if($action==='android.log_file'&&(!is_int($args['bytes'])||$args['bytes']<256||$args['bytes']>32768))throw new DiagnosticException('invalid_parameters');
+        if($action==='android.log_file'&&(!is_int($args['bytes'])||$args['bytes']<256||$args['bytes']>32768||!is_string($args['package'])||!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)+$/D',$args['package'])||!is_string($args['filename'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\\.log$/D',$args['filename'])))throw new DiagnosticException('invalid_parameters');
         $devices=AndroidSnapshot::parseDevices($this->command(['devices','-l']));
         $selected=array_values(array_filter($devices,static fn($d)=>$d['serial']===$device));
         if(count($selected)!==1)throw new DiagnosticException('device_not_found');
@@ -43,7 +43,7 @@ final class Diagnostics
             'android.files'=>$this->files($device,$args['location'],$args['limit']),
             'android.storage_report'=>$this->report($device),
             'android.logcat'=>$this->logcat($device,$args['filter'],$args['lines']),
-            'android.log_file'=>$this->logFile($device,$args['bytes']),
+            'android.log_file'=>$this->logFile($device,$args['bytes'],$args['package'],$args['filename']),
         };
         return self::bound(['schema_version'=>1,'action'=>$action,'device'=>$device,'status'=>'ok','read_only'=>true,'collected_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'data'=>$data]);
     }
@@ -187,11 +187,8 @@ SH;
             'measurement_note'=>'Logical file sizes in a bounded live snapshot, not allocated blocks; active files may change during collection.',
             'duplication_note'=>'Same name and size are candidates only, never proof. Public Movies may include videos from other applications; origin is not inferred.'];
     }
-    private function logFile(string $device,int $bytes): array
+    private function logFile(string $device,int $bytes,string $package,string $filename): array
     {
-        $package=$this->profile['package']??null;
-        $filename=$this->profile['log_file']??null;
-        if($package===null||$filename===null)return ['status'=>'location_unconfigured','content'=>null];
         $path='/sdcard/Android/data/'.$package.'/files/'.$filename;
         try{
             $body=$this->shell($device,['tail','-c',(string)$bytes,$path]);
