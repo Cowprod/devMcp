@@ -8,7 +8,7 @@ use Cowprod\DevMcp\Mcp\RemoteTools;
 use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
 use Symfony\Component\Process\Process;
 try{
-    if($argc<4||$argc>6)throw new DiagnosticException('invalid_parameters');
+    if($argc<4||$argc>7)throw new DiagnosticException('invalid_parameters');
     [$script,$projectId,$operation,$device]=$argv;$action='android.'.$operation;
     if(!in_array($action,Diagnostics::ACTIONS,true))throw new DiagnosticException('unknown_action');
     $config=require(getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
@@ -20,8 +20,10 @@ try{
         if($argc!==6||!ctype_digit($argv[5]))throw new DiagnosticException('invalid_parameters');
         $arguments+=[$operation==='files'?'location':'filter'=>$argv[4],$operation==='files'?'limit':'lines'=>(int)$argv[5]];
     }elseif($operation==='log_file'){
-        if($argc!==5||!ctype_digit($argv[4]))throw new DiagnosticException('invalid_parameters');
+        if($argc!==7||!ctype_digit($argv[4]))throw new DiagnosticException('invalid_parameters');
         $arguments['bytes']=(int)$argv[4];
+        $arguments['package']=$argv[5];
+        $arguments['filename']=$argv[6];
     }elseif($argc!==4)throw new DiagnosticException('invalid_parameters');
     $declared->normalizeArguments($arguments);
     $db=RemoteTools::fromConfig($config)?->sqlProjectConfiguration();
