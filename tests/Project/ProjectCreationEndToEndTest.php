@@ -305,7 +305,8 @@ final class ProjectCreationEndToEndTest extends TestCase
         self::assertSame(0, (int) $this->db->query(
             "SELECT COUNT(*) FROM dm_local_project_config WHERE project_id='bakery-e2e'"
         )->fetchColumn());
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\Mcp\Exception\ToolCallException::class);
+        $this->expectExceptionMessage('PROJECT_UNAVAILABLE');
         $this->tools->actionRun('bakery-e2e', 'git.status');
     }
 

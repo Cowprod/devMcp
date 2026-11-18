@@ -55,6 +55,28 @@ final class DiagnosticsIntegrationTest extends TestCase
             self::assertArrayNotHasKey('error',$reply);self::assertTrue($reply['result']['isError']);self::assertStringContainsString('INVALID_ANDROID_DIAGNOSTIC_ARGUMENTS',$reply['result']['content'][0]['text']);
         }
     }
+    public function testUnknownProjectAndActionReturnAuditedToolErrors(): void
+    {
+        $registry=ProjectRegistry::fromConfig(['projects'=>['fixture'=>$this->project(['type'=>'enum','values'=>['tablet']])]]);
+        $audit=new AuditLogger($this->root.'/audit');
+        $jobs=new JobManager($registry,new FileJobStore($this->root.'/jobs'),new ArtifactService(),$audit);
+        $tools=new ProjectTools($registry,new ActionRunner($audit),$jobs,$audit,new HostTools());
+        foreach ([['action_list',['project'=>'missing'],'PROJECT_UNAVAILABLE'],
+            ['action_run',['project'=>'fixture','action'=>'devmcp.update'],'ACTION_UNAVAILABLE'],
+            ['action_describe',['project'=>'fixture','action'=>'devmcp.update'],'ACTION_UNAVAILABLE'],
+            ['action_start',['project'=>'fixture','action'=>'devmcp.update'],'ACTION_UNAVAILABLE']] as [$tool,$args,$code]) {
+            $reply=McpWireClient::call($tools,$tool,$args);
+            self::assertArrayNotHasKey('error',$reply);
+            self::assertTrue($reply['result']['isError']);
+            self::assertStringContainsString($code,$reply['result']['content'][0]['text']);
+        }
+        $records=$audit->tail('fixture',10);
+        self::assertCount(3,$records);
+        self::assertSame('action_rejected',$records[0]['event']);
+        self::assertSame('ACTION_UNAVAILABLE',$records[0]['reason']);
+        self::assertSame([],glob($this->root.'/jobs/*'));
+    }
+
     public function testLoadingSharedConfigurationCannotOverwriteTheCliOperation(): void
     {
         $operation='device_info';$definition='caller-definition';$androidDiagnostics='caller-context';

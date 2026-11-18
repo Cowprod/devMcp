@@ -16,6 +16,17 @@ Dernière observation : 31 octobre 2026, sortie de `systemctl list-units --type=
 
 **Ne pas utiliser `devmcp-http.service` comme nom de service de production** : cette unité n'était pas installée sur touchdeck au 31 octobre 2026. Le port 127.0.0.1:8765 ne présentait aucun listener lors du contrôle `ss`. Le dépôt décrit un *template* HTTP, pas nécessairement un service déployé.
 
+## Auto-update du serveur MCP
+
+Le serveur expose `devmcp.update` sur le projet d'administration `devmcp-admin` :
+`action_run(project="devmcp-admin", action="devmcp.update")`.
+Le projet applicatif TouchDeck est un projet ordinaire, sans rôle dans la mise à jour du serveur.
+La migration SQL retire le grant historique d'auto-update des projets applicatifs.
+La réponse confirme uniquement la mise en file ; vérifier ensuite `action_list` et les journaux de déploiement.
+L'updater synchronise les diagnostics Android dans le registre SQL avant le redémarrage du runtime.
+Les projets absents et actions non autorisées renvoient désormais des erreurs d'outil explicites,
+`PROJECT_UNAVAILABLE` / `ACTION_UNAVAILABLE`, et une trace `action_rejected` sans arguments sensibles.
+
 ## Vérification et redémarrage
 
 Avant toute action, vérifier l'unité réelle et son type avec `systemctl cat devmcp-tunnel.service` et `systemctl status devmcp-tunnel.service`. Pour recharger le tunnel après modification de la configuration, l'opérateur peut utiliser `sudo systemctl restart devmcp-tunnel.service`, **avec interruption temporaire de la connexion ChatGPT**. Ce redémarrage n'est pas une preuve que la configuration est prise en compte : le vérifier par un appel MCP effectif et les journaux de l'unité. Ne pas redémarrer le worker ou PM2 sans motif.
