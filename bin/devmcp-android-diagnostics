@@ -19,6 +19,9 @@ try{
     if(in_array($operation,['files','logcat'],true)){
         if($argc!==6||!ctype_digit($argv[5]))throw new DiagnosticException('invalid_parameters');
         $arguments+=[$operation==='files'?'location':'filter'=>$argv[4],$operation==='files'?'limit':'lines'=>(int)$argv[5]];
+    }elseif($operation==='log_file'){
+        if($argc!==5||!ctype_digit($argv[4]))throw new DiagnosticException('invalid_parameters');
+        $arguments['bytes']=(int)$argv[4];
     }elseif($argc!==4)throw new DiagnosticException('invalid_parameters');
     $declared->normalizeArguments($arguments);
     $db=RemoteTools::fromConfig($config)?->sqlProjectConfiguration();
