@@ -8,7 +8,7 @@ use Symfony\Component\Process\Process;
 /** Fixed read-only ADB operations. No caller command, path, package or tag reaches a shell. */
 final class Diagnostics
 {
-    public const ACTIONS=['android.device_info','android.storage','android.files','android.storage_report','android.logcat'];
+    public const ACTIONS=['android.device_info','android.storage','android.files','android.storage_report','android.logcat','android.log_file'];
     public const LOCATIONS=['public_dcim','public_movies','app_external','app_private'];
     public const FILTERS=['multicam','app','camera','storage','transfer'];
     public const MAX_OUTPUT=48000;
@@ -20,6 +20,7 @@ final class Diagnostics
         foreach($allowedDevices as $serial)if(!is_string($serial)||!AndroidSnapshot::validSerial($serial))throw new DiagnosticException('invalid_device_policy');
         if(isset($profile['package'])&&(!is_string($profile['package'])||!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/D',$profile['package'])))throw new DiagnosticException('invalid_package_profile');
         if(isset($profile['public_directory'])&&(!is_string($profile['public_directory'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D',$profile['public_directory'])))throw new DiagnosticException('invalid_directory_profile');
+        if(isset($profile['log_file'])&&(!is_string($profile['log_file'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\\.log$/D',$profile['log_file'])))throw new DiagnosticException('invalid_log_file_profile');
         $this->runner=$runner===null?self::process(...):\Closure::fromCallable($runner);
     }
     public function execute(string $action,string $device,array $args=[]): array
@@ -27,10 +28,11 @@ final class Diagnostics
         $this->deadline=microtime(true)+40;
         if(!in_array($action,self::ACTIONS,true))throw new DiagnosticException('unknown_action');
         if(!AndroidSnapshot::validSerial($device)||!in_array($device,$this->allowedDevices,true))throw new DiagnosticException('device_not_authorized');
-        $expected=match($action){'android.files'=>['location','limit'],'android.logcat'=>['filter','lines'],default=>[]};
+        $expected=match($action){'android.files'=>['location','limit'],'android.logcat'=>['filter','lines'],'android.log_file'=>['bytes'],default=>[]};
         if(array_diff(array_keys($args),$expected)||array_diff($expected,array_keys($args)))throw new DiagnosticException('invalid_parameters');
         if($action==='android.files'&&(!in_array($args['location'],self::LOCATIONS,true)||!is_int($args['limit'])||$args['limit']<1||$args['limit']>100))throw new DiagnosticException('invalid_parameters');
         if($action==='android.logcat'&&(!in_array($args['filter'],self::FILTERS,true)||!is_int($args['lines'])||$args['lines']<1||$args['lines']>500))throw new DiagnosticException('invalid_parameters');
+        if($action==='android.log_file'&&(!is_int($args['bytes'])||$args['bytes']<256||$args['bytes']>32768))throw new DiagnosticException('invalid_parameters');
         $devices=AndroidSnapshot::parseDevices($this->command(['devices','-l']));
         $selected=array_values(array_filter($devices,static fn($d)=>$d['serial']===$device));
         if(count($selected)!==1)throw new DiagnosticException('device_not_found');
@@ -41,6 +43,7 @@ final class Diagnostics
             'android.files'=>$this->files($device,$args['location'],$args['limit']),
             'android.storage_report'=>$this->report($device),
             'android.logcat'=>$this->logcat($device,$args['filter'],$args['lines']),
+            'android.log_file'=>$this->logFile($device,$args['bytes']),
         };
         return self::bound(['schema_version'=>1,'action'=>$action,'device'=>$device,'status'=>'ok','read_only'=>true,'collected_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'data'=>$data]);
     }
@@ -183,6 +186,17 @@ SH;
             'potential_abandoned_temporary_files'=>$temporary,'temporary_rule'=>'Filename suffix and age > 24h only; may still be in use. Never deleted.',
             'measurement_note'=>'Logical file sizes in a bounded live snapshot, not allocated blocks; active files may change during collection.',
             'duplication_note'=>'Same name and size are candidates only, never proof. Public Movies may include videos from other applications; origin is not inferred.'];
+    }
+    private function logFile(string $device,int $bytes): array
+    {
+        $package=$this->profile['package']??null;
+        $filename=$this->profile['log_file']??null;
+        if($package===null||$filename===null)return ['status'=>'location_unconfigured','content'=>null];
+        $path='/sdcard/Android/data/'.$package.'/files/'.$filename;
+        try{
+            $body=$this->shell($device,['tail','-c',(string)$bytes,$path]);
+            return ['status'=>'ok','package'=>$package,'filename'=>$filename,'bytes'=>strlen($body),'content'=>$body,'tail_only'=>true];
+        }catch(DiagnosticException $e){return ['status'=>$e->reason,'content'=>null];}
     }
     private function logcat(string $device,string $filter,int $lines): array
     {
