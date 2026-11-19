@@ -9,7 +9,7 @@ use Symfony\Component\Process\Process;
 final class Diagnostics
 {
     public const ACTIONS=['android.device_info','android.storage','android.files','android.storage_report','android.logcat','android.log_file'];
-    public const LOCATIONS=['public_dcim','public_movies','app_external','app_private'];
+    public const LOCATIONS=['public_dcim','public_movies','public_downloads','public_pictures','public_music','public_documents','public_dcim_all','app_external','app_private'];
     public const FILTERS=['multicam','app','camera','storage','transfer'];
     public const MAX_OUTPUT=48000;
     private \Closure $runner;
@@ -124,7 +124,7 @@ final class Diagnostics
     }
     private function root(string $location): ?string
     {
-        return match($location){'public_movies'=>'/sdcard/Movies','public_dcim'=>isset($this->profile['public_directory'])?'/sdcard/DCIM/'.$this->profile['public_directory']:null,
+        return match($location){'public_movies'=>'/sdcard/Movies','public_downloads'=>'/sdcard/Download','public_pictures'=>'/sdcard/Pictures','public_music'=>'/sdcard/Music','public_documents'=>'/sdcard/Documents','public_dcim_all'=>'/sdcard/DCIM','public_dcim'=>isset($this->profile['public_directory'])?'/sdcard/DCIM/'.$this->profile['public_directory']:null,
             'app_external'=>isset($this->profile['package'])?'/sdcard/Android/data/'.$this->profile['package'].'/files':null,'app_private'=>isset($this->profile['package'])?'.':null};
     }
     private function files(string $device,string $location,int $limit): array
