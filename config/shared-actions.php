@@ -12,7 +12,7 @@ foreach(['device_info','storage','files','storage_report','logcat','log_file'] a
         'parameters'=>['device'=>['type'=>'android_serial','description'=>'Numéro ADB explicitement autorisé par android.install de ce projet.']],
     ];
     if($operation==='files'){
-        $definition['parameters']['location']=['type'=>'enum','values'=>['public_dcim','public_movies','app_external','app_private'],'description'=>'Destination déclarée ; aucun chemin libre.'];
+        $definition['parameters']['location']=['type'=>'enum','values'=>['public_dcim','public_movies','public_downloads','public_pictures','public_music','public_documents','public_dcim_all','app_external','app_private'],'description'=>'Destination déclarée ; aucun chemin libre.'];
         $definition['parameters']['limit']=['type'=>'integer','minimum'=>1,'maximum'=>100,'description'=>'Nombre maximal d’entrées, parcours sans liens limité à huit niveaux.'];
         $definition['argv'][]=['param'=>'location'];$definition['argv'][]=['param'=>'limit'];
     }
