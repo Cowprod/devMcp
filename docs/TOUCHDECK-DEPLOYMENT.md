@@ -62,3 +62,11 @@ Un appel via `action_run` renvoie `ASYNC_ACTION_REQUIRED` avec `next_tool=action
 et une trace `action_rejected`, sans exécuter de commande.
 La synchronisation vérifie origin, refuse les fichiers suivis modifiés et utilise
 un checkout sans force. La HEAD détachée sur le commit demandé est intentionnelle.
+
+## Connexions SQL après inactivité
+
+Le tunnel STDIO garde ses schémas MCP mais crée un runtime et une connexion SQL neufs
+pour chaque appel aux outils de projet. Une expiration MariaDB `wait_timeout` ne bloque
+ainsi pas les appels suivants. Aucune action n’est rejouée automatiquement.
+Une impossibilité d’ouvrir le registre renvoie `REGISTRY_UNAVAILABLE` sans exposer
+les informations de connexion ; `host_capabilities` reste indépendant du registre.

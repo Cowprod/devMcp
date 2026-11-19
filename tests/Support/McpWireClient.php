@@ -48,7 +48,7 @@ final class McpWireClient
         return json_decode($body, true, 512, JSON_THROW_ON_ERROR);
     }
 
-    public static function call(ProjectTools $tools, string $name, array $arguments, string $protocol = '2026-07-28'): array
+    public static function call(ProjectTools $tools, string $name, array $arguments, string $protocol = '2026-07-28', ?\Closure $projectToolsFactory = null): array
     {
         $input = fopen('php://temp', 'w+');
         $path = tempnam(sys_get_temp_dir(), 'devmcp-wire-');
@@ -71,7 +71,7 @@ final class McpWireClient
         foreach ($messages as $message) fwrite($input, json_encode($message, JSON_THROW_ON_ERROR) . PHP_EOL);
         rewind($input);
         try {
-            $status = (new ServerFactory())->build($tools)->run(new StdioTransport($input, $output));
+            $status = (new ServerFactory())->build($tools, projectToolsFactory: $projectToolsFactory)->run(new StdioTransport($input, $output));
             if ($status !== 0) throw new RuntimeException('MCP transport failed');
             foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
                 $response = json_decode($line, true, 512, JSON_THROW_ON_ERROR);

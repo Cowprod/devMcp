@@ -23,6 +23,9 @@ if (!is_array($config)) {
 }
 
 $runtime = RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var');
-$server = (new ServerFactory())->build($runtime->tools);
+$server = (new ServerFactory())->build(
+    $runtime->tools,
+    projectToolsFactory: static fn() => RuntimeFactory::fromConfig($config, dirname(__DIR__) . '/var')->tools,
+);
 
 exit($server->run(new StdioTransport()));

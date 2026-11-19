@@ -13,6 +13,7 @@ final class ServerFactory
         ProjectTools $tools,
         ?SessionStoreInterface $sessionStore = null,
         ?HostTools $hostTools = null,
+        ?\Closure $projectToolsFactory = null,
     ): Server {
         $hostTools ??= new HostTools();
         $actionInputSchema = [
@@ -243,6 +244,9 @@ final class ServerFactory
 
         if ($sessionStore !== null) {
             $builder->setSession($sessionStore);
+        }
+        if ($projectToolsFactory !== null) {
+            $builder->setReferenceHandler(new FreshProjectToolsHandler($projectToolsFactory));
         }
 
         return $builder->build();
