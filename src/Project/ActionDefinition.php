@@ -74,6 +74,12 @@ final class ActionDefinition
                 );
             }
 
+            // Legacy per-project serial enums no longer restrict ADB transports.
+            if(str_starts_with($id,'android.')&&in_array($parameterId,['device','serial'],true)){
+                $parameterData['type']='android_serial';
+                unset($parameterData['values'],$parameterData['minimum'],$parameterData['maximum']);
+                $parameterData['description']='Identifiant ADB explicite en état device dans l’inventaire courant, USB ou Wi-Fi.';
+            }
             $parameters[$parameterId] = ParameterDefinition::fromArray(
                 $parameterId,
                 $parameterData,

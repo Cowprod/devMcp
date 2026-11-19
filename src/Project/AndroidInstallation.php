@@ -2,15 +2,12 @@
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 use RuntimeException;
-use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
 final class AndroidInstallation
 {
     public static function validate(array $record,string $project,string $device,array $connected): array
     {
         if(($record['project_id']??null)!==$project||($record['artifact']['target']??null)!=='android'||($record['artifact']['signed']??null)!==true)throw new RuntimeException('A signed Android build of this exact project is required');
-        if(!AndroidSnapshot::validSerial($device))throw new RuntimeException('Explicit ADB serial required');
-        $matches=array_values(array_filter($connected,static fn($row)=>($row['serial']??null)===$device));
-        if(count($matches)!==1||$matches[0]['state']!=='device')throw new RuntimeException('The selected tablet must be connected and authorized');
+        \Cowprod\DevMcp\Android\ConnectedDevices::requireDevice($device,$connected);
         $file=$record['path']??'';
         if(!is_file($file)||is_link($file)||filesize($file)!==$record['artifact']['size']||hash_file('sha256',$file)!==$record['artifact']['sha256'])throw new RuntimeException('Published APK integrity mismatch');
         return $record['artifact'];

@@ -19,6 +19,7 @@ final class JobWorker
         private readonly AuditLogger $audit,
         private readonly string $target = 'local',
         private readonly int $pollMicroseconds = 100000,
+        private readonly ?\Closure $androidDevices = null,
     ) {
     }
 
@@ -56,6 +57,7 @@ final class JobWorker
 
             $cwd = PathGuard::resolveDirectory($project->root, $action->cwd);
             $argv = $action->buildArgv($job->arguments);
+            \Cowprod\DevMcp\Android\ConnectedDevices::assertAction($job->actionId,$job->arguments,$this->androidDevices);
             $process = new Process($argv, $cwd, ['DEVMCP_JOB_ID'=>$job->id,'DEVMCP_PROJECT_ID'=>$job->projectId], null, null);
             $started = hrtime(true) / 1_000_000_000;
 

@@ -6,10 +6,10 @@ return (static function(): array {
 $androidDiagnostics=[];
 foreach(['device_info','storage','files','storage_report','logcat','log_file'] as $operation){
     $definition=[
-        'description'=>'Diagnostic Android en lecture seule : '.$operation.'. Appareil issu de la politique android.install du projet ; aucune commande libre.',
+        'description'=>'Diagnostic Android en lecture seule : '.$operation.'. Appareil en état device dans l’inventaire ADB courant ; aucune commande libre.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-diagnostics',['project'=>'id'],$operation,['param'=>'device']],
         'cwd'=>'.','timeout'=>50,'target'=>'local','sync'=>true,
-        'parameters'=>['device'=>['type'=>'android_serial','description'=>'Numéro ADB explicitement autorisé par android.install de ce projet.']],
+        'parameters'=>['device'=>['type'=>'android_serial','description'=>'Identifiant ADB courant, USB ou Wi-Fi, en état device.']],
     ];
     if($operation==='files'){
         $definition['parameters']['location']=['type'=>'enum','values'=>['public_dcim','public_movies','public_downloads','public_pictures','public_music','public_documents','public_dcim_all','app_external','app_private'],'description'=>'Destination déclarée ; aucun chemin libre.'];

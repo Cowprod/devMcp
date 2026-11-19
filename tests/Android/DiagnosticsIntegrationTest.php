@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Tests\Android;
-use Cowprod\DevMcp\Android\{Diagnostics,DiagnosticsMigration,ProjectPolicy,DiagnosticException};
+use Cowprod\DevMcp\Android\{Diagnostics,DiagnosticsMigration,ConnectedDevices,DiagnosticException};
 use Cowprod\DevMcp\Project\{ProjectDefinition,ProjectRegistry,SqlProjectConfiguration};
 use Cowprod\DevMcp\Mcp\{ProjectTools,HostTools};
 use Cowprod\DevMcp\Execution\{JobManager,FileJobStore,ActionRunner};
@@ -20,7 +20,7 @@ final class DiagnosticsIntegrationTest extends TestCase
     }
     private function project(array $device): array{return ['root'=>$this->root,'description'=>'fixture','shared_actions'=>[],
         'actions'=>['android.install'=>['description'=>'Existing install','argv'=>['/usr/bin/adb','-s',['param'=>'device'],'install','app.apk'],'parameters'=>['device'=>$device],'cwd'=>'.']]];}
-    public function testMigrationPreservesExistingActionsAndDevicePolicyAndIsIdempotent(): void
+    public function testMigrationPreservesExistingActionMetadataAndIsIdempotent(): void
     {
         $db=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
         $db->exec('CREATE TABLE dm_project_registry_state(id INTEGER,ready INTEGER); INSERT INTO dm_project_registry_state VALUES(1,1)');
@@ -35,14 +35,14 @@ final class DiagnosticsIntegrationTest extends TestCase
         $registry=ProjectRegistry::fromConfig($loaded);$project=$registry->get('multicam');
         foreach(Diagnostics::ACTIONS as $name)self::assertArrayHasKey($name,$project->getActions());
         $argv=$project->getAction('android.files')->buildArgv(['device'=>'tablet','location'=>'app_private','limit'=>5]);self::assertSame('multicam',$argv[2]);
-        self::assertSame(['tablet'],ProjectPolicy::allowedDevices($project,[['serial'=>'unlisted','state'=>'device']]));
-        $service=new Diagnostics(ProjectPolicy::allowedDevices($project,[]),[],static fn()=>self::fail('Unauthorized ADB invocation'));
-        self::expectException(DiagnosticException::class);$service->execute('android.storage','unlisted');
+        self::assertSame('android_serial',$project->getAction('android.install')->toPublicArray()['parameters'][0]['type']);
+        self::assertSame('wifi:5555',ConnectedDevices::requireDevice('wifi:5555',[['serial'=>'wifi:5555','state'=>'device']])['serial']);
     }
-    public function testStandardInstallationPolicyUsesTheSameAuthorizedConnectedDevices(): void
+    public function testDeviceAdmissionDoesNotDependOnProjectInstallationDefinitions(): void
     {
-        $project=ProjectDefinition::fromArray('fixture',$this->project(['type'=>'android_serial']));
-        self::assertSame(['connected'],ProjectPolicy::allowedDevices($project,[['serial'=>'connected','state'=>'device'],['serial'=>'offline','state'=>'offline'],['serial'=>'untrusted','state'=>'unauthorized']]));
+        $project=ProjectDefinition::fromArray('fixture',['root'=>$this->root,'actions'=>[]]);
+        self::assertSame([],$project->getActions());
+        self::assertSame('connected',ConnectedDevices::requireDevice('connected',[['serial'=>'connected','state'=>'device']])['serial']);
     }
     public function testInvalidMcpArgumentsReturnToolErrorsWithoutSpawningCommands(): void
     {

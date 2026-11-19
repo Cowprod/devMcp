@@ -9,7 +9,7 @@ final class DiagnosticsTest extends TestCase
     private string $privateStatus='ok';
     private function service(): Diagnostics
     {
-        return new Diagnostics(['tablet'],['package'=>'fr.emmanuel.multicam','public_directory'=>'MultiCam'],function($args,$timeout,$max){
+        return new Diagnostics(['package'=>'fr.emmanuel.multicam','public_directory'=>'MultiCam'],function($args,$timeout,$max){
             $this->calls[]=$args;$cmd=end($args);$r=['exit_code'=>0,'stdout'=>'','stderr'=>''];
             if($args[1]==='devices')$r['stdout']="List of devices attached\ntablet device model:Test\n";
             elseif(str_contains($cmd,"'run-as'")&&str_contains($cmd,"'id'")){
@@ -38,7 +38,7 @@ final class DiagnosticsTest extends TestCase
     }
     public function testUnknownDeviceAndInvalidInputsNeverInvokeAdb(): void
     {
-        foreach([['android.storage','other',[]],['android.files','tablet',['location'=>'../../etc','limit'=>1]],['android.files','tablet',['location'=>'app_private','limit'=>101]],['android.logcat','tablet',['filter'=>'camera; rm','lines'=>500]],['android.logcat','tablet',['filter'=>'camera','lines'=>501]],['android.storage','tablet',['command'=>'reboot']]] as [$a,$d,$p]){
+        foreach([['android.storage','bad;command',[]],['android.files','tablet',['location'=>'../../etc','limit'=>1]],['android.files','tablet',['location'=>'app_private','limit'=>101]],['android.logcat','tablet',['filter'=>'camera; rm','lines'=>500]],['android.logcat','tablet',['filter'=>'camera','lines'=>501]],['android.storage','tablet',['command'=>'reboot']]] as [$a,$d,$p]){
             try{$this->service()->execute($a,$d,$p);self::fail('Invalid request accepted');}catch(DiagnosticException){self::assertSame([],$this->calls);}
         }
     }
