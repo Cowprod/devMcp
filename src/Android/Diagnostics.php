@@ -15,9 +15,8 @@ final class Diagnostics
     private \Closure $runner;
     private float $deadline;
     private bool $lastCommandTruncated=false;
-    public function __construct(private readonly array $allowedDevices,private readonly array $profile=[],?callable $runner=null,private readonly string $adb='/usr/bin/adb')
+    public function __construct(private readonly array $profile=[],?callable $runner=null,private readonly string $adb='/usr/bin/adb')
     {
-        foreach($allowedDevices as $serial)if(!is_string($serial)||!AndroidSnapshot::validSerial($serial))throw new DiagnosticException('invalid_device_policy');
         if(isset($profile['package'])&&(!is_string($profile['package'])||!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/D',$profile['package'])))throw new DiagnosticException('invalid_package_profile');
         if(isset($profile['public_directory'])&&(!is_string($profile['public_directory'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/D',$profile['public_directory'])))throw new DiagnosticException('invalid_directory_profile');
         if(isset($profile['log_file'])&&(!is_string($profile['log_file'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\\.log$/D',$profile['log_file'])))throw new DiagnosticException('invalid_log_file_profile');
@@ -27,16 +26,14 @@ final class Diagnostics
     {
         $this->deadline=microtime(true)+40;
         if(!in_array($action,self::ACTIONS,true))throw new DiagnosticException('unknown_action');
-        if(!AndroidSnapshot::validSerial($device)||!in_array($device,$this->allowedDevices,true))throw new DiagnosticException('device_not_authorized');
+        if(!AndroidSnapshot::validSerial($device))throw new DiagnosticException('invalid_device');
         $expected=match($action){'android.files'=>['location','limit'],'android.logcat'=>['filter','lines'],'android.log_file'=>['bytes','package','filename'],default=>[]};
         if(array_diff(array_keys($args),$expected)||array_diff($expected,array_keys($args)))throw new DiagnosticException('invalid_parameters');
         if($action==='android.files'&&(!in_array($args['location'],self::LOCATIONS,true)||!is_int($args['limit'])||$args['limit']<1||$args['limit']>100))throw new DiagnosticException('invalid_parameters');
         if($action==='android.logcat'&&(!in_array($args['filter'],self::FILTERS,true)||!is_int($args['lines'])||$args['lines']<1||$args['lines']>500))throw new DiagnosticException('invalid_parameters');
         if($action==='android.log_file'&&(!is_int($args['bytes'])||$args['bytes']<256||$args['bytes']>32768||!is_string($args['package'])||!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)+$/D',$args['package'])||!is_string($args['filename'])||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\\.log$/D',$args['filename'])))throw new DiagnosticException('invalid_parameters');
         $devices=AndroidSnapshot::parseDevices($this->command(['devices','-l']));
-        $selected=array_values(array_filter($devices,static fn($d)=>$d['serial']===$device));
-        if(count($selected)!==1)throw new DiagnosticException('device_not_found');
-        if($selected[0]['state']!=='device')throw new DiagnosticException($selected[0]['state']==='unauthorized'?'device_not_authorized':'device_offline');
+        ConnectedDevices::requireDevice($device,$devices);
         $data=match($action){
             'android.device_info'=>$this->deviceInfo($device),
             'android.storage'=>$this->storage($device),

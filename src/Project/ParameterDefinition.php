@@ -147,7 +147,7 @@ final class ParameterDefinition
     {
         if (
             !is_string($value)
-            || !preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $value)
+            || !\Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot::validSerial($value)
         ) {
             throw new InvalidArgumentException(
                 "Le paramètre {$this->id} n'est pas un serial Android valide"

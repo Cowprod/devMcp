@@ -12,6 +12,7 @@ final class AndroidInstallationTest extends TestCase
         $record=['project_id'=>'demo','path'=>$file,'artifact'=>['target'=>'android','signed'=>true,'size'=>3,'sha256'=>hash_file('sha256',$file)]];
         try {
             self::assertSame($record['artifact'],AndroidInstallation::validate($record,'demo','tablet',[['serial'=>'tablet','state'=>'device']]));
+            foreach(['USB-NEW','192.168.194.55:5555','adb-R83Y106V1HF-T7ANrx._adb-tls-connect._tcp','[fe80::1%wlan0]:42123'] as $serial)self::assertSame($record['artifact'],AndroidInstallation::validate($record,'demo',$serial,[['serial'=>$serial,'state'=>'device']]));
             foreach ([['other','device',false],['demo','unauthorized',false],['demo','offline',false],['demo','device',true]] as [$project,$state,$tamper]) {
                 if($tamper)file_put_contents($file,'bad');
                 try {AndroidInstallation::validate($record,$project,'tablet',[['serial'=>'tablet','state'=>$state]]);self::fail('Invalid install accepted');}

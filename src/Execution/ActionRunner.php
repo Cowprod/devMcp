@@ -17,6 +17,7 @@ final class ActionRunner
         private readonly AuditLogger $audit,
         private readonly int $maxTimeoutSeconds = 300,
         private readonly int $maxOutputBytes = 65536,
+        private readonly ?\Closure $androidDevices = null,
     ) {
     }
 
@@ -41,6 +42,7 @@ final class ActionRunner
         $error = null;
 
         try {
+            \Cowprod\DevMcp\Android\ConnectedDevices::assertAction($actionId,$arguments,$this->androidDevices);
             $process->run();
         } catch (ProcessTimedOutException $exception) {
             $timedOut = true;
@@ -52,8 +54,8 @@ final class ActionRunner
         $durationMs = (int) round((hrtime(true) - $started) / 1_000_000);
         $exitCode = $process->getExitCode();
 
-        [$stdout, $stdoutTruncated] = $this->truncate($process->getOutput());
-        [$stderr, $stderrTruncated] = $this->truncate($process->getErrorOutput());
+        [$stdout, $stdoutTruncated] = $this->truncate($process->isStarted()?$process->getOutput():'');
+        [$stderr, $stderrTruncated] = $this->truncate($process->isStarted()?$process->getErrorOutput():'');
 
         $ok = !$timedOut && $error === null && $exitCode === 0;
 

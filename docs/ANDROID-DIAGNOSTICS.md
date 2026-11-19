@@ -1,6 +1,6 @@
 # Diagnostics Android ADB en lecture seule
 
-Les diagnostics utilisent les actions partagées, le registre SQL et le client ADB existants de TouchDeck. Ils ne créent pas un deuxième inventaire ou une nouvelle liste d’appareils. La politique de `android.install` du projet fait autorité : une enum reste une liste stricte ; le type existant `android_serial` autorise uniquement les appareils connectés et déjà autorisés par ADB. Chaque demande recontrôle l’état `device`.
+Les diagnostics utilisent les actions partagées, le registre SQL et le client ADB existants de TouchDeck. Ils ne créent pas un deuxième inventaire ou une nouvelle liste d’appareils. La seule condition d’admission d’un appareil est sa présence actuelle dans `adb devices` avec l’état exact `device`. Aucun numéro USB déclaré dans `android.install` n’est utilisé comme liste d’autorisation. USB, adresses Wi-Fi et identifiants mDNS/TLS sont traités de la même manière. Les états `offline`, `unauthorized`, `recovery` et `sideload` sont refusés.
 
 ## Actions MCP
 
@@ -30,9 +30,9 @@ Les arguments inconnus, les valeurs hors limites et les filtres/chemins libres s
 - `app_external` : `/sdcard/Android/data/<package>/files`.
 - `app_private` : répertoire privé du package, exclusivement par `run-as` si Android l’autorise pour l’application débogable. Aucun root, `su`, changement de permissions ou contournement.
 
-Le profil central de MultiCam reprend le package déjà utilisé par le pont d’administration : `fr.emmanuel.multicam`. Il est conservé dans `dm_local_project_config.config_json.android_diagnostics`, sans modifier son dépôt. Pour un autre projet, le même objet peut déclarer `package` et `public_directory`. Les actions nécessitent toujours une politique `android.install` existante ; aucun droit d’installation n’est ajouté. Sans profil, les lectures système et `public_movies` restent disponibles, les emplacements applicatifs renvoient `location_unconfigured`.
+Le profil central de MultiCam reprend le package déjà utilisé par le pont d’administration : `fr.emmanuel.multicam`. Il est conservé dans `dm_local_project_config.config_json.android_diagnostics`, sans modifier son dépôt. Pour un autre projet, le même objet peut déclarer `package` et `public_directory`. L’accès aux diagnostics ne dépend pas de la présence ni des paramètres de `android.install`. Les droits d’exécuter une action sur un projet restent distincts : aucune action d’installation n’est ajoutée à un projet qui ne la déclarait pas. Sans profil, les lectures système et `public_movies` restent disponibles, les emplacements applicatifs renvoient `location_unconfigured`.
 
-La migration `bin/migrate-android-diagnostics.php --execute MIGRATE_ANDROID_DIAGNOSTICS` publie uniquement les cinq nouveaux templates et les active sur les projets locaux disposant déjà d’une politique d’installation compatible. Elle conserve intégralement leurs actions existantes et leurs appareils autorisés. Elle est transactionnelle et idempotente, sans nouveau schéma SQL. L’installation du runtime local appelle cette migration lors des mises à jour normales.
+La migration `bin/migrate-android-diagnostics.php --execute MIGRATE_ANDROID_DIAGNOSTICS` publie uniquement les cinq nouveaux templates et les active sur les projets locaux disposant déjà de la capacité d’installation Android. Elle conserve les définitions d’actions ; leurs anciennes listes de séries ne font plus autorité. Elle est transactionnelle et idempotente, sans nouveau schéma SQL. L’installation du runtime local appelle cette migration lors des mises à jour normales.
 
 ## Stockage et limites des mesures
 
@@ -55,3 +55,9 @@ Les commandes utilisent `logcat -d -t`, jamais `-c`/`--clear` ni surveillance co
 Aucun paramètre ne contient de commande, chemin, package ou tag libre. Le programme distant de parcours est fixe, ses arguments sont échappés et il ne suit pas les liens. Les commandes ne lisent que les métadonnées des fichiers. Aucune vidéo n’est lancée, aucun APK n’est installé et aucun fichier de tablette n’est créé, déplacé ou supprimé.
 
 Délais : huit secondes maximum par commande et quarante secondes par diagnostic. Réponse JSON limitée à 48 000 octets avant l’enveloppe MCP. Les erreurs incluent `device_not_authorized`, `device_offline`, `not_found`, `permission_denied`, `run_as_unavailable`, `command_timeout`, `command_output_limit`, `location_unconfigured` et les sorties Android non reconnues. Elles ne sont pas remplacées par des valeurs inventées.
+
+## Admission unifiée des transports ADB — 19 novembre 2026
+
+À la lecture des définitions (registre SQL, configuration PHP ou templates partagés), tout sélecteur `device` ou `serial` d’une action `android.*` devient un `android_serial`, sans enum historique. Les autres paramètres et les enums des actions non Android ne changent pas. Les anciennes valeurs peuvent rester stockées mais ne sont ni publiées comme choix fermés ni utilisées pour autoriser un appareil. Aucune migration de schéma n’est nécessaire.
+
+Le moteur synchrone et le worker relisent l’inventaire ADB avant l’exécution. Une disparition ou un changement d’état entre la mise en file et l’exécution fait échouer le job sans lancer l’action. Les diagnostics et les deux installateurs utilisent le même contrôle d’état, sans deuxième liste. Les identifiants mDNS (`adb-…._adb-tls-connect._tcp`), IPv4:port et IPv6:port sont acceptés littéralement, uniquement lorsqu’ils figurent en état `device` dans cet inventaire. La sélection explicite d’une cible reste obligatoire ; aucun lien automatique entre une série USB et un alias Wi-Fi n’est inventé. L’authentification ADB, les limites des diagnostics et les permissions Android, notamment `run-as`, restent en vigueur.

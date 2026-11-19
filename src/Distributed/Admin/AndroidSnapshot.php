@@ -21,8 +21,10 @@ final class AndroidSnapshot
 
     public static function validSerial(string $serial): bool
     {
-        return strlen($serial) <= 128
-            && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/D', $serial) === 1;
+        if(strlen($serial)>128)return false;
+        if(preg_match('/^[A-Za-z0-9][A-Za-z0-9_.:%-]*$/D',$serial)===1)return true;
+        if(preg_match('/^\[([0-9a-fA-F:]+)(?:%[A-Za-z0-9_.-]+)?\]:([0-9]{1,5})$/D',$serial,$m)!==1)return false;
+        return filter_var($m[1],FILTER_VALIDATE_IP,FILTER_FLAG_IPV6)!==false&&(int)$m[2]>=1&&(int)$m[2]<=65535;
     }
 
     /** @return list<array<string,mixed>> */
@@ -30,11 +32,11 @@ final class AndroidSnapshot
     {
         $devices = [];
         foreach (preg_split('/\r?\n/', $output) ?: [] as $line) {
-            if (!preg_match('/^([A-Za-z0-9_.:-]+)\s+(device|unauthorized|offline|recovery|sideload)(?:\s+(.*))?$/D', trim($line), $matches)) {
+            if (!preg_match('/^(\S+)\s+(device|unauthorized|offline|recovery|sideload)(?:\s+(.*))?$/D', trim($line), $matches)) {
                 continue;
             }
             $serial = $matches[1];
-            if (!self::validSerial($serial) || count($devices) >= 16 || isset($devices[$serial])) {
+            if (!self::validSerial($serial) || isset($devices[$serial])) {
                 continue;
             }
             $details = $matches[3] ?? '';

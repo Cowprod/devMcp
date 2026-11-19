@@ -2,11 +2,9 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/vendor/autoload.php';
-use Cowprod\DevMcp\Android\{Diagnostics,DiagnosticException,ProjectPolicy};
+use Cowprod\DevMcp\Android\{Diagnostics,DiagnosticException};
 use Cowprod\DevMcp\Runtime\RuntimeFactory;
 use Cowprod\DevMcp\Mcp\RemoteTools;
-use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
-use Symfony\Component\Process\Process;
 try{
     if($argc<4||$argc>7)throw new DiagnosticException('invalid_parameters');
     [$script,$projectId,$operation,$device]=$argv;$action='android.'.$operation;
@@ -30,9 +28,7 @@ try{
     if($db===null||!$db->isReady())throw new DiagnosticException('registry_unavailable');
     $raw=$db->load()['projects'][$projectId]??null;
     if(!is_array($raw))throw new DiagnosticException('invalid_project_context');
-    $p=new Process(['/usr/bin/adb','devices','-l'],null,null,null,5);$p->mustRun();
-    $allowed=ProjectPolicy::allowedDevices($project,AndroidSnapshot::parseDevices($p->getOutput()));
-    $service=new Diagnostics($allowed,$raw['android_diagnostics']??[]);
+    $service=new Diagnostics($raw['android_diagnostics']??[]);
     unset($arguments['device']);$result=$service->execute($action,$device,$arguments);
     echo json_encode($result,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES),"\n";
 }catch(DiagnosticException $e){echo json_encode(['status'=>$e->reason,'read_only'=>true],JSON_THROW_ON_ERROR),"\n";exit(1);}

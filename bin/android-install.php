@@ -1,9 +1,12 @@
 <?php
 declare(strict_types=1);
+require dirname(__DIR__).'/vendor/autoload.php';
+use Cowprod\DevMcp\Android\ConnectedDevices;
+use Cowprod\DevMcp\Distributed\Admin\AndroidSnapshot;
 
 /**
  * Generic, bounded ADB installer for devMcp.
- * Arguments: project-root, relative-apk, authorized-serial.
+ * Arguments: project-root, relative-apk, connected-adb-serial.
  * ADB is invoked without a shell. Existing app data is preserved.
  */
 if ($argc !== 4) {
@@ -15,7 +18,7 @@ $root = realpath($rootArg);
 if ($root === false || !is_dir($root) ||
     preg_match('~^(?!/)[A-Za-z0-9._/-]+$~D', $relativeApk) !== 1 ||
     in_array('..', explode('/', $relativeApk), true) ||
-    preg_match('/^[A-Za-z0-9._:-]{1,128}$/D', $serial) !== 1) {
+    !AndroidSnapshot::validSerial($serial)) {
     fwrite(STDERR, "Invalid project root, APK path or serial\n");
     exit(2);
 }
@@ -43,10 +46,10 @@ function adbRun(array $args): array {
     return [proc_close($p), trim((string)$out), trim((string)$err)];
 }
 [$code, $devices, $err] = adbRun(['devices']);
-if ($code !== 0 || preg_match('/^' . preg_quote($serial, '/') . '\\s+device\\s*$/m', $devices) !== 1) {
-    fwrite(STDERR, "Device not authorized/online: $serial\n");
-    exit(1);
-}
+try {
+    if($code!==0)throw new RuntimeException('adb_inventory_unavailable');
+    ConnectedDevices::requireDevice($serial,AndroidSnapshot::parseDevices($devices));
+}catch(RuntimeException $error){fwrite(STDERR,$error->getMessage()."\n");exit(1);}
 [$code, $out, $err] = adbRun(['-s', $serial, 'install', '-r', $apk]);
 if ($code === 0 && str_contains($out, 'Success')) {
     echo "PASS $serial " . basename($apk) . "\n";

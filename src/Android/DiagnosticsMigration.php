@@ -20,7 +20,8 @@ final class DiagnosticsMigration
             }
             foreach($all['projects'] as $id=>$item){
                 $install=$item['actions']['android.install']??(in_array('android.install',$item['shared_actions']??[],true)?($all['shared_actions']['android.install']??null):null);
-                if(!is_array($install)||!in_array($install['parameters']['device']['type']??null,['enum','android_serial'],true))continue;
+                // Existing install capability identifies Android projects, not authorized devices.
+                if(!is_array($install))continue;
                 $before=$item;
                 foreach(Diagnostics::ACTIONS as $name){
                     if(isset($item['actions'][$name]))throw new \RuntimeException('Refusing to overwrite project diagnostics action');
