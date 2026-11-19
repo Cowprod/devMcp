@@ -25,6 +25,7 @@ Les arguments inconnus, les valeurs hors limites et les filtres/chemins libres s
 ## Emplacements et profils
 
 - `public_dcim` : `/sdcard/DCIM/<public_directory>` ; pour MultiCam, `MultiCam`.
+- `public_downloads`, `public_pictures`, `public_music`, `public_documents`, `public_dcim_all` : respectivement `/sdcard/Download`, `/sdcard/Pictures`, `/sdcard/Music`, `/sdcard/Documents`, `/sdcard/DCIM`. Parcours borné, lecture seule, aucun accès aux données privées des autres applications.
 - `public_movies` : `/sdcard/Movies`. L’origine applicative de ces vidéos est inconnue et n’est jamais attribuée automatiquement à MultiCam.
 - `app_external` : `/sdcard/Android/data/<package>/files`.
 - `app_private` : répertoire privé du package, exclusivement par `run-as` si Android l’autorise pour l’application débogable. Aucun root, `su`, changement de permissions ou contournement.
