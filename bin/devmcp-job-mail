@@ -1,0 +1,66 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Notification\FinishedJobs;
+use Cowprod\DevMcp\Notification\SmtpJobMail;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+try {
+    $config = require '/etc/devmcp/global.php';
+    $state = '/var/lib/devmcp-job-mail';
+    $settings = json_decode(file_get_contents('/etc/devmcp/job-mail.json'), true, 16, JSON_THROW_ON_ERROR);
+    $mail = new SmtpJobMail($settings['username'], $settings['password'], $settings['recipient']);
+    if (($argv[1] ?? '') === '--test') {
+        $mail->send(['id' => bin2hex(random_bytes(16)), 'source' => 'test',
+            'project' => 'devmcp', 'action' => 'mail.test', 'status' => 'succeeded']);
+        exit(0);
+    }
+
+    $lock = fopen($state . '/lock', 'c');
+    if (!flock($lock, LOCK_EX | LOCK_NB)) {
+        exit(0);
+    }
+    $since = new DateTimeImmutable($settings['enabled_at'], new DateTimeZone('UTC'));
+    $directory = $config['jobs']['directory'] ?? dirname(__DIR__) . '/var/jobs';
+
+    $remoteJobs = static function () use ($config, $since): Generator {
+        $path = $config['distributed']['config_path'] ?? '/etc/devmcp/mcp-distributed.php';
+        if (!is_readable($path)) {
+            return;
+        }
+        $dbConfig = require $path;
+        $db = DatabaseConnection::connect($dbConfig['dsn'], $dbConfig['writer_username'], $dbConfig['writer_password']);
+        yield from FinishedJobs::remote($db, $since);
+    };
+
+    $failed = false;
+    $sent = 0;
+    foreach ([FinishedJobs::local($directory, $since), $remoteJobs()] as $jobs) {
+        foreach ($jobs as $job) {
+            $receipt = $state . '/' . hash('sha256', $job['source'] . ':' . $job['id']) . '.sent';
+            if (is_file($receipt)) {
+                continue;
+            }
+            try {
+                $mail->send($job);
+                if (file_put_contents($receipt, gmdate(DATE_ATOM) . "\n", LOCK_EX) === false) {
+                    throw new RuntimeException('Cannot store delivery receipt');
+                }
+                if (++$sent >= 30) {
+                    break 2;
+                }
+            } catch (Throwable $error) {
+                fwrite(STDERR, 'devMCP notification pending: ' . $error->getMessage() . PHP_EOL);
+                $failed = true;
+                break 2;
+            }
+        }
+    }
+    exit($failed ? 1 : 0);
+} catch (Throwable $error) {
+    fwrite(STDERR, 'devMCP notification runner unavailable: ' . get_class($error) . PHP_EOL);
+    exit(1);
+}

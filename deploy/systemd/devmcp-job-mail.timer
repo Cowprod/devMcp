@@ -1,0 +1,10 @@
+[Unit]
+Description=Send pending devMCP job completion mail every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

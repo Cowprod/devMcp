@@ -1,0 +1,16 @@
+[Unit]
+Description=Send devMCP job completion mail
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/devmcp/job-mail.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/php /opt/devmcp/bin/devmcp-job-mail
+StateDirectory=devmcp-job-mail
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
