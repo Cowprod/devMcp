@@ -14,19 +14,21 @@ final class MacProjectRuntime extends RemoteProjectRuntime
                 ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??'')
                 ||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',$job['project_id']??'')
                 ||!empty($job['arguments']??[]))throw new RuntimeException('Invalid agent update request');
+            // Never run the updater inside the agent poll lock: launcher configuration
+            // acquires that same lock. Kickstart the independent scheduled LaunchAgent.
             $account=posix_getpwuid(posix_geteuid());
             $base=$account['dir'].'/Library/Application Support/devMcp';
-            $config=$base.'/config.php';$updater=$base.'/active/bin/update-agent-macos.php';
-            if(!is_file($config)||!is_file($updater)||!is_executable('/opt/homebrew/bin/php'))throw new RuntimeException('Managed macOS updater unavailable');
-            $command=['/opt/homebrew/bin/php',$updater,$config];
-            $process=proc_open($command,[0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
-            if(!is_resource($process))throw new RuntimeException('Managed macOS updater failed to start');
-            $stdout=stream_get_contents($pipes[1],4096);fclose($pipes[1]);
-            $stderr=stream_get_contents($pipes[2],4096);fclose($pipes[2]);
-            if(proc_close($process)!==0)throw new RuntimeException('Managed macOS updater failed; consult local update-error.log');
-            $revision=trim(file_get_contents($base.'/active/revision'));
-            if(!preg_match('/^[a-f0-9]{40}$/D',$revision))throw new RuntimeException('Updated agent revision unavailable');
-            return ['agent_revision'=>$revision,'update_status'=>str_contains($stdout,'updated to')?'updated':'already_current'];
+            if(!is_file($base.'/config.php')||!is_file($base.'/active/bin/update-agent-macos.php'))
+                throw new RuntimeException('Managed macOS updater unavailable');
+            $target='gui/'.posix_geteuid().'/net.cowprod.devmcp.update';
+            $process=proc_open(['/bin/launchctl','kickstart','-k',$target],
+                [0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+            if(!is_resource($process))throw new RuntimeException('Managed updater could not be scheduled');
+            stream_get_contents($pipes[1],1024);fclose($pipes[1]);
+            stream_get_contents($pipes[2],1024);fclose($pipes[2]);
+            if(proc_close($process)!==0)throw new RuntimeException('Managed updater LaunchAgent unavailable');
+            return ['update_status'=>'triggered','completion'=>'asynchronous',
+                'message'=>'Updater started independently; verify installed revision after next poll'];
         }
         if(!in_array($job['operation']??'', ['ios_capabilities','ios_build','android_build'],true))return parent::run($job,$policy);
         if(($policy['enabled']??false)!==true||($job['machine_id']??null)!==($policy['machine_id']??null)
