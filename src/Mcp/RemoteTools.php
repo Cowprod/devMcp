@@ -49,12 +49,13 @@ final class RemoteTools
         }
         $operation = match ($action) {
             'project.provision' => 'create', 'workspace.sync' => 'sync', 'project.deploy' => 'deploy',
-            'ios.capabilities' => 'ios_capabilities', 'ios.build' => 'ios_build', 'android.build' => 'android_build',
+            'agent.update' => 'agent_update', 'ios.capabilities' => 'ios_capabilities', 'ios.build' => 'ios_build', 'android.build' => 'android_build',
             'project.status' => 'status', 'project.logs' => 'logs', 'git.head' => 'head',
             'workspace.list' => 'list', 'workspace.read' => 'read', 'workspace.stat' => 'stat', 'workspace.find' => 'find',
             default => self::reject('UNKNOWN_ACTION', 'Use the exact public action id from action_list, for example ios.build, not the internal job name ios_build.', ['allowed_actions'=>array_column($this->actions($project)['actions'],'id')]),
         };
         if(str_starts_with($operation,'ios_')&&$record['os_family']!=='macos')throw new InvalidArgumentException('iOS builds require a macOS agent');
+        if($operation==='agent_update'&&$record['os_family']!=='macos')throw new InvalidArgumentException('Agent update currently requires a macOS agent');
         if($operation==='android_build'&&$record['os_family']!=='macos')throw new InvalidArgumentException('Managed Cordova Android builds currently require a macOS agent');
         $q->assertOperationAllowed($record,$operation);
         $this->action($project, $action);
@@ -292,6 +293,7 @@ final class RemoteTools
             $capabilities=(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($managed['machine_id']);
             if(!$capabilities['hosting'])$names=array_values(array_diff($names,['project.deploy']));
             if($managed['os_family']==='macos'){
+                $names[]='agent.update';
                 $names[]='ios.capabilities';
                 if($capabilities['cordova_ios'])$names[]='ios.build';
                 if($capabilities['cordova_android'])$names[]='android.build';
@@ -308,7 +310,7 @@ final class RemoteTools
                     'workspace.list', 'workspace.read', 'workspace.stat', 'workspace.find' => [['id' => 'path', 'type' => 'relative_path', 'required' => false]],
                     default => [],
                 };
-                $actions[] = ['id' => $id, 'description' => $id==='ios.build' ? 'Compile un projet Xcode ou Cordova depuis un commit exact ; préparation Cordova automatique et livraison HTTPS.' : 'Agent project operation: ' . $id,
+                $actions[] = ['id' => $id, 'description' => $id==='ios.build' ? 'Compile un projet Xcode ou Cordova depuis un commit exact ; préparation Cordova automatique et livraison HTTPS.' : ($id==='agent.update' ? 'Déclenche la mise à jour vérifiée de cet agent macOS depuis le dépôt officiel devMCP, sans commande libre.' : 'Agent project operation: ' . $id),
                     'target' => 'remote', 'sync_allowed' => false, 'parameters' => $parameters];
             }
             return ['project' => $project, 'actions' => $actions];
