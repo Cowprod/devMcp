@@ -8,6 +8,26 @@ final class MacProjectRuntime extends RemoteProjectRuntime
 {
     public static function run(array $job, array $policy): array
     {
+        if(($job['operation']??null)==='agent_update'){
+            if(PHP_OS_FAMILY!=='Darwin'||posix_geteuid()===0||($policy['enabled']??false)!==true
+                ||($job['machine_id']??null)!==($policy['machine_id']??null)
+                ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??'')
+                ||!preg_match('/^[a-z0-9][a-z0-9-]{0,47}$/D',$job['project_id']??'')
+                ||!empty($job['arguments']??[]))throw new RuntimeException('Invalid agent update request');
+            $account=posix_getpwuid(posix_geteuid());
+            $base=$account['dir'].'/Library/Application Support/devMcp';
+            $config=$base.'/config.php';$updater=$base.'/active/bin/update-agent-macos.php';
+            if(!is_file($config)||!is_file($updater)||!is_executable('/opt/homebrew/bin/php'))throw new RuntimeException('Managed macOS updater unavailable');
+            $command=['/opt/homebrew/bin/php',$updater,$config];
+            $process=proc_open($command,[0=>['file','/dev/null','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+            if(!is_resource($process))throw new RuntimeException('Managed macOS updater failed to start');
+            $stdout=stream_get_contents($pipes[1],4096);fclose($pipes[1]);
+            $stderr=stream_get_contents($pipes[2],4096);fclose($pipes[2]);
+            if(proc_close($process)!==0)throw new RuntimeException('Managed macOS updater failed; consult local update-error.log');
+            $revision=trim(file_get_contents($base.'/active/revision'));
+            if(!preg_match('/^[a-f0-9]{40}$/D',$revision))throw new RuntimeException('Updated agent revision unavailable');
+            return ['agent_revision'=>$revision,'update_status'=>str_contains($stdout,'updated to')?'updated':'already_current'];
+        }
         if(!in_array($job['operation']??'', ['ios_capabilities','ios_build','android_build'],true))return parent::run($job,$policy);
         if(($policy['enabled']??false)!==true||($job['machine_id']??null)!==($policy['machine_id']??null)
             ||!preg_match('/^[a-f0-9]{32}$/D',$job['id']??''))throw new RuntimeException('Invalid iOS agent identity');
