@@ -13,6 +13,9 @@ final class MacCordovaIos
         $environment=getenv();
         $environment['PATH']=implode(':',array_unique(array_filter([dirname($node),'/opt/homebrew/bin','/usr/local/bin','/usr/bin','/bin','/usr/sbin','/sbin',getenv('PATH')?:''])));
         if(isset($tools['backend_url']))$environment['DEVMCP_BACKEND_URL']=$tools['backend_url'];
+        // CocoaPods/Ruby require a UTF-8 locale even when launchd provides no locale.
+        // Keep the change scoped to the Cordova build subprocess environment.
+        $environment['LANG']='en_US.UTF-8';$environment['LC_ALL']='en_US.UTF-8';
         $environment['CI']='1';$environment['HOMEBREW_NO_AUTO_UPDATE']='1';
         return $environment;
     }
