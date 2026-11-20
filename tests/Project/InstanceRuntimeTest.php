@@ -9,10 +9,11 @@ use RuntimeException;
 final class InstanceFixtureRuntime extends RemoteProjectRuntime
 {
     public static string $base;
+    public static ?array $capturedVariables=null;
     protected static function workspaceRoot(array $policy):string{return self::$base.'/'.$policy['machine_id'];}
     protected static function owner():int{return posix_geteuid();}
     protected static function deploy(string $workspace,array $meta,string $runtime,string $ip):array
-    {return array_replace($meta,['runtime'=>$runtime,'active_revision'=>$meta['revision'],'port'=>12345,'url'=>'http://'.$ip.':12345']);}
+    {self::$capturedVariables=static::$instanceVariables;return array_replace($meta,['runtime'=>$runtime,'active_revision'=>$meta['revision'],'port'=>12345,'url'=>'http://'.$ip.':12345']);}
     protected static function control(string $workspace,array $meta,string $operation,string $ip):array
     {return array_replace($meta,['service_state'=>$operation==='stop'?'stopped':'running','workspace_created'=>true]);}
 }
@@ -41,6 +42,25 @@ final class InstanceRuntimeTest extends TestCase
         self::assertSame(sha1('version-one'),json_decode($before,true)['active_revision']);
         self::assertSame('version-two',file_get_contents($changed['workspace_path'].'/releases/'.sha1('version-two').'/public/index.html'));
         self::assertStringNotContainsString('private-env-',json_encode($changed));
+    }
+    public function testManagedDeploymentInjectsActualIdentityAndCommitOnly():void
+    {
+        $id=str_repeat('c',32);
+        $this->executeJob($this->job($this->a,$id,'create'));
+        $deployed=$this->executeJob($this->job($this->a,$id,'deploy'));
+        $env=InstanceFixtureRuntime::$capturedVariables;
+        self::assertIsArray($env);
+        self::assertSame($id,$env['DEVMCP_DEPLOYMENT_ID']);
+        self::assertSame($deployed['active_revision'],$env['DEVMCP_SOURCE_COMMIT']);
+        self::assertSame('private-env-'.$this->a,$env['INSTANCE_NAME']);
+        self::assertSame(sha1('version-one'),$env['DEVMCP_SOURCE_COMMIT']);
+        foreach(['DEVMCP_DEPLOYMENT_ID','DEVMCP_SOURCE_COMMIT'] as $name){
+            $forged=$this->job($this->a,$id,'deploy');
+            $forged['configuration']['variables'][$name]='forged';
+            try{$this->executeJob($forged);self::fail('Engine environment was user-overridable: '.$name);}
+            catch(\InvalidArgumentException $exception){self::assertStringContainsString('reserved',$exception->getMessage());}
+        }
+        self::assertSame($deployed['active_revision'],json_decode(file_get_contents($deployed['workspace_path'].'/.project.json'),true)['active_revision']);
     }
     public function testUnmanagedExistingDirectoryIsNotAdopted():void
     {
