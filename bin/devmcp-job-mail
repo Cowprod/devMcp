@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Notification\FinishedJobs;
 use Cowprod\DevMcp\Notification\SmtpJobMail;
+use Cowprod\DevMcp\Notification\PublishedSites;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -26,25 +27,40 @@ try {
     $since = new DateTimeImmutable($settings['enabled_at'], new DateTimeZone('UTC'));
     $directory = $config['jobs']['directory'] ?? dirname(__DIR__) . '/var/jobs';
 
-    $remoteJobs = static function () use ($config, $since): Generator {
-        $path = $config['distributed']['config_path'] ?? '/etc/devmcp/mcp-distributed.php';
-        if (!is_readable($path)) {
-            return;
+    $db = null;
+    $path = $config['distributed']['config_path'] ?? '/etc/devmcp/mcp-distributed.php';
+    if (is_readable($path)) {
+        try {
+            $dbConfig = require $path;
+            $db = DatabaseConnection::connect($dbConfig['dsn'], $dbConfig['writer_username'], $dbConfig['writer_password']);
+        } catch (PDOException) {
+            fwrite(STDERR, "devMCP remote notification registry unavailable\n");
         }
-        $dbConfig = require $path;
-        $db = DatabaseConnection::connect($dbConfig['dsn'], $dbConfig['writer_username'], $dbConfig['writer_password']);
-        yield from FinishedJobs::remote($db, $since);
-    };
+    }
+    $machine = gethostname() ?: '';
+    $previewIp = $config['preview_zerotier_ipv4'] ?? ($machine === 'touchdeck' ? '192.168.194.189' : '');
+    $sites = $db === null ? null : new PublishedSites($db, $machine, $previewIp);
+    $remoteJobs = $db === null ? [] : FinishedJobs::remote($db, $since);
 
     $failed = false;
     $sent = 0;
-    foreach ([FinishedJobs::local($directory, $since), $remoteJobs()] as $jobs) {
+    foreach ([FinishedJobs::local($directory, $since), $remoteJobs] as $jobs) {
         foreach ($jobs as $job) {
             $receipt = $state . '/' . hash('sha256', $job['source'] . ':' . $job['id']) . '.sent';
             if (is_file($receipt)) {
                 continue;
             }
             try {
+                if (!isset($job['links']['Site']) && $sites !== null) {
+                    try {
+                        $url = $sites->url($job);
+                        if ($url !== null) {
+                            $job['links']['Site'] = $url;
+                        }
+                    } catch (PDOException) {
+                        fwrite(STDERR, "devMCP site URL unavailable for notification\n");
+                    }
+                }
                 $mail->send($job);
                 if (file_put_contents($receipt, gmdate(DATE_ATOM) . "\n", LOCK_EX) === false) {
                     throw new RuntimeException('Cannot store delivery receipt');

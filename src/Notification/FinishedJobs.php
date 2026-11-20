@@ -51,10 +51,10 @@ final class FinishedJobs
     public static function remote(PDO $db, DateTimeImmutable $since): Generator
     {
         $queries = [
-            'project' => 'SELECT id, project_id AS project, operation AS action, state AS status, result_json FROM dm_remote_project_job WHERE finished_at >= ?',
-            'readonly' => 'SELECT j.id, d.project_id AS project, j.action_name AS action, j.state AS status FROM dm_remote_readonly_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.finished_at >= ?',
-            'hosting' => 'SELECT j.id, d.project_id AS project, j.action_name AS action, j.state AS status FROM dm_remote_hosting_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.finished_at >= ?',
-            'distributed' => "SELECT j.id, d.project_id AS project, j.action_id AS action, j.status FROM dm_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.updated_at >= ? AND j.status IN ('succeeded','failed','cancelled','timed_out','expired','uncertain')",
+            'project' => 'SELECT id, project_id AS project, operation AS action, state AS status, result_json, deployment_id FROM dm_remote_project_job WHERE finished_at >= ?',
+            'readonly' => 'SELECT j.id, j.deployment_id, d.project_id AS project, j.action_name AS action, j.state AS status FROM dm_remote_readonly_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.finished_at >= ?',
+            'hosting' => 'SELECT j.id, j.deployment_id, d.project_id AS project, j.action_name AS action, j.state AS status FROM dm_remote_hosting_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.finished_at >= ?',
+            'distributed' => "SELECT j.id, j.deployment_id, d.project_id AS project, j.action_id AS action, j.status FROM dm_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.updated_at >= ? AND j.status IN ('succeeded','failed','cancelled','timed_out','expired','uncertain')",
         ];
         foreach ($queries as $source => $sql) {
             try {
