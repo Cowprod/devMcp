@@ -14,9 +14,9 @@ final class FinishedJobsTest extends TestCase
     public function testRemoteProjectSuccessUsesItsOwnBuildPage(): void
     {
         $db = new PDO('sqlite::memory:', options: [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-        $db->exec('CREATE TABLE dm_remote_project_job (id TEXT, project_id TEXT, operation TEXT, state TEXT, result_json TEXT, finished_at TEXT)');
+        $db->exec('CREATE TABLE dm_remote_project_job (id TEXT, project_id TEXT, operation TEXT, state TEXT, result_json TEXT, finished_at TEXT, deployment_id TEXT)');
         $page = 'https://lab.example/?ios_artifact=' . str_repeat('a', 64);
-        $insert = $db->prepare('INSERT INTO dm_remote_project_job VALUES (?, ?, ?, ?, ?, ?)');
+        $insert = $db->prepare('INSERT INTO dm_remote_project_job VALUES (?, ?, ?, ?, ?, ?, NULL)');
         $insert->execute([str_repeat('a', 32), 'nearby-places', 'ios_build', 'succeeded',
             json_encode(['data' => ['build_url' => $page, 'installation_available' => true]], JSON_THROW_ON_ERROR),
             '2026-11-20 12:01:00.000000']);
