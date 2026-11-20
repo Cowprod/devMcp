@@ -16,6 +16,21 @@ final class MacCordovaIosTest extends TestCase
         $package=['name'=>'fixture','devDependencies'=>['cordova'=>'13.0.0','cordova-ios'=>'8.2.0'],'cordova'=>['platforms'=>['ios']],'scripts'=>['verify:ios'=>'node verify.js']];
         file_put_contents($this->root.'/package.json',json_encode($package));file_put_contents($this->root.'/package-lock.json','{"lockfileVersion":3}');file_put_contents($this->root.'/config.xml','<widget/>');return $package;
     }
+    public function testCordovaEnvironmentAlwaysUsesUtf8ForCocoaPods():void
+    {
+        $node=PHP_BINARY;
+        $beforeLang=getenv('LANG');$beforeLc=getenv('LC_ALL');
+        putenv('LANG=C');putenv('LC_ALL=C');
+        try {
+            $environment=MacCordovaIos::environment(['node'=>$node]);
+            self::assertSame('en_US.UTF-8',$environment['LANG']);
+            self::assertSame('en_US.UTF-8',$environment['LC_ALL']);
+            self::assertSame('1',$environment['CI']);
+        } finally {
+            $beforeLang===false?putenv('LANG'):putenv('LANG='.$beforeLang);
+            $beforeLc===false?putenv('LC_ALL'):putenv('LC_ALL='.$beforeLc);
+        }
+    }
     public function testAcceptsRootAndNestedCordovaProjectsWithExplicitScripts():void
     {
         foreach(['.','app'] as $path){$config=MacIosRuntime::configuration(['kind'=>'cordova','path'=>$path,'scheme'=>'App','configuration'=>'Release','verify_script'=>'verify:ios']);self::assertSame($path,$config['path']);}
