@@ -19,7 +19,7 @@ final class WorkspaceUploadTools {
             if ($mode === 'persistent' && !$this->validPath($path)) throw new RuntimeException('Invalid destination');
             $id = bin2hex(random_bytes(16));
             $meta = ['path'=>$path,'mode'=>$mode,'size'=>$size,'sha256'=>$sha256,'offset'=>0,'overwrite'=>$overwrite,'created'=>time()];
-            if (file_put_contents("$base/$id.json", json_encode($meta, JSON_THROW_ON_ERROR), LOCK_EX) === false || file_put_contents("$base/$id.part", '') === false) throw new RuntimeException('Upload initialization failed');
+            if (file_put_contents("$base/$id.json", json_encode($meta, JSON_THROW_ON_ERROR), LOCK_EX) === false || file_put_contents("$base/$id.part", '', LOCK_EX) === false) throw new RuntimeException('Upload initialization failed');
             return ['upload_id'=>$id,'max_chunk_bytes'=>49152,'next_offset'=>0];
         }
         if (!is_string($upload_id) || !preg_match('/^[a-f0-9]{32}$/D', $upload_id)) throw new RuntimeException('Invalid upload ID');
@@ -34,9 +34,10 @@ final class WorkspaceUploadTools {
                 unlink($part); unlink($metaPath); return ['aborted'=>true];
             }
             if ($operation === 'chunk') {
-                if (!is_string($data) || strlen($data) > 65536 || !preg_match('/^[A-Za-z0-9+\/]*={0,2}$/D', $data)) throw new RuntimeException('Invalid base64 chunk');
+                if (!is_string($data) || $data === '' || strlen($data) > 65536 || !preg_match('/^[A-Za-z0-9+\/]*={0,2}$/D', $data)) throw new RuntimeException('Invalid base64 chunk');
                 $bytes = base64_decode($data, true);
                 if ($bytes === false || strlen($bytes) > 49152 || ($meta['offset'] + strlen($bytes)) > $meta['size']) throw new RuntimeException('Chunk exceeds upload limit');
+                if (filesize($part) !== $meta['offset']) throw new RuntimeException('Upload offset mismatch');
                 if (file_put_contents($part, $bytes, FILE_APPEND | LOCK_EX) !== strlen($bytes)) throw new RuntimeException('Chunk write failed');
                 $meta['offset'] += strlen($bytes);
                 ftruncate($handle, 0); rewind($handle); fwrite($handle, json_encode($meta, JSON_THROW_ON_ERROR)); fflush($handle);
@@ -50,7 +51,7 @@ final class WorkspaceUploadTools {
                 if (!$this->validPath($meta['path'])) throw new RuntimeException('Invalid destination');
                 $target = $root . '/' . $meta['path'];
                 $parent = dirname($target);
-                if (realpath($parent) !== $parent || !str_starts_with($parent . '/', $root . '/')) throw new RuntimeException('Destination directory must exist within workspace');
+                if (($resolvedParent = realpath($parent)) === false || ($resolvedParent !== $root && !str_starts_with($resolvedParent . '/', $root . '/')) || $resolvedParent !== $parent) throw new RuntimeException('Destination directory must exist within workspace');
                 if (is_link($target) || (file_exists($target) && (!$meta['overwrite'] || !is_file($target)))) throw new RuntimeException('Destination exists or is unsafe');
             }
             if (!rename($part, $target)) throw new RuntimeException('Publication failed');
@@ -59,6 +60,6 @@ final class WorkspaceUploadTools {
         } finally { flock($handle, LOCK_UN); fclose($handle); }
     }
     private function validPath(?string $path): bool {
-        return is_string($path) && strlen($path) <= 240 && preg_match('~^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[a-zA-Z0-9_./-]+$~D', $path) === 1 && !str_contains($path, '//') && !str_starts_with($path, '.devmcp-uploads/') && !str_starts_with($path, '.git/');
+        return is_string($path) && strlen($path) <= 240 && preg_match('~^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[a-zA-Z0-9_./-]+$~D', $path) === 1 && !str_contains($path, '//') && !str_starts_with($path, '.devmcp-uploads/') && !str_starts_with($path, '.git/') && $path !== '.git' && $path !== '.devmcp-uploads' && !str_starts_with($path, './') && !str_contains($path, '/./') && !str_ends_with($path, '/.') && !str_ends_with($path, '/');
     }
 }
