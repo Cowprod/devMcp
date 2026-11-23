@@ -41,7 +41,6 @@ if ($operation === 'prepare') {
     $args = ['/usr/bin/npm', is_file($lock) ? 'ci' : 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-progress'];
     $process = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root);
     if (!is_resource($process)) fail('npm unavailable', 5);
-    fclose($pipes[0]);
     echo stream_get_contents($pipes[1]); fclose($pipes[1]);
     fwrite(STDERR, stream_get_contents($pipes[2])); fclose($pipes[2]);
     $code = proc_close($process);
