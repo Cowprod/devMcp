@@ -15,6 +15,7 @@ final class WorkspaceUploadTools {
         if (!is_dir($base) && !mkdir($base, 0700) && !is_dir($base)) throw new RuntimeException('Upload directory unavailable');
         if (realpath($base) !== $base) throw new RuntimeException('Unsafe upload directory');
         if ($operation === 'begin') {
+            $this->cleanupExpired($base);
             if (!in_array($mode, ['temporary', 'persistent'], true) || !is_int($size) || $size < 0 || $size > 20971520 || !is_string($sha256) || !preg_match('/^[a-f0-9]{64}$/D', $sha256)) throw new RuntimeException('Invalid upload metadata');
             if ($mode === 'persistent' && !$this->validPath($path)) throw new RuntimeException('Invalid destination');
             $id = bin2hex(random_bytes(16));
@@ -59,6 +60,28 @@ final class WorkspaceUploadTools {
             unlink($metaPath);
             return ['committed'=>true,'mode'=>$meta['mode'],'path'=>$meta['mode'] === 'temporary' ? '.devmcp-uploads/' . $upload_id . '.ready' : $meta['path'],'sha256'=>$meta['sha256']];
         } finally { flock($handle, LOCK_UN); fclose($handle); }
+    }
+    private function cleanupExpired(string $base): void {
+        $now = time();
+        foreach (glob($base . '/*.json') ?: [] as $metaPath) {
+            if (is_link($metaPath) || !is_file($metaPath)) continue;
+            $id = basename($metaPath, '.json');
+            if (!preg_match('/^[a-f0-9]{32}$/D', $id)) continue;
+            $handle = fopen($metaPath, 'c+');
+            if (!is_resource($handle)) continue;
+            if (!flock($handle, LOCK_EX | LOCK_NB)) { fclose($handle); continue; }
+            try {
+                $meta = json_decode(stream_get_contents($handle) ?: '', true);
+                if (!is_array($meta) || $now - (int) ($meta['created'] ?? 0) <= 3600) continue;
+                $part = $base . '/' . $id . '.part';
+                if (is_file($part) && !is_link($part)) unlink($part);
+                unlink($metaPath);
+            } finally { flock($handle, LOCK_UN); fclose($handle); }
+        }
+        foreach (glob($base . '/*.ready') ?: [] as $ready) {
+            if (is_link($ready) || !is_file($ready) || !preg_match('/^[a-f0-9]{32}\\.ready$/D', basename($ready))) continue;
+            if ($now - filemtime($ready) > 86400) unlink($ready);
+        }
     }
     private function validPath(?string $path): bool {
         return is_string($path) && strlen($path) <= 240 && preg_match('~^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[a-zA-Z0-9_./-]+$~D', $path) === 1 && !str_contains($path, '//') && !str_starts_with($path, '.devmcp-uploads/') && !str_starts_with($path, '.git/') && $path !== '.git' && $path !== '.devmcp-uploads' && !str_starts_with($path, './') && !str_contains($path, '/./') && !str_ends_with($path, '/.') && !str_ends_with($path, '/');
