@@ -173,7 +173,7 @@ else
 
     advance
     update_stage=candidate-dependencies
-    (cd "$candidate" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-plugins --no-scripts --prefer-dist)
+    (cd "$candidate" && COMPOSER_HOME="$stage_root/composer" COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-plugins --no-scripts --prefer-dist)
     advance
     update_stage=candidate-tests
     /usr/sbin/runuser -u nobody -- /bin/sh "$validator" tests "$candidate"
@@ -185,7 +185,7 @@ else
     if ! git diff --quiet "$old" "$new" -- composer.json composer.lock; then
         advance
         update_stage=production-dependencies
-        (cd "$candidate" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-dev --no-plugins --no-scripts --prefer-dist --optimize-autoloader)
+        (cd "$candidate" && COMPOSER_HOME="$stage_root/composer" COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-dev --no-plugins --no-scripts --prefer-dist --optimize-autoloader)
         test -d "$checkout/vendor"
     fi
 
