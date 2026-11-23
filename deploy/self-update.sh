@@ -61,6 +61,8 @@ update_stage=project-service-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-service-action.php --execute MIGRATE_PROJECT_SERVICE
 update_stage=project-test-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-test-action.php --execute MIGRATE_PROJECT_TEST
+update_stage=sass-actions
+/usr/bin/php /opt/devmcp/bin/migrate-sass-actions.php --execute MIGRATE_SASS_ACTIONS
 # Preview-port reservations must exist before code that allocates a port is
 # reloaded. This fixed, idempotent migration never modifies existing rows.
 update_stage=preview-port-migration
