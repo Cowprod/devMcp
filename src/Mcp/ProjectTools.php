@@ -45,7 +45,17 @@ final class ProjectTools
 
     public function workspaceUpload(string $project, string $operation, ?string $upload_id = null, ?string $path = null, ?string $mode = null, ?int $size = null, ?string $sha256 = null, ?string $data = null, bool $overwrite = false): array
     {
-        return (new WorkspaceUploadTools($this->projects))->transfer($project, $operation, $upload_id, $path, $mode, $size, $sha256, $data, $overwrite);
+        return (new WorkspaceUploadTools($this->projects))->transfer(
+            $project, $operation, $upload_id, $path, $mode, $size, $sha256, $data, $overwrite,
+            commitMode: 'temporary',
+        );
+    }
+
+    public function workspaceUploadCommit(string $project, string $upload_id): array
+    {
+        return (new WorkspaceUploadTools($this->projects))->transfer(
+            $project, 'commit', $upload_id, commitMode: 'persistent',
+        );
     }
 
     public function projectList(): array

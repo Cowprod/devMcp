@@ -29,6 +29,16 @@ Le résultat par identifiant indique `unconfirmed` tant qu’aucun résultat fin
 ou `succeeded`/`failed` avec l’étape, le code de sortie et les commits demandé, installé et chargé.
 Si `main` avance avant le traitement de la demande, l’étape `revision-mismatch` signale qu’il faut
 soumettre une nouvelle demande pour la nouvelle révision.
+Pour chaque nouveau commit, l’updater prépare une copie de travail temporaire et y valide la
+syntaxe PHP, les dépendances et les tests MCP ciblés. Les tests du registre nécessitent
+`pdo_sqlite` pour le PHP CLI. Une validation échouée bloque l’activation et le redémarrage.
+Après activation, l’updater vérifie le protocole MCP local et la disponibilité du tunnel,
+y compris sa communication avec le plan de contrôle. Un échec d’activation restaure le
+checkout précédent et ses dépendances puis vérifie le runtime restauré. La référence Git
+`refs/devmcp/previous` conserve la dernière révision vérifiée avant activation.
+Les champs `completed_stages`, `stage` et `rollback` sont consultables via
+`devmcp.update.status`. Les migrations de registre existantes sont idempotentes et ne font pas
+l’objet d’une inversion SQL automatique.
 L'updater synchronise les diagnostics Android dans le registre SQL avant le redémarrage du runtime.
 Les projets absents et actions non autorisées renvoient désormais des erreurs d'outil explicites,
 `PROJECT_UNAVAILABLE` / `ACTION_UNAVAILABLE`, et une trace `action_rejected` sans arguments sensibles.

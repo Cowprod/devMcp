@@ -9,12 +9,17 @@ use Mcp\Server\Transport\StdioTransport;
 $checkout = $argv[1] ?? dirname(__DIR__);
 require $checkout . '/vendor/autoload.php';
 
+$outputPath = null;
 try {
     $config = require '/etc/devmcp/global.php';
     $runtime = RuntimeFactory::fromConfig($config, $checkout . '/var');
     $server = (new ServerFactory())->build($runtime->tools);
     $input = fopen('php://temp', 'w+');
-    $output = tmpfile();
+    $outputPath = tempnam(sys_get_temp_dir(), 'devmcp-update-probe-');
+    if ($outputPath === false) {
+        throw new RuntimeException('Cannot create probe output');
+    }
+    $output = fopen($outputPath, 'w+');
     $messages = [
         ['id' => 1, 'method' => 'initialize', 'params' => [
             'protocolVersion' => '2025-03-26',
@@ -35,9 +40,8 @@ try {
     if ($server->run(new StdioTransport($input, $output)) !== 0) {
         throw new RuntimeException('Stdio probe failed');
     }
-    rewind($output);
     $replies = [];
-    while (($line = fgets($output)) !== false) {
+    foreach (file($outputPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         $message = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
         if (isset($message['id'], $message['result'])) {
             $replies[$message['id']] = $message['result'];
@@ -52,5 +56,8 @@ try {
     echo "MCP initialize, tools/list and host_capabilities passed.\n";
 } catch (Throwable $error) {
     fwrite(STDERR, 'MCP probe failed: ' . $error::class . "\n");
-    exit(1);
+    $failed = true;
+} finally {
+    if (is_string($outputPath)) unlink($outputPath);
 }
+exit(isset($failed) ? 1 : 0);

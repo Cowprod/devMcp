@@ -18,7 +18,7 @@ case "$phase" in
         echo 'Candidate syntax checks passed.'
         ;;
     tests)
-        php vendor/bin/phpunit \
+        php vendor/bin/phpunit --do-not-cache-result \
             tests/ServerFactoryTest.php tests/StdioDualEraTest.php tests/HttpTransportTest.php \
             tests/Mcp tests/Project/AdminUpdateMigrationTest.php tests/Project/WorkspaceAccessInstallerTest.php
         ;;

@@ -3,12 +3,13 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Mcp;
 
 use Cowprod\DevMcp\Project\ProjectRegistry;
+use Mcp\Exception\ToolCallException;
 use RuntimeException;
 
 final class WorkspaceUploadTools {
     public function __construct(private readonly ProjectRegistry $projects) {}
 
-    public function transfer(string $project, string $operation, ?string $upload_id = null, ?string $path = null, ?string $mode = null, ?int $size = null, ?string $sha256 = null, ?string $data = null, bool $overwrite = false): array {
+    public function transfer(string $project, string $operation, ?string $upload_id = null, ?string $path = null, ?string $mode = null, ?int $size = null, ?string $sha256 = null, ?string $data = null, bool $overwrite = false, ?string $commitMode = null): array {
         $root = $this->projects->get($project)->root;
         $base = $root . '/.devmcp-uploads';
         if (is_link($base)) throw new RuntimeException('Unsafe upload directory');
@@ -46,7 +47,10 @@ final class WorkspaceUploadTools {
                 return ['next_offset'=>$meta['offset'],'size'=>$meta['size']];
             }
             if ($operation !== 'commit') throw new RuntimeException('Unknown upload operation');
-            if (filesize($part) !== $meta['size'] || hash_file('sha256', $part) !== $meta['sha256']) throw new RuntimeException('Size or SHA256 mismatch');
+            if ($commitMode !== null && $meta['mode'] !== $commitMode) {
+                throw new ToolCallException('Use the commit tool for the initialized upload mode');
+            }
+            if (filesize($part) !== $meta['size'] || hash_file('sha256', $part) !== $meta['sha256']) throw new ToolCallException('Size or SHA256 mismatch');
             if ($meta['mode'] === 'temporary') {
                 $target = "$base/$upload_id.ready";
             } else {
@@ -54,9 +58,15 @@ final class WorkspaceUploadTools {
                 $target = $root . '/' . $meta['path'];
                 $parent = dirname($target);
                 if (($resolvedParent = realpath($parent)) === false || ($resolvedParent !== $root && !str_starts_with($resolvedParent . '/', $root . '/')) || $resolvedParent !== $parent) throw new RuntimeException('Destination directory must exist within workspace');
-                if (is_link($target) || (file_exists($target) && (!$meta['overwrite'] || !is_file($target)))) throw new RuntimeException('Destination exists or is unsafe');
+                if (is_link($target) || (file_exists($target) && (!$meta['overwrite'] || !is_file($target)))) throw new ToolCallException('Destination exists or is unsafe');
             }
-            if (!rename($part, $target)) throw new RuntimeException('Publication failed');
+            if ($meta['mode'] === 'persistent' && !$meta['overwrite']) {
+                // link is atomic and fails if another writer creates the destination first.
+                if (!@link($part, $target)) throw new ToolCallException('Destination exists or publication failed');
+                unlink($part);
+            } elseif (!rename($part, $target)) {
+                throw new RuntimeException('Publication failed');
+            }
             unlink($metaPath);
             return ['committed'=>true,'mode'=>$meta['mode'],'path'=>$meta['mode'] === 'temporary' ? '.devmcp-uploads/' . $upload_id . '.ready' : $meta['path'],'sha256'=>$meta['sha256']];
         } finally { flock($handle, LOCK_UN); fclose($handle); }

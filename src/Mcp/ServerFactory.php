@@ -177,7 +177,7 @@ final class ServerFactory
                     'size'=>['type'=>'integer','minimum'=>0,'maximum'=>20971520],
                     'sha256'=>['type'=>'string'],'data'=>['type'=>'string','maxLength'=>65536]
                 ],'required'=>['project','path','offset','size','sha256','data'],'additionalProperties'=>false])
-            ->addTool([$tools, 'workspaceUpload'], 'workspace_upload', description: 'Transfert binaire borne vers un workspace local : begin, chunk base64, commit SHA-256, abort. Modes temporary et persistent.', inputSchema: [
+            ->addTool([$tools, 'workspaceUpload'], 'workspace_upload', description: 'Prepare et transfere un fichier dans un workspace local. Pour finaliser un fichier temporaire, utiliser commit ici. Pour publier un fichier persistant, utiliser workspace_upload_commit.', inputSchema: [
                 'type'=>'object', 'properties'=>[
                     'project'=>['type'=>'string'], 'operation'=>['type'=>'string','enum'=>['begin','chunk','status','commit','abort']],
                     'upload_id'=>['type'=>['string','null']], 'path'=>['type'=>['string','null']],
@@ -188,9 +188,7 @@ final class ServerFactory
                 ], 'required'=>['project','operation'], 'additionalProperties'=>false
             ])
             ->addTool(
-                static fn (string $project, string $upload_id): array => $tools->workspaceUpload(
-                    $project, 'commit', $upload_id
-                ),
+                [$tools, 'workspaceUploadCommit'],
                 'workspace_upload_commit',
                 description: 'Publie dans un workspace local un fichier deja recu et verifie par SHA-256. La publication persistante exige une autorisation explicite et peut ecraser un fichier si overwrite a ete autorise lors de la preparation.',
                 annotations: new ToolAnnotations(
