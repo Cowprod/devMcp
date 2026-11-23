@@ -32,6 +32,16 @@ foreach(['device_info','storage','files','storage_report','logcat','log_file'] a
     $androidDiagnostics['android.'.$operation]=$definition;
 }
 return $androidDiagnostics + [
+    'sass.version' => [
+        'description' => 'Version du compilateur Dart Sass local gere par devMCP.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-sass', 'version'],
+        'cwd' => '.', 'timeout' => 10, 'sync' => true, 'target' => 'local',
+    ],
+    'sass.build' => [
+        'description' => 'Compile localement sass.json dans le workspace, sans GitHub Actions; conserve le CSS precedent en cas d erreur.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-sass', 'build'],
+        'cwd' => '.', 'timeout' => 120, 'target' => 'local',
+    ],
     'android.install'=>[
         'description'=>'Installe un APK debug publié par un build Android local réussi sur une tablette ADB explicitement choisie, lance l’app et capture son écran.',
         'argv'=>['/usr/bin/php','/opt/devmcp/bin/devmcp-android-install',['param'=>'project_id'],['param'=>'build_id'],['param'=>'device']],
