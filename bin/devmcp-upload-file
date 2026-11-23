@@ -132,8 +132,13 @@ def main():
         chunk_size = min(int(begin.get("max_chunk_bytes", 49152)), 32768)
         with args.file.open("rb") as source:
             while block := source.read(chunk_size):
-                client.tool("workspace_upload", {"project": args.project, "operation": "chunk", "upload_id": upload_id, "data": base64.b64encode(block).decode("ascii")})
+                expected = source.tell()
+                response = client.tool("workspace_upload", {"project": args.project, "operation": "chunk", "upload_id": upload_id, "data": base64.b64encode(block).decode("ascii")})
+                if response.get("next_offset") != expected:
+                    raise RuntimeError("Local upload offset mismatch: " + str(response))
         result = client.tool("workspace_upload", {"project": args.project, "operation": "commit", "upload_id": upload_id})
+        if result.get("committed") is not True or result.get("sha256") != digest.hexdigest():
+            raise RuntimeError("Local server did not confirm SHA256 publication: " + str(result))
         print(json.dumps(result, ensure_ascii=False))
     except Exception:
         try:
