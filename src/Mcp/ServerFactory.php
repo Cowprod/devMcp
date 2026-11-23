@@ -186,6 +186,107 @@ final class ServerFactory
                     'overwrite'=>['type'=>'boolean']
                 ], 'required'=>['project','operation'], 'additionalProperties'=>false
             ])
+            ->addTool(
+                static fn (string $project, string $upload_id): array => $tools->workspaceUpload(
+                    $project, 'commit', $upload_id
+                ),
+                'workspace_upload_commit',
+                description: 'Publie definitivement dans un workspace local un fichier deja recu et verifie SHA-256. Operation d ecriture persistante, potentiellement destructive si le transfert a ete initialise avec overwrite=true. Necessite une autorisation explicite de publication. Ne pas utiliser pour inspecter ou preparer un transfert.',
+                inputSchema: [
+                    'type'=>'object',
+                    'properties'=>[
+                        'project'=>['type'=>'string','description'=>'Identifiant du workspace local cible.'],
+                        'upload_id'=>['type'=>'string','pattern'=>'^[a-f0-9]{32}, description: 'Liste les projets accessibles.')
+            ->addTool(
+                [$tools, 'projectCreate'], 'project_create',
+                description: 'Crée le dépôt GitHub privé et le workspace sur la machine choisie. Pour une machine distante, retourne un job à suivre jusqu’à la création effective.',
+                inputSchema: $projectCreateSchema,
+            )
+            ->addTool(
+                [$tools, 'githubRepositoryCreate'],
+                'github_repository_create',
+                description: 'Cree un depot GitHub prive uniquement si la politique centrale est activee. Ne cree ni projet ni workspace.',
+                inputSchema: $githubRepositoryCreateSchema,
+            )
+            ->addTool(
+                [$tools, 'projectRegister'], 'project_register',
+                description: 'Enregistre une intention de projet sans clonage ni affectation. Retourne registration_succeeded et la revision; une repetition identique ne cree aucun doublon.',
+                inputSchema: $projectRegisterSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisioningList'], 'project_provisioning_list',
+                description: 'Liste les intentions de provisionnement et leurs etats persistants.',
+            )
+            ->addTool(
+                [$tools, 'projectRepositoryConfirm'], 'project_repository_confirm',
+                description: 'Enregistre une attestation explicite de depot pret. Ne verifie pas GitHub automatiquement.',
+                inputSchema: $repositoryConfirmSchema,
+            )
+            ->addTool(
+                [$tools, 'projectAssignMachine'], 'project_assign_machine',
+                description: 'Affecte un projet a une machine active. Ensuite appeler project_provision_remote pour un agent distant, project_provision_local pour cet hote.',
+                inputSchema: $machineAssignSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisionLocal'], 'project_provision_local',
+                description: 'Clone sur cet hote uniquement. Pour RTX ou un autre agent distant, utiliser project_provision_remote.',
+                inputSchema: $localProvisionSchema,
+            )
+            ->addTool(
+                [$tools, 'projectProvisionRemote'], 'project_provision_remote',
+                description: 'Termine un projet machine_assigned sur un agent distant (RTX, caseRouter). Utilise le depot existant et retourne un job de creation a attendre avant project.deploy.',
+                inputSchema: $remoteProvisionSchema,
+            )
+            ->addTool([$tools, 'projectDescribe'], 'project_describe', description: 'Décrit un projet accessible.')
+            ->addTool(
+                [$tools, 'projectCreatePreview'],
+                'project_create_preview',
+                description: 'Valide un plan de création local ou distant et de dépôt GitHub, sans écriture ni permission nouvelle.',
+                inputSchema: $projectPreviewSchema,
+            )
+            ->addTool([$tools,'deploymentTargets'],'deployment_targets',description:'Machines actives avec agent de projets et hébergement déclaré ; renvoie machine_id, nom, OS et architecture pour deployment_register.')
+            ->addTool([$tools,'deploymentList'],'deployment_list',description:'Liste les instances gérées par projet, machine et deployment_id. Ne duplique jamais le projet GitHub.')
+            ->addTool([$tools,'deploymentDescribe'],'deployment_describe',description:'État, configuration publique, versions et jobs d’une instance précise ; aucune valeur de variable sensible.')
+            ->addTool([$tools,'deploymentRegister'],'deployment_register',description:'Déclare une instance sur une machine active avec agent projets ; confirmation ADD_DEPLOYMENT. Ne touche aucun dossier existant. Puis deployment_action_start create avec un commit exact, et deploy avec le runtime.',inputSchema:$instanceRegisterSchema)
+            ->addTool([$tools,'deploymentConfigure'],'deployment_configure',description:'Modifie la configuration propre à une instance avec sa révision actuelle : port 12000..19999, variables. Les valeurs ne sont jamais relues. Nécessite ensuite deploy pour application ; chemin immuable après le premier job.',inputSchema:$instanceConfigureSchema)
+            ->addTool([$tools,'deploymentActionStart'],'deployment_action_start',description:'Action ciblée par deployment_id : create, sync, deploy, status, logs, stop, restart. create/sync/deploy exigent un commit exact ; deploy exige runtime static/php/node. Aucun choix implicite de machine. Retourne job_id à suivre avec job_status.',inputSchema:$instanceActionSchema)
+            ->addTool([$tools, 'actionList'], 'action_list', description: 'Liste les actions autorisées pour un projet.')
+            ->addTool([$tools, 'actionDescribe'], 'action_describe', description: 'Décrit une action autorisée, ses paramètres et contraintes. Pour ios.build : schéma JSON et équipes de signature détectées ; actualiser avec ios.capabilities si nécessaire.')
+            ->addTool(
+                [$tools, 'actionRun'],
+                'action_run',
+                description: 'Exécute une action locale explicitement autorisée en synchrone.',
+                inputSchema: $actionInputSchema,
+            )
+            ->addTool(
+                [$tools, 'actionStart'],
+                'action_start',
+                description: 'Met une action publique déclarée dans la file des jobs. Consulter action_list et action_describe avant utilisation. Pour iOS : action ios.build, arguments target et commit obligatoires ; choisir team_id via ios.capabilities, jamais depuis le nom du certificat. Retourne job_id à suivre avec job_status.',
+                inputSchema: $actionInputSchema,
+            )
+            ->addTool([$tools, 'jobStatus'], 'job_status', description: 'Retourne l’état persistant d’un job.')
+            ->addTool([$tools, 'jobOutput'], 'job_output', description: 'Lit stdout/stderr persistants d’un job par morceaux bornés.')
+            ->addTool([$tools, 'jobCancel'], 'job_cancel', description: 'Demande l’annulation d’un job.')
+            ->addTool([$tools, 'artifactList'], 'artifact_list', description: 'Liste les artefacts déclarés d’un job.')
+            ->addTool([$tools, 'artifactGet'], 'artifact_get', description: 'Lit un artefact déclaré par morceaux base64 bornés.')
+            ->addTool([$tools, 'auditTail'], 'audit_tail', description: "Lit l'audit local ou l'historique SQL borné des jobs read-only distants (métadonnées uniquement).");
+
+        if ($sessionStore !== null) {
+            $builder->setSession($sessionStore);
+        }
+        if ($projectToolsFactory !== null) {
+            $builder->setReferenceHandler(new FreshProjectToolsHandler($projectToolsFactory));
+        }
+
+        return $builder->build();
+    }
+}
+,'description'=>'Identifiant du transfert initialise et complet.'],
+                    ],
+                    'required'=>['project','upload_id'],
+                    'additionalProperties'=>false,
+                ],
+            )
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
                 [$tools, 'projectCreate'], 'project_create',
