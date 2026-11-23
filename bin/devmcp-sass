@@ -1,0 +1,57 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+/**
+ * Bounded, local Dart Sass compiler for a devMCP project workspace.
+ * Usage: devmcp-sass build|version
+ * Paths are exclusively supplied by sass.json in the current workspace.
+ */
+function fail(string $message, int $code = 1): never {
+    fwrite(STDERR, $message . PHP_EOL);
+    exit($code);
+}
+$operation = $argv[1] ?? '';
+if (!in_array($operation, ['build', 'version'], true) || count($argv) !== 2) {
+    fail('Expected build or version', 2);
+}
+$binary = '/opt/devmcp-tools/dart-sass/sass';
+if (!is_file($binary) || !is_executable($binary)) {
+    fail('Dart Sass unavailable at ' . $binary, 3);
+}
+if ($operation === 'version') {
+    passthru(escapeshellarg($binary) . ' --version', $status);
+    exit($status);
+}
+$root = realpath(getcwd());
+if ($root === false) fail('Invalid workspace', 4);
+$manifest = $root . '/sass.json';
+if (!is_file($manifest) || is_link($manifest)) fail('Missing sass.json', 4);
+$config = json_decode((string)file_get_contents($manifest), true);
+if (!is_array($config) || ($config['schema_version'] ?? null) !== 1) fail('Invalid sass.json schema', 4);
+function safePath(string $root, mixed $value): string {
+    if (!is_string($value) || !preg_match('~^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[a-zA-Z0-9_./-]+$~D', $value)) {
+        fail('Invalid manifest path', 4);
+    }
+    $parts = explode('/', $value);
+    foreach ($parts as $part) {
+        if ($part === '' || $part === '.' || $part === '..') fail('Invalid path component', 4);
+    }
+    return $root . '/' . $value;
+}
+$input = safePath($root, $config['input'] ?? null);
+$output = safePath($root, $config['output'] ?? null);
+if (!str_ends_with($input, '.scss') || !str_ends_with($output, '.css') || $input === $output) fail('Expected SCSS input and CSS output', 4);
+if (!is_file($input) || is_link($input) || realpath($input) !== $input) fail('Invalid SCSS source', 4);
+$dir = dirname($output);
+if (!is_dir($dir) || is_link($dir) || realpath($dir) !== $dir || is_link($output)) fail('Output directory must exist within workspace', 4);
+if (is_file($output) && realpath($output) !== $output) fail('Unsafe output path', 4);
+$tmp = tempnam($dir, '.sass-');
+if ($tmp === false) fail('Unable to allocate output', 5);
+$command = escapeshellarg($binary) . ' --no-source-map --style=compressed --no-error-css ' .
+    escapeshellarg($input) . ' ' . escapeshellarg($tmp) . ' 2>&1';
+exec($command, $lines, $status);
+foreach ($lines as $line) echo $line . PHP_EOL;
+if ($status !== 0) { @unlink($tmp); fail('Sass compilation failed; previous CSS preserved', 6); }
+if (!rename($tmp, $output)) { @unlink($tmp); fail('Unable to publish compiled CSS', 7); }
+echo 'Compiled ' . ($config['input']) . ' -> ' . ($config['output']) . PHP_EOL;
