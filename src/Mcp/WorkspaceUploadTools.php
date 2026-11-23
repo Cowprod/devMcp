@@ -30,6 +30,7 @@ final class WorkspaceUploadTools {
         try {
             $meta = json_decode(stream_get_contents($handle) ?: '', true, 32, JSON_THROW_ON_ERROR);
             if (!is_array($meta) || time() - ($meta['created'] ?? 0) > 3600) throw new RuntimeException('Upload expired');
+            if ($operation === 'status') return ['upload_id'=>$upload_id,'mode'=>$meta['mode'],'size'=>$meta['size'],'next_offset'=>$meta['offset'],'expires_at'=>$meta['created'] + 3600];
             if ($operation === 'abort') {
                 unlink($part); unlink($metaPath); return ['aborted'=>true];
             }
