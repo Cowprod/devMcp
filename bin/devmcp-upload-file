@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Upload a local ChatGPT attachment or generated file through devMCP Streamable HTTP.
+
+Usage: devmcp-upload-file --url https://HOST/mcp --project PROJECT --mode persistent
+       --path public/icon.png /path/to/file
+Credentials are supplied through DEVMCP_BEARER_TOKEN, never command arguments.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+import pathlib
+import sys
+import urllib.request
+
+
+class McpClient:
+    def __init__(self, url, token):
+        self.url, self.token, self.session, self.seq = url, token, None, 0
+
+    def request(self, method, params=None, notification=False):
+        self.seq += 1
+        body = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            body["params"] = params
+        if not notification:
+            body["id"] = self.seq
+        headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+        if self.token:
+            headers["Authorization"] = "Bearer " + self.token
+        if self.session:
+            headers["Mcp-Session-Id"] = self.session
+        req = urllib.request.Request(self.url, data=json.dumps(body).encode(), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=90) as response:
+            self.session = response.headers.get("Mcp-Session-Id", self.session)
+            raw = response.read(1048576).decode()
+            if notification or response.status == 202:
+                return None
+            if "text/event-stream" in response.headers.get("Content-Type", ""):
+                events = [line[5:].strip() for line in raw.splitlines() if line.startswith("data:")]
+                messages = [json.loads(event) for event in events if event.startswith("{")]
+                reply = next((item for item in messages if item.get("id") == self.seq), None)
+            else:
+                reply = json.loads(raw)
+            if not isinstance(reply, dict):
+                raise RuntimeError("No matching MCP response")
+            if "error" in reply:
+                raise RuntimeError(str(reply["error"]))
+            return reply.get("result")
+
+    def tool(self, name, args):
+        result = self.request("tools/call", {"name": name, "arguments": args})
+        if result.get("isError"):
+            raise RuntimeError(str(result.get("content")))
+        for item in result.get("content", []):
+            if item.get("type") == "text":
+                try:
+                    return json.loads(item["text"])
+                except ValueError:
+                    pass
+        return result.get("structuredContent", result)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("file", type=pathlib.Path)
+    p.add_argument("--url", required=True)
+    p.add_argument("--project", required=True)
+    p.add_argument("--mode", choices=["temporary", "persistent"], default="persistent")
+    p.add_argument("--path", help="Relative destination in the project workspace")
+    p.add_argument("--overwrite", action="store_true")
+    args = p.parse_args()
+    if args.mode == "persistent" and not args.path:
+        p.error("--path is required for persistent mode")
+    size = args.file.stat().st_size
+    if size > 20 * 1024 * 1024:
+        p.error("File exceeds 20 MiB")
+    digest = hashlib.sha256()
+    with args.file.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    client = McpClient(args.url, os.getenv("DEVMCP_BEARER_TOKEN"))
+    client.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "devmcp-upload-file", "version": "1.0"}})
+    client.request("notifications/initialized", notification=True)
+    begin = client.tool("workspace_upload", {"project": args.project, "operation": "begin", "mode": args.mode, "path": args.path, "size": size, "sha256": digest.hexdigest(), "overwrite": args.overwrite})
+    upload_id = begin["upload_id"]
+    try:
+        chunk_size = min(int(begin.get("max_chunk_bytes", 49152)), 32768)
+        with args.file.open("rb") as source:
+            while block := source.read(chunk_size):
+                client.tool("workspace_upload", {"project": args.project, "operation": "chunk", "upload_id": upload_id, "data": base64.b64encode(block).decode("ascii")})
+        result = client.tool("workspace_upload", {"project": args.project, "operation": "commit", "upload_id": upload_id})
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception:
+        try:
+            client.tool("workspace_upload", {"project": args.project, "operation": "abort", "upload_id": upload_id})
+        except Exception:
+            pass
+        raise
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print("Upload failed: " + str(error), file=sys.stderr)
+        sys.exit(1)
