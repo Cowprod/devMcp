@@ -33,11 +33,11 @@ class RemoteProjectRuntime
             if(!preg_match('/^[a-f0-9]{32}$/D',$job['deployment_id']??'')||!is_int($job['configuration_revision']??null)||$job['configuration_revision']<1)throw new RuntimeException('Invalid instance identity/configuration revision');
             $instanceConfig=DeploymentConfiguration::validate($job['configuration']??[]);
             $job['operation']=$job['instance_action']??'';
-            if(!in_array($job['operation'],['create','sync','deploy','status','logs','stop','restart','list','read','stat','find','head'],true))throw new RuntimeException('Unknown instance operation');
+            if(!in_array($job['operation'],['create','sync','deploy','status','logs','stop','restart','list','read','stat','find','head','upload'],true))throw new RuntimeException('Unknown instance operation');
         }
         $project = RemoteProjectPackage::projectId($job['project_id'] ?? '');
         $operation = $job['operation'] ?? '';
-        if (!in_array($operation, ['create', 'sync', 'deploy', 'status', 'logs', 'list', 'read', 'stat', 'find', 'head', 'stop', 'restart'], true)) {
+        if (!in_array($operation, ['create', 'sync', 'deploy', 'status', 'logs', 'list', 'read', 'stat', 'find', 'head', 'upload', 'stop', 'restart'], true)) {
             throw new RuntimeException('Unknown project operation');
         }
         if (in_array($operation, ['create', 'sync', 'deploy'], true)) {
@@ -107,6 +107,8 @@ class RemoteProjectRuntime
                 }
                 static::writeJson($metaPath, $meta);
                 $result = $meta + ['workspace_created' => true, 'deployment_complete' => $operation === 'deploy'];
+            } elseif ($operation === 'upload') {
+                $result = static::uploadChunk($workspace, $job['arguments'] ?? []);
             } elseif(in_array($operation,['stop','restart'],true)) {
                 if(!$instance)throw new RuntimeException('Service changes require an explicit instance request');
                 $result=static::control($workspace,$meta,$operation,$policy['bind_ipv4']??'');
@@ -122,6 +124,51 @@ class RemoteProjectRuntime
             flock($lock, LOCK_UN);
             fclose($lock);
         }
+    }
+
+    protected static function uploadChunk(string $workspace, array $args): array
+    {
+        $path = RemoteProjectPackage::path($args['path'] ?? '');
+        if (str_starts_with($path, 'releases/') || str_starts_with($path, '.devmcp-') || str_starts_with($path, '.project')) {
+            throw new RuntimeException('Reserved project path');
+        }
+        $offset = $args['offset'] ?? null;
+        $size = $args['size'] ?? null;
+        $sha = $args['sha256'] ?? null;
+        $encoded = $args['data'] ?? null;
+        if (!is_int($offset) || $offset < 0 || !is_int($size) || $size < 0 || $size > 20971520
+            || !is_string($sha) || preg_match('/^[a-f0-9]{64}$/D', $sha) !== 1
+            || !is_string($encoded) || strlen($encoded) > 65536) throw new RuntimeException('Invalid upload chunk');
+        $bytes = base64_decode($encoded, true);
+        if (!is_string($bytes) || strlen($bytes) > 49152 || $offset + strlen($bytes) > $size) throw new RuntimeException('Invalid upload bytes');
+        $staging = $workspace . '/.devmcp-transfer';
+        static::directory($staging);
+        $id = hash('sha256', $path . "\0" . $sha . "\0" . $size);
+        $part = $staging . '/' . $id . '.part';
+        if (is_link($part)) throw new RuntimeException('Unsafe staging file');
+        $handle = fopen($part, 'c+b');
+        if (!is_resource($handle) || !flock($handle, LOCK_EX)) throw new RuntimeException('Upload lock unavailable');
+        try {
+            $current = fstat($handle)['size'];
+            if ($current !== $offset) {
+                if ($current >= $offset + strlen($bytes)) {
+                    fseek($handle, $offset);
+                    if (fread($handle, strlen($bytes)) === $bytes) return ['next_offset'=>$current,'duplicate'=>true];
+                }
+                throw new RuntimeException('Upload offset mismatch');
+            }
+            if (fseek($handle, 0, SEEK_END) !== 0 || fwrite($handle, $bytes) !== strlen($bytes)) throw new RuntimeException('Upload write failed');
+            fflush($handle);
+            $next = $offset + strlen($bytes);
+        } finally { flock($handle, LOCK_UN); fclose($handle); }
+        if ($next !== $size) return ['next_offset'=>$next,'committed'=>false];
+        if (hash_file('sha256', $part) !== $sha) throw new RuntimeException('SHA256 mismatch');
+        $target = $workspace . '/' . $path;
+        $parent = dirname($target);
+        $resolved = realpath($parent);
+        if ($resolved === false || ($resolved !== $workspace && !str_starts_with($resolved . '/', $workspace . '/')) || $resolved !== $parent || is_link($target) || file_exists($target)) throw new RuntimeException('Unsafe or occupied destination');
+        if (!rename($part, $target)) throw new RuntimeException('Upload publication failed');
+        return ['next_offset'=>$next,'committed'=>true,'path'=>$path,'sha256'=>$sha];
     }
 
     protected static function stage(string $workspace, array $package): void
