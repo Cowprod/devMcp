@@ -36,6 +36,13 @@ final class ProjectTools
     /**
      * @return array{projects: list<array<string, mixed>>, host: array<string, mixed>}
      */
+    public function workspaceUploadRemote(string $project, string $path, int $offset, int $size, string $sha256, string $data, ?string $deployment_id = null): array
+    {
+        if ($this->remoteTools === null) throw new InvalidArgumentException('Remote registry unavailable');
+        $remote = $deployment_id === null ? $this->remoteTools : $this->remoteTools->forDeployment($project, $deployment_id);
+        return $remote->uploadChunk($project, $path, $offset, $size, $sha256, $data);
+    }
+
     public function workspaceUpload(string $project, string $operation, ?string $upload_id = null, ?string $path = null, ?string $mode = null, ?int $size = null, ?string $sha256 = null, ?string $data = null, bool $overwrite = false): array
     {
         return (new WorkspaceUploadTools($this->projects))->transfer($project, $operation, $upload_id, $path, $mode, $size, $sha256, $data, $overwrite);
