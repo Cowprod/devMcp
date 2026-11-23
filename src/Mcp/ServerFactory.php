@@ -167,6 +167,14 @@ final class ServerFactory
                 description: 'POC conversationnel MyTrackMe simule. Lire le catalogue, creer une base fictive, enregistrer des tours, finaliser et consulter le plan. Aucune operation MyTrackMe reelle.',
                 inputSchema: $myTrackMePocSchema)
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
+            ->addTool([$tools, 'workspaceUploadRemote'], 'workspace_upload_remote',
+                description: 'Envoie un bloc binaire base64 vers un agent distant via job; attendre job_status succeeded avant le bloc suivant. Publication finale uniquement apres SHA256 complet.',
+                inputSchema: ['type'=>'object','properties'=>[
+                    'project'=>['type'=>'string'],'deployment_id'=>['type'=>['string','null']],
+                    'path'=>['type'=>'string'],'offset'=>['type'=>'integer','minimum'=>0],
+                    'size'=>['type'=>'integer','minimum'=>0,'maximum'=>20971520],
+                    'sha256'=>['type'=>'string'],'data'=>['type'=>'string','maxLength'=>65536]
+                ],'required'=>['project','path','offset','size','sha256','data'],'additionalProperties'=>false])
             ->addTool([$tools, 'workspaceUpload'], 'workspace_upload', description: 'Transfert binaire borne vers un workspace local : begin, chunk base64, commit SHA-256, abort. Modes temporary et persistent.', inputSchema: [
                 'type'=>'object', 'properties'=>[
                     'project'=>['type'=>'string'], 'operation'=>['type'=>'string','enum'=>['begin','chunk','status','commit','abort']],
