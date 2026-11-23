@@ -37,6 +37,11 @@ return $androidDiagnostics + [
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-sass', 'version'],
         'cwd' => '.', 'timeout' => 10, 'sync' => true, 'target' => 'local',
     ],
+    'sass.prepare' => [
+        'description' => 'Installe les dependances npm declarees du projet Sass, sans scripts npm.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-sass', 'prepare'],
+        'cwd' => '.', 'timeout' => 300, 'target' => 'local',
+    ],
     'sass.build' => [
         'description' => 'Compile localement sass.json dans le workspace, sans GitHub Actions; conserve le CSS precedent en cas d erreur.',
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-sass', 'build'],
