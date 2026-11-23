@@ -159,6 +159,14 @@ return $androidDiagnostics + [
         'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-update-request'],
         'cwd' => '.', 'timeout' => 15, 'sync' => true,
     ],
+    'devmcp.update.status' => [
+        'description' => 'Lit le résultat persistant d’une demande devMcp par son identifiant. succeeded confirme le déploiement, unconfirmed indique qu’aucun résultat final n’est disponible.',
+        'argv' => ['/usr/bin/php', '/opt/devmcp/bin/devmcp-update-request', '--status', ['param' => 'update_id']],
+        'cwd' => '.', 'timeout' => 5, 'sync' => true,
+        'parameters' => [
+            'update_id' => ['type' => 'identifier', 'description' => 'Identifiant de 32 caractères hexadécimaux retourné par devmcp.update.'],
+        ],
+    ],
 
     // Privileged systemd operations go through an unprivileged bounded queue.
     // A root-owned timer rechecks SQL and the reserved port before any action.

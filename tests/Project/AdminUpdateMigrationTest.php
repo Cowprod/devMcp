@@ -21,18 +21,19 @@ final class AdminUpdateMigrationTest extends TestCase
         $db = $this->database();
         $insert = $db->prepare('INSERT INTO dm_local_project_config VALUES (?,?)');
         $insert->execute(['devmcp-admin', json_encode(['root'=>sys_get_temp_dir(),'actions'=>[]])]);
-        $application = ['root'=>sys_get_temp_dir(),'shared_actions'=>['devmcp.update'],'actions'=>[], 'android_diagnostics'=>['package'=>'net.example.app']];
+        $application = ['root'=>sys_get_temp_dir(),'shared_actions'=>['devmcp.update','devmcp.update.status'],'actions'=>[], 'android_diagnostics'=>['package'=>'net.example.app']];
         $insert->execute(['ordinary-app', json_encode($application)]);
         $templates = require dirname(__DIR__,2).'/config/shared-actions.php';
         self::assertSame(['project_present'=>true,'grant_added'=>true,'grants_removed'=>['ordinary-app']],AdminUpdateMigration::apply($db,$templates));
         self::assertSame(['project_present'=>true,'grant_added'=>false,'grants_removed'=>[]],AdminUpdateMigration::apply($db,$templates));
         $loaded=(new SqlProjectConfiguration($db))->load();
-        self::assertSame(['devmcp.update'],$loaded['projects']['devmcp']['shared_actions']);
+        self::assertSame(['devmcp.update','devmcp.update.status'],$loaded['projects']['devmcp']['shared_actions']);
         $application['shared_actions']=[];
         self::assertSame($application,$loaded['projects']['ordinary-app']);
         self::assertArrayNotHasKey('devmcp-admin',$loaded['projects']);
         self::assertCount(2,$loaded['projects']);
         self::assertSame($templates['devmcp.update'],$loaded['shared_actions']['devmcp.update']);
+        self::assertSame($templates['devmcp.update.status'],$loaded['shared_actions']['devmcp.update.status']);
     }
     public function testExistingCanonicalAndLegacyProjectsMergeTheirActions(): void
     {
@@ -43,7 +44,7 @@ final class AdminUpdateMigrationTest extends TestCase
         AdminUpdateMigration::apply($db,require dirname(__DIR__,2).'/config/shared-actions.php');
         $projects=(new SqlProjectConfiguration($db))->load()['projects'];
         self::assertSame(['devmcp'],array_keys($projects));
-        self::assertEqualsCanonicalizing(['git.head','workspace.read','devmcp.update'],$projects['devmcp']['shared_actions']);
+        self::assertEqualsCanonicalizing(['git.head','workspace.read','devmcp.update','devmcp.update.status'],$projects['devmcp']['shared_actions']);
         self::assertSame(['canonical','legacy'],array_keys($projects['devmcp']['actions']));
     }
     public function testConflictingWorkspacesRollBackWithoutLosingEitherProject(): void

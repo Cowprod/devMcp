@@ -23,7 +23,12 @@ Le serveur expose `devmcp.update` sur le projet unique `devmcp` :
 Le projet applicatif TouchDeck est un projet ordinaire, sans rôle dans la mise à jour du serveur.
 Le serveur et son administration partagent désormais ce seul projet ; l’ancien identifiant `devmcp-admin` est retiré du registre, sans alias.
 La migration SQL retire le grant historique d'auto-update des projets applicatifs.
-La réponse confirme uniquement la mise en file ; vérifier ensuite `action_list` et les journaux de déploiement.
+La réponse `queued` fournit `update_id` et `requested_revision`. Consulter ensuite
+`action_run(project="devmcp", action="devmcp.update.status", arguments={"update_id":"<id>"})`.
+Le résultat par identifiant indique `unconfirmed` tant qu’aucun résultat final n’est disponible,
+ou `succeeded`/`failed` avec l’étape, le code de sortie et les commits demandé, installé et chargé.
+Si `main` avance avant le traitement de la demande, l’étape `revision-mismatch` signale qu’il faut
+soumettre une nouvelle demande pour la nouvelle révision.
 L'updater synchronise les diagnostics Android dans le registre SQL avant le redémarrage du runtime.
 Les projets absents et actions non autorisées renvoient désormais des erreurs d'outil explicites,
 `PROJECT_UNAVAILABLE` / `ACTION_UNAVAILABLE`, et une trace `action_rejected` sans arguments sensibles.

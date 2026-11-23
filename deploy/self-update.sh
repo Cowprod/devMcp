@@ -8,7 +8,11 @@ flock -n 9 || { echo "devMcp update already running" >&2; exit 1; }
 # /run is root-controlled. The content is deliberately limited to fixed stages.
 update_stage=preflight
 status_file=/run/devmcp-update-status
-trap 'rc=$?; umask 022; { printf "exit_code=%s\\nstage=%s\\n" "$rc" "$update_stage"; date -u "+finished_utc=%Y-%m-%dT%H:%M:%SZ"; } > "$status_file"' 0
+deployed_revision_file=/run/devmcp-runtime-revision
+# Scope trust to this invocation, including the initial revision lookup.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0=/opt/devmcp
 # Persist a per-request result outside /run, including the requested and installed SHA.
 # The status directory is root-owned and readable by the MCP service.
 tracking_dir=/var/lib/devmcp-update-status
@@ -18,6 +22,7 @@ request_id=
 requested_revision=
 if [ -f /var/lib/devmcp/update-request ] && [ ! -L /var/lib/devmcp/update-request ]; then
     read -r request_id requested_revision < /var/lib/devmcp/update-request || true
+    rm -f /var/lib/devmcp/update-request
 fi
 case "$request_id" in
     *[!a-f0-9]*|'') request_id= ;;
@@ -33,28 +38,25 @@ write_tracking_status() {
     rc=$1
     stage=$2
     installed_after=$(git -C /opt/devmcp rev-parse HEAD 2>/dev/null || true)
+    runtime_revision=$(cat "$deployed_revision_file" 2>/dev/null || true)
     result=failed
-    if [ "$rc" -eq 0 ] && [ "$stage" = complete ] && [ -n "$requested_revision" ] && [ "$installed_after" = "$requested_revision" ] && [ -f /run/devmcp-runtime-revision ] && [ "$(cat /run/devmcp-runtime-revision)" = "$requested_revision" ]; then
+    if [ "$rc" -eq 0 ] && [ "$stage" = complete ] && [ -n "$installed_after" ] &&
+        [ "$runtime_revision" = "$installed_after" ] &&
+        { [ -z "$request_id" ] || [ "$requested_revision" = "$installed_after" ]; }; then
         result=succeeded
     fi
     [ -n "$request_id" ] || request_id=untracked
-    tmp="$tracking_dir/.latest.$"
-    printf '{"update_id":"%s","status":"%s","exit_code":%s,"stage":"%s","requested_revision":"%s","installed_before":"%s","installed_after":"%s","started_utc":"%s","finished_utc":"%s"}\\n' \
-        "$request_id" "$result" "$rc" "$stage" "$requested_revision" "$installed_before" "$installed_after" "$started_utc" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$tmp"
+    tmp=$(mktemp "$tracking_dir/.result.XXXXXX")
+    printf '{"update_id":"%s","status":"%s","exit_code":%s,"stage":"%s","requested_revision":"%s","installed_before":"%s","installed_after":"%s","runtime_revision":"%s","started_utc":"%s","finished_utc":"%s"}\n' \
+        "$request_id" "$result" "$rc" "$stage" "$requested_revision" "$installed_before" "$installed_after" "$runtime_revision" "$started_utc" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$tmp"
     chmod 644 "$tmp"
-    mv -f "$tmp" "$tracking_dir/latest.json"
     if [ "$request_id" != untracked ]; then
-        cp "$tracking_dir/latest.json" "$tracking_dir/$request_id.json"
+        ln "$tmp" "$tracking_dir/$request_id.json"
     fi
+    mv -f "$tmp" "$tracking_dir/latest.json"
 }
 trap 'rc=$?; umask 022; { printf "exit_code=%s\\nstage=%s\\n" "$rc" "$update_stage"; date -u "+finished_utc=%Y-%m-%dT%H:%M:%SZ"; } > "$status_file"; write_tracking_status "$rc" "$update_stage"' 0
-rm -f /var/lib/devmcp/update-request
 cd /opt/devmcp
-# Git runs as root while the checkout belongs to the deployment user.
-# Scope trust to this invocation; do not modify root's global git config.
-export GIT_CONFIG_COUNT=1
-export GIT_CONFIG_KEY_0=safe.directory
-export GIT_CONFIG_VALUE_0=/opt/devmcp
 [ "$(git rev-parse --show-toplevel)" = /opt/devmcp ] || exit 1
 [ "$(git branch --show-current)" = main ] || { echo "Expected main branch" >&2; exit 1; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "Tracked local modifications: abort" >&2; exit 1; }
@@ -62,6 +64,11 @@ update_stage=git-fetch
 git fetch --no-tags origin main
 old=$(git rev-parse HEAD)
 new=$(git rev-parse refs/remotes/origin/main)
+if [ -n "$request_id" ] && [ "$requested_revision" != "$new" ]; then
+    update_stage=revision-mismatch
+    echo "Requested revision does not match current origin/main; queue a fresh request" >&2
+    exit 1
+fi
 if [ "$old" = "$new" ]; then
     echo "devMcp core already up to date: $old"
 else
@@ -135,7 +142,6 @@ DEVMCP_CONFIG=/etc/devmcp/global.php /usr/bin/php /opt/devmcp/bin/devmcp-doctor
 # checkout. If a previous run updated files but failed before reload, retry.
 # /run is root-controlled and resets harmlessly at boot.
 update_stage=restart
-deployed_revision_file=/run/devmcp-runtime-revision
 deployed_revision=
 if [ -f "$deployed_revision_file" ]; then
     deployed_revision=$(cat "$deployed_revision_file")

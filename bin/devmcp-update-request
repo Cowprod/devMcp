@@ -1,51 +1,68 @@
 #!/usr/bin/env php
 <?php
 declare(strict_types=1);
-// Write a bounded request in the worker-owned state directory.
-// The root-owned updater polls this file through systemd, never via sudo.
+
 $directory = '/var/lib/devmcp';
 $request = $directory . '/update-request';
-$statusFile = '/var/lib/devmcp-update-status/latest.json';
+$results = '/var/lib/devmcp-update-status';
+
+if ($argc === 3 && $argv[1] === '--status' && preg_match('/\A[a-f0-9]{32}\z/', $argv[2]) === 1) {
+    $id = $argv[2];
+    $file = "$results/$id.json";
+    if (!is_file($file)) {
+        echo json_encode(['update_id' => $id, 'status' => 'unconfirmed'], JSON_THROW_ON_ERROR), "\n";
+        exit(0);
+    }
+    $json = (string) file_get_contents($file, false, null, 0, 4096);
+    // Earlier versions wrote a literal backslash-n after the JSON object.
+    if (str_ends_with($json, '\n')) {
+        $json = substr($json, 0, -2);
+    }
+    $status = json_decode($json, true);
+    if (($status['update_id'] ?? null) !== $id) {
+        fwrite(STDERR, "Invalid persisted update result\n");
+        exit(1);
+    }
+    echo json_encode($status, JSON_THROW_ON_ERROR), "\n";
+    exit(0);
+}
+if ($argc !== 1) {
+    fwrite(STDERR, "Usage: devmcp-update-request [--status <update-id>]\n");
+    exit(2);
+}
 if (!is_dir($directory) || !is_writable($directory)) {
     fwrite(STDERR, "Update request directory is not writable\n");
     exit(1);
 }
-if (is_link($request) || (file_exists($request) && !is_file($request))) {
-    fwrite(STDERR, "Invalid update request path\n");
+if (file_exists($request) || is_link($request)) {
+    fwrite(STDERR, "An update request is already queued\n");
     exit(1);
 }
-$id = bin2hex(random_bytes(16));
-$requested = substr(trim((string) shell_exec('/usr/bin/git -C /opt/devmcp ls-remote origin refs/heads/main 2>/dev/null')), 0, 40);
-if (!preg_match('/^[a-f0-9]{40}$/D', $requested)) {
+
+// Trust this checkout for this Git invocation only. Resolve the upstream SHA
+// before accepting a request, and use no caller-supplied command arguments.
+exec('GIT_TERMINAL_PROMPT=0 /usr/bin/git -c safe.directory=/opt/devmcp -C /opt/devmcp ls-remote --exit-code origin refs/heads/main 2>/dev/null', $lines, $exitCode);
+if ($exitCode !== 0 || count($lines) !== 1
+    || preg_match('/\A([a-f0-9]{40})\trefs\/heads\/main\z/', $lines[0], $match) !== 1) {
     fwrite(STDERR, "Cannot resolve requested revision\n");
     exit(1);
 }
-if (file_put_contents($request, $id . ' ' . $requested . "\n", LOCK_EX) === false) {
-    fwrite(STDERR, "Could not queue update request\n");
+$requested = $match[1];
+$id = bin2hex(random_bytes(16));
+$contents = "$id $requested\n";
+$staged = tempnam($directory, '.update-request.');
+if ($staged === false) {
+    fwrite(STDERR, "Could not stage update request\n");
     exit(1);
 }
-echo "Update queued: id=$id requested_revision=$requested\n";
-if (is_file($statusFile) && !is_link($statusFile) && is_readable($statusFile)
-    && filesize($statusFile) !== false && filesize($statusFile) <= 4096) {
-    $status = json_decode((string) file_get_contents($statusFile), true);
-    if (is_array($status)) {
-        echo "Last completed update: ", json_encode($status, JSON_UNESCAPED_SLASHES), "\n";
-    }
+try {
+    // Publish the complete request atomically, without replacing a concurrent request.
+    $queued = file_put_contents($staged, $contents) === strlen($contents) && @link($staged, $request);
+} finally {
+    unlink($staged);
 }
-// Fixed argv, no caller-provided shell command. Exit codes are not used as
-// proof of deployment; the MCP runtime must still be verified separately.
-$process = proc_open(
-    ['/usr/bin/git', '-C', '/opt/devmcp', 'rev-parse', 'HEAD'],
-    [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-    $pipes
-);
-if (is_resource($process)) {
-    $head = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    if (proc_close($process) === 0 && is_string($head)
-        && preg_match('/\\A[a-f0-9]{40}\\s*\\z/D', $head) === 1) {
-        echo 'Installed revision: ', trim($head), "\n";
-    }
+if (!$queued) {
+    fwrite(STDERR, "Could not queue update request (another request may already be queued)\n");
+    exit(1);
 }
-
+echo json_encode(['update_id' => $id, 'status' => 'queued', 'requested_revision' => $requested], JSON_THROW_ON_ERROR), "\n";
