@@ -5,6 +5,7 @@ declare(strict_types=1);
 // The root-owned updater polls this file through systemd, never via sudo.
 $directory = '/var/lib/devmcp';
 $request = $directory . '/update-request';
+$statusFile = '/var/lib/devmcp-update-status/latest.json';
 if (!is_dir($directory) || !is_writable($directory)) {
     fwrite(STDERR, "Update request directory is not writable\n");
     exit(1);
@@ -13,22 +14,22 @@ if (is_link($request) || (file_exists($request) && !is_file($request))) {
     fwrite(STDERR, "Invalid update request path\n");
     exit(1);
 }
-if (file_put_contents($request, gmdate('c') . "\n", LOCK_EX) === false) {
+$id = bin2hex(random_bytes(16));
+$requested = trim((string) shell_exec('/usr/bin/git -C /opt/devmcp rev-parse refs/remotes/origin/main 2>/dev/null'));
+if (!preg_match('/^[a-f0-9]{40}$/D', $requested)) {
+    fwrite(STDERR, "Cannot resolve requested revision\n");
+    exit(1);
+}
+if (file_put_contents($request, $id . ' ' . $requested . "\n", LOCK_EX) === false) {
     fwrite(STDERR, "Could not queue update request\n");
     exit(1);
 }
-echo "Update queued; systemd checks within one minute.\n";
-// Read-only operational diagnostics: never expose logs, configuration or tokens.
-// The status file is written by the root updater with only stage/exit metadata.
-$statusFile = '/run/devmcp-update-status';
+echo "Update queued: id=$id requested_revision=$requested\n";
 if (is_file($statusFile) && !is_link($statusFile) && is_readable($statusFile)
-    && filesize($statusFile) !== false && filesize($statusFile) <= 512) {
-    $status = file_get_contents($statusFile);
-    if (is_string($status) && preg_match(
-        '/\\Aexit_code=[0-9]+\\nstage=[a-z-]+\\nfinished_utc=[0-9T:Z-]+\\n\\z/D',
-        $status
-    ) === 1) {
-        echo "Last updater run:\n", $status;
+    && filesize($statusFile) !== false && filesize($statusFile) <= 4096) {
+    $status = json_decode((string) file_get_contents($statusFile), true);
+    if (is_array($status)) {
+        echo "Last completed update: ", json_encode($status, JSON_UNESCAPED_SLASHES), "\n";
     }
 }
 // Fixed argv, no caller-provided shell command. Exit codes are not used as
