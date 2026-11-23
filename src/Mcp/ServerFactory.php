@@ -166,6 +166,7 @@ final class ServerFactory
             ->addTool([$myTrackMePoc, 'call'], 'mytrackme_poc',
                 description: 'POC conversationnel MyTrackMe simule. Lire le catalogue, creer une base fictive, enregistrer des tours, finaliser et consulter le plan. Aucune operation MyTrackMe reelle.',
                 inputSchema: $myTrackMePocSchema)
+            ->addTool(static fn (): array => ['message' => 'Hello World', 'probe' => 'devmcp-tool-discovery-20261123'], 'hello_world', description: 'Sonde de découverte MCP sans effet de bord : retourne Hello World.')
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'workspaceUploadRemote'], 'workspace_upload_remote',
                 description: 'Envoie un bloc binaire base64 vers un agent distant via job; attendre job_status succeeded avant le bloc suivant. Publication finale uniquement apres SHA256 complet.',
