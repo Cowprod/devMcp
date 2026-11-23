@@ -17,7 +17,13 @@ if (!in_array($operation, ['build', 'version'], true) || count($argv) !== 2) {
 }
 $binary = '/opt/devmcp-tools/dart-sass/sass';
 if (!is_file($binary) || !is_executable($binary)) {
-    fail('Dart Sass unavailable at ' . $binary, 3);
+    $local = realpath(getcwd() . '/node_modules/.bin/sass');
+    $modules = realpath(getcwd() . '/node_modules');
+    if ($local !== false && $modules !== false && str_starts_with($local, $modules . '/') && is_executable($local)) {
+        $binary = $local;
+    } else {
+        fail('Dart Sass unavailable (managed binary or project-local node_modules)', 3);
+    }
 }
 if ($operation === 'version') {
     passthru(escapeshellarg($binary) . ' --version', $status);
