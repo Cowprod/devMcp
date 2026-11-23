@@ -15,7 +15,7 @@ $operation = $argv[1] ?? '';
 if (!in_array($operation, ['build', 'version'], true) || count($argv) !== 2) {
     fail('Expected build or version', 2);
 }
-$binary = '/opt/devmcp-tools/dart-sass/sass';
+$binary = '/opt/devmcp-tools/dart-sass/node_modules/.bin/sass';
 if (!is_file($binary) || !is_executable($binary)) {
     $local = realpath(getcwd() . '/node_modules/.bin/sass');
     $modules = realpath(getcwd() . '/node_modules');
