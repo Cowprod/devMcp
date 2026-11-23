@@ -145,6 +145,11 @@ class RemoteProjectRuntime
         static::directory($staging);
         $id = hash('sha256', $path . "\0" . $sha . "\0" . $size);
         $part = $staging . '/' . $id . '.part';
+        $target = $workspace . '/' . $path;
+        if ($offset + strlen($bytes) === $size && is_file($target) && !is_link($target)
+            && filesize($target) === $size && hash_file('sha256', $target) === $sha) {
+            return ['next_offset'=>$size,'committed'=>true,'duplicate'=>true,'path'=>$path,'sha256'=>$sha];
+        }
         if (is_link($part)) throw new RuntimeException('Unsafe staging file');
         $handle = fopen($part, 'c+b');
         if (!is_resource($handle) || !flock($handle, LOCK_EX)) throw new RuntimeException('Upload lock unavailable');
