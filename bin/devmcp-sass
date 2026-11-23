@@ -12,8 +12,8 @@ function fail(string $message, int $code = 1): never {
     exit($code);
 }
 $operation = $argv[1] ?? '';
-if (!in_array($operation, ['build', 'version'], true) || count($argv) !== 2) {
-    fail('Expected build or version', 2);
+if (!in_array($operation, ['build', 'version', 'prepare'], true) || count($argv) !== 2) {
+    fail('Expected build, version or prepare', 2);
 }
 $binary = '/opt/devmcp-tools/dart-sass/node_modules/.bin/sass';
 if (!is_file($binary) || !is_executable($binary)) {
@@ -31,6 +31,24 @@ if ($operation === 'version') {
 }
 $root = realpath(getcwd());
 if ($root === false) fail('Invalid workspace', 4);
+if ($operation === 'prepare') {
+    $package = $root . '/package.json';
+    if (!is_file($package) || is_link($package)) fail('Missing package.json', 4);
+    $data = json_decode((string) file_get_contents($package), true);
+    if (!is_array($data) || !is_array($data['devDependencies'] ?? null) || !isset($data['devDependencies']['bootstrap'])) fail('Bootstrap dependency not declared', 4);
+    $lock = $root . '/package-lock.json';
+    if (is_link($lock) || is_link($root . '/node_modules')) fail('Unsafe dependency paths', 4);
+    $args = ['/usr/bin/npm', is_file($lock) ? 'ci' : 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-progress'];
+    $process = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root);
+    if (!is_resource($process)) fail('npm unavailable', 5);
+    fclose($pipes[0]);
+    echo stream_get_contents($pipes[1]); fclose($pipes[1]);
+    fwrite(STDERR, stream_get_contents($pipes[2])); fclose($pipes[2]);
+    $code = proc_close($process);
+    if ($code !== 0) fail('npm dependency installation failed', 6);
+    echo "Project dependencies installed\n";
+    exit(0);
+}
 $manifest = $root . '/sass.json';
 if (!is_file($manifest) || is_link($manifest)) fail('Missing sass.json', 4);
 $config = json_decode((string)file_get_contents($manifest), true);
