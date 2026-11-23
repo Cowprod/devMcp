@@ -15,7 +15,7 @@ if (is_link($request) || (file_exists($request) && !is_file($request))) {
     exit(1);
 }
 $id = bin2hex(random_bytes(16));
-$requested = trim((string) shell_exec('/usr/bin/git -C /opt/devmcp rev-parse refs/remotes/origin/main 2>/dev/null'));
+$requested = substr(trim((string) shell_exec('/usr/bin/git -C /opt/devmcp ls-remote origin refs/heads/main 2>/dev/null')), 0, 40);
 if (!preg_match('/^[a-f0-9]{40}$/D', $requested)) {
     fwrite(STDERR, "Cannot resolve requested revision\n");
     exit(1);
