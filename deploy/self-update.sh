@@ -9,7 +9,45 @@ flock -n 9 || { echo "devMcp update already running" >&2; exit 1; }
 update_stage=preflight
 status_file=/run/devmcp-update-status
 trap 'rc=$?; umask 022; { printf "exit_code=%s\\nstage=%s\\n" "$rc" "$update_stage"; date -u "+finished_utc=%Y-%m-%dT%H:%M:%SZ"; } > "$status_file"' 0
-# Clear any pending MCP request after acquiring the exclusive update lock.
+# Persist a per-request result outside /run, including the requested and installed SHA.
+# The status directory is root-owned and readable by the MCP service.
+tracking_dir=/var/lib/devmcp-update-status
+mkdir -p "$tracking_dir"
+chmod 755 "$tracking_dir"
+request_id=
+requested_revision=
+if [ -f /var/lib/devmcp/update-request ] && [ ! -L /var/lib/devmcp/update-request ]; then
+    read -r request_id requested_revision < /var/lib/devmcp/update-request || true
+fi
+case "$request_id" in
+    *[!a-f0-9]*|'') request_id= ;;
+esac
+[ "${#request_id}" -eq 32 ] || request_id=
+case "$requested_revision" in
+    *[!a-f0-9]*|'') requested_revision= ;;
+esac
+[ "${#requested_revision}" -eq 40 ] || requested_revision=
+started_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+installed_before=$(git -C /opt/devmcp rev-parse HEAD 2>/dev/null || true)
+write_tracking_status() {
+    rc=$1
+    stage=$2
+    installed_after=$(git -C /opt/devmcp rev-parse HEAD 2>/dev/null || true)
+    result=failed
+    if [ "$rc" -eq 0 ] && [ "$stage" = complete ] && [ -n "$requested_revision" ] && [ "$installed_after" = "$requested_revision" ] && [ -f /run/devmcp-runtime-revision ] && [ "$(cat /run/devmcp-runtime-revision)" = "$requested_revision" ]; then
+        result=succeeded
+    fi
+    [ -n "$request_id" ] || request_id=untracked
+    tmp="$tracking_dir/.latest.$"
+    printf '{"update_id":"%s","status":"%s","exit_code":%s,"stage":"%s","requested_revision":"%s","installed_before":"%s","installed_after":"%s","started_utc":"%s","finished_utc":"%s"}\\n' \
+        "$request_id" "$result" "$rc" "$stage" "$requested_revision" "$installed_before" "$installed_after" "$started_utc" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$tmp"
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$tracking_dir/latest.json"
+    if [ "$request_id" != untracked ]; then
+        cp "$tracking_dir/latest.json" "$tracking_dir/$request_id.json"
+    fi
+}
+trap 'rc=$?; umask 022; { printf "exit_code=%s\\nstage=%s\\n" "$rc" "$update_stage"; date -u "+finished_utc=%Y-%m-%dT%H:%M:%SZ"; } > "$status_file"; write_tracking_status "$rc" "$update_stage"' 0
 rm -f /var/lib/devmcp/update-request
 cd /opt/devmcp
 # Git runs as root while the checkout belongs to the deployment user.
