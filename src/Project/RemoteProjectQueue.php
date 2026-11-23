@@ -108,7 +108,7 @@ final class RemoteProjectQueue
             $agent=$this->db->prepare('SELECT agent_version FROM dm_machine WHERE id=?');$agent->execute([$record['machine_id']]);
             if(!preg_match('/^projects-v1:[a-f0-9]{40}:inst1$/D',$agent->fetchColumn()?:''))throw new \Mcp\Exception\ToolCallException('Instance-aware agent update required');
             $request['workspace_path']=$record['workspace_path'];$request['deployment_id']=$record['deployment_id'];
-            if(in_array($operation,['status','logs','list','read','stat','find','head'],true)){
+            if(in_array($operation,['status','logs','list','read','stat','find','head','upload'],true)){
                 $request['instance_action']=$operation;$request['operation']='instance';$request['configuration_revision']=(int)$record['config_revision'];
                 $request['configuration']=['port'=>null,'variables'=>[]];$request['allow_legacy_workspace']=(bool)$record['ready'];
             }
