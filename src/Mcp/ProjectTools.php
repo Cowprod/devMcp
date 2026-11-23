@@ -36,6 +36,11 @@ final class ProjectTools
     /**
      * @return array{projects: list<array<string, mixed>>, host: array<string, mixed>}
      */
+    public function workspaceUpload(string $project, string $operation, ?string $upload_id = null, ?string $path = null, ?string $mode = null, ?int $size = null, ?string $sha256 = null, ?string $data = null, bool $overwrite = false): array
+    {
+        return (new WorkspaceUploadTools($this->projects))->transfer($project, $operation, $upload_id, $path, $mode, $size, $sha256, $data, $overwrite);
+    }
+
     public function projectList(): array
     {
         return $this->projectInventory(true);
