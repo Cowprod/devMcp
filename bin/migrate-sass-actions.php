@@ -46,7 +46,7 @@ try {
         throw new RuntimeException('Registre SQL non prêt');
     }
     $actions = require dirname(__DIR__) . '/config/shared-actions.php';
-    foreach (['sass.version', 'sass.build'] as $id) {
+    foreach (['sass.version', 'sass.build', 'sass.prepare'] as $id) {
         if (!is_array($actions[$id] ?? null) || ($actions[$id]['argv'][1] ?? null) !== '/opt/devmcp/bin/devmcp-sass') {
             throw new RuntimeException('Invalid Sass action template');
         }
@@ -61,7 +61,7 @@ try {
             'INSERT INTO dm_shared_action_config (action_id, config_json) VALUES (?, ?) '
             . 'ON DUPLICATE KEY UPDATE config_json = VALUES(config_json)'
         );
-        foreach (['sass.version', 'sass.build'] as $id) {
+        foreach (['sass.version', 'sass.build', 'sass.prepare'] as $id) {
             $upsert->execute([$id, json_encode($actions[$id], JSON_THROW_ON_ERROR)]);
         }
 
@@ -85,7 +85,7 @@ try {
                 throw new RuntimeException('Définition locale invalide');
             }
             $changed = false;
-            foreach (['sass.version', 'sass.build'] as $id) {
+            foreach (['sass.version', 'sass.build', 'sass.prepare'] as $id) {
                 if (!in_array($id, $item['shared_actions'], true)) {
                     $item['shared_actions'][] = $id;
                     $changed = true;
