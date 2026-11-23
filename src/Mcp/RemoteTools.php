@@ -35,6 +35,20 @@ final class RemoteTools
         return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db,$this->deploymentId);
     }
 
+    public function uploadChunk(string $project, string $path, int $offset, int $size, string $sha256, string $data): array
+    {
+        $record = $this->projectQueue()->project($project);
+        if ($record === null || (int) $record['ready'] !== 1) throw new RuntimeException('Remote workspace not ready');
+        \Cowprod\DevMcp\Project\RemoteProjectPackage::path($path);
+        if (str_starts_with($path, 'releases/') || str_starts_with($path, '.devmcp-') || str_starts_with($path, '.project')) throw new RuntimeException('Reserved path');
+        if ($offset < 0 || $size < 0 || $size > 20971520 || $offset > $size || preg_match('/^[a-f0-9]{64}$/D',$sha256)!==1 || strlen($data)>65536) throw new RuntimeException('Invalid upload metadata');
+        $bytes=base64_decode($data,true);
+        if (!is_string($bytes) || strlen($bytes)>49152 || $offset+strlen($bytes)>$size) throw new RuntimeException('Invalid upload chunk');
+        return $this->projectQueue()->enqueue($project,'upload',['arguments'=>[
+            'path'=>$path,'offset'=>$offset,'size'=>$size,'sha256'=>$sha256,'data'=>$data
+        ]]);
+    }
+
     public function createRemoteWorkspace(string $project): array
     {
         return $this->startManaged($project, 'project.provision', []);
