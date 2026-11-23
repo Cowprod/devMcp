@@ -169,7 +169,7 @@ final class ServerFactory
             ->addTool([$hostTools, 'capabilities'], 'host_capabilities', description: 'Décrit les outils de développement et ports série disponibles sur l’hôte, sans exécuter de commande.')
             ->addTool([$tools, 'workspaceUpload'], 'workspace_upload', description: 'Transfert binaire borne vers un workspace local : begin, chunk base64, commit SHA-256, abort. Modes temporary et persistent.', inputSchema: [
                 'type'=>'object', 'properties'=>[
-                    'project'=>['type'=>'string'], 'operation'=>['type'=>'string','enum'=>['begin','chunk','commit','abort']],
+                    'project'=>['type'=>'string'], 'operation'=>['type'=>'string','enum'=>['begin','chunk','status','commit','abort']],
                     'upload_id'=>['type'=>['string','null']], 'path'=>['type'=>['string','null']],
                     'mode'=>['type'=>['string','null'],'enum'=>['temporary','persistent',null]],
                     'size'=>['type'=>['integer','null'],'minimum'=>0,'maximum'=>20971520],
