@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 import urllib.request
 
 
@@ -53,6 +54,8 @@ class McpClient:
         result = self.request("tools/call", {"name": name, "arguments": args})
         if result.get("isError"):
             raise RuntimeError(str(result.get("content")))
+        if isinstance(result.get("structuredContent"), dict):
+            return result["structuredContent"]
         for item in result.get("content", []):
             if item.get("type") == "text":
                 try:
@@ -72,9 +75,15 @@ def main():
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--deployment-id", help="Remote deployment ID; omit for local workspace")
     args = p.parse_args()
+    if args.deployment_id and args.mode != "persistent":
+        p.error("Remote uploads currently require persistent mode")
+    if args.deployment_id and args.overwrite:
+        p.error("Remote uploads do not support overwrite")
     if (args.mode == "persistent" or args.deployment_id) and not args.path:
         p.error("--path is required for persistent mode")
     size = args.file.stat().st_size
+    if args.deployment_id and size == 0:
+        p.error("Remote empty files are not supported")
     if size > 20 * 1024 * 1024:
         p.error("File exceeds 20 MiB")
     digest = hashlib.sha256()
@@ -95,11 +104,19 @@ def main():
                     "sha256": digest.hexdigest(), "data": base64.b64encode(block).decode("ascii")
                 })
                 job_id = job["job_id"]
-                import time
                 for attempt in range(60):
                     status = client.tool("job_status", {"job_id": job_id})
                     state = status.get("status")
                     if state == "succeeded":
+                        payload = status.get("result") or {}
+                        if payload.get("ok") is not True:
+                            raise RuntimeError("Remote job succeeded without a successful agent result: " + str(status))
+                        data = payload.get("data") or {}
+                        expected = offset + len(block)
+                        if data.get("next_offset") != expected and not (data.get("duplicate") and data.get("next_offset", -1) >= expected):
+                            raise RuntimeError("Agent offset mismatch: " + str(data))
+                        if expected == size and (data.get("committed") is not True or data.get("sha256") != digest.hexdigest()):
+                            raise RuntimeError("Agent did not confirm final SHA256 publication")
                         break
                     if state in ("failed", "expired", "cancelled"):
                         raise RuntimeError("Remote upload job failed: " + str(status))
