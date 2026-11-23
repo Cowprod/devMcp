@@ -61,6 +61,11 @@ update_stage=project-service-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-service-action.php --execute MIGRATE_PROJECT_SERVICE
 update_stage=project-test-action
 /usr/bin/php /opt/devmcp/bin/migrate-project-test-action.php --execute MIGRATE_PROJECT_TEST
+update_stage=sass-install
+mkdir -p /opt/devmcp-tools/dart-sass
+if [ ! -x /opt/devmcp-tools/dart-sass/node_modules/.bin/sass ] || [ "$(/opt/devmcp-tools/dart-sass/node_modules/.bin/sass --version)" != 1.94.2 ]; then
+    /usr/bin/npm install --prefix /opt/devmcp-tools/dart-sass --no-audit --no-fund --save-exact sass@1.94.2
+fi
 update_stage=sass-actions
 /usr/bin/php /opt/devmcp/bin/migrate-sass-actions.php --execute MIGRATE_SASS_ACTIONS
 # Preview-port reservations must exist before code that allocates a port is
