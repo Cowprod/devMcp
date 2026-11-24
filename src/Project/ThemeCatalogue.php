@@ -67,6 +67,27 @@ final class ThemeCatalogue
         }
     }
 
+    public function installLocal(string $project, string $theme, string $sha, callable $install): array
+    {
+        self::validateProject($project);
+        $this->db->beginTransaction();
+        try {
+            $sql='SELECT theme_id,installed_sha FROM dm_project_theme WHERE project_id=?';
+            if($this->db->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql')$sql.=' FOR UPDATE';
+            $q=$this->db->prepare($sql);$q->execute([$project]);
+            $row=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$row || $row['theme_id']!==$theme)throw new InvalidArgumentException('Select theme first');
+            $result=$install();
+            if(($result['sha']??null)!==$sha)throw new RuntimeException('Installation SHA mismatch');
+            $this->db->prepare('UPDATE dm_project_theme SET installed_sha=? WHERE project_id=? AND theme_id=?')->execute([$sha,$project,$theme]);
+            $this->db->commit();
+            return $result+['project_id'=>$project,'theme_id'=>$theme,'installed_sha'=>$sha];
+        } catch(\Throwable $e) {
+            if($this->db->inTransaction())$this->db->rollBack();
+            throw $e;
+        }
+    }
+
     private static function validateProject(string $project): void
     {
         if(!preg_match('/^[a-z0-9][a-z0-9._-]{0,63}$/D',$project))throw new InvalidArgumentException('Projet invalide');

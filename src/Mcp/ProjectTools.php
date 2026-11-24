@@ -701,6 +701,34 @@ final class ProjectTools
         if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
         return $this->remoteTools->themeCatalogue();
     }
+    public function themeInstall(string $project, string $sha): array
+    {
+        try {
+            if(!preg_match('/^[a-f0-9]{40}$/D',$sha))throw new InvalidArgumentException('Invalid SHA');
+            $target=$this->localActionProject($project);
+            $catalogue=$this->themeCatalogue();
+            $selection=$catalogue->assignment($project);
+            $theme=$selection['theme_id']??throw new InvalidArgumentException('Select theme first');
+            $source=$this->localActionProject($catalogue->info($theme)['project']);
+            $git=new \Symfony\Component\Process\Process(['git','rev-parse','HEAD'],$source->root);
+            $git->mustRun();
+            if(trim($git->getOutput())!==$sha)throw new InvalidArgumentException('Theme workspace SHA differs; sync source first');
+            $manifest=json_decode(file_get_contents($source->root.'/theme.json'),true,512,JSON_THROW_ON_ERROR);
+            if(($manifest['id']??null)!==$theme || ($manifest['distribution']??null)!=='public')throw new InvalidArgumentException('Invalid theme manifest');
+            $distribution=$source->root.'/public';
+            $resources=array_values($manifest['resources']??[]);
+            // Include local Font Awesome fonts referenced by its CSS.
+            if(isset($manifest['resources']['icons'])){
+                $fonts=$distribution.'/assets/fontawesome/webfonts';
+                if(!is_dir($fonts))throw new InvalidArgumentException('Missing Font Awesome fonts');
+                foreach(glob($fonts.'/*')?:[] as $file)if(is_file($file))$resources[]='assets/fontawesome/webfonts/'.basename($file);
+            }
+            $public=$target->root.'/public';
+            $result=$catalogue->installLocal($project,$theme,$sha,fn()=>(new \Cowprod\DevMcp\Project\ThemeInstaller())->install($distribution,$public,$sha,$resources));
+            $this->audit->append(['project'=>$project,'action'=>'theme.install','theme_id'=>$theme,'sha'=>$sha,'outcome'=>'succeeded']);
+            return $result;
+        }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
     public function themeList(): array {return ['themes'=>$this->themeCatalogue()->all()];}
     public function themeInfo(string $theme): array
     {
