@@ -646,6 +646,7 @@ main.container-fluid{max-width:1800px;padding:12px!important}
 <a class="td-tab active" href="#dashboard" data-td-view="dashboard"><i class="fa-solid fa-gauge-high me-1" aria-hidden="true"></i> Tableau de bord</a>
 <a class="td-tab" href="#machines" data-td-view="machines"><i class="fa-solid fa-computer me-1" aria-hidden="true"></i> Machines</a>
 <a class="td-tab" href="#projects" data-td-view="projects"><i class="fa-solid fa-folder-tree me-1" aria-hidden="true"></i> Projets</a>
+<a class="td-tab" href="#themes" data-td-view="themes"><i class="fa-solid fa-palette me-1" aria-hidden="true"></i> Chartes</a>
 <a class="td-tab" href="#deployments" data-td-view="deployments"><i class="fa-solid fa-diagram-project me-1" aria-hidden="true"></i> Affectations</a>
 <a class="td-tab" href="#android-adb" data-td-view="android"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Android</a>
 <form method="post" action="/?logout=1" class="ms-auto"><input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>"><button type="submit" class="btn btn-sm btn-outline-light">Déconnexion</button></form>
@@ -791,6 +792,18 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <?php foreach($iosBuilds as $build): ?><tr><td><?= e($build['project_id']) ?></td><td><?= e($build['artifact']['version']) ?></td><td><?= $build['artifact']['target']==='android'?'Android':($build['artifact']['signed']?'iPhone / iPad':'Simulateur') ?></td><td><a href="/?<?= !empty($build['local_build'])?'local_artifact':'ios_artifact' ?>=<?= e($build['token']) ?>">Ouvrir / télécharger</a></td></tr><?php endforeach; ?>
 </tbody></table></div></div></section><?php endif; ?>
 </section>
+<section class="admin-panel" id="panel-themes" data-panel="themes">
+<h2 class="h5">Chartes graphiques</h2>
+<div class="row g-3">
+<?php foreach (require dirname(__DIR__).'/config/theme-catalogue.php' as $theme): ?>
+<div class="col-12 col-md-6"><div class="card h-100"><div class="card-body">
+<h3 class="h5"><?= e($theme['name']) ?> <?php if ($theme['default']): ?><span class="badge bg-secondary">Par défaut</span><?php endif; ?></h3>
+<p><?= e($theme['project']) ?></p>
+<a class="btn btn-primary" href="<?= e($theme['preview']) ?>" target="_blank" rel="noopener noreferrer">Prévisualiser</a>
+<a class="btn btn-secondary" href="<?= e($theme['repository']) ?>" target="_blank" rel="noopener noreferrer">Dépôt GitHub</a>
+</div></div></div>
+<?php endforeach; ?>
+</div></section>
 <section class="admin-panel" id="panel-deployments" data-panel="deployments">
 <section class="card mb-4 remote-action-card"><div class="card-body">
 <h2 class="h5">Exécuter une action sur une affectation</h2>
@@ -1077,7 +1090,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
 </script>
 <script>
 (function(){
- const names={'android-adb':'android',android:'android',machines:'machines',projects:'projects',deployments:'deployments',dashboard:'dashboard'};
+ const names={'android-adb':'android',android:'android',machines:'machines',projects:'projects',deployments:'deployments',themes:'themes',dashboard:'dashboard'};
  function activate(){
    const key=location.hash.slice(1);
    const selected=names[key]||'dashboard';
