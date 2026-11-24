@@ -76,10 +76,11 @@ final class ThemeCatalogue
             if($this->db->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql')$sql.=' FOR UPDATE';
             $q=$this->db->prepare($sql);$q->execute([$project]);
             $row=$q->fetch(PDO::FETCH_ASSOC);
-            if(!$row || $row['theme_id']!==$theme)throw new InvalidArgumentException('Select theme first');
+            if(!$row)throw new InvalidArgumentException('Select theme first');
+            $this->info($theme);
             $result=$install();
             if(($result['sha']??null)!==$sha)throw new RuntimeException('Installation SHA mismatch');
-            $this->db->prepare('UPDATE dm_project_theme SET installed_sha=? WHERE project_id=? AND theme_id=?')->execute([$sha,$project,$theme]);
+            $this->db->prepare('UPDATE dm_project_theme SET theme_id=?,installed_sha=? WHERE project_id=?')->execute([$theme,$sha,$project]);
             $this->db->commit();
             return $result+['project_id'=>$project,'theme_id'=>$theme,'installed_sha'=>$sha];
         } catch(\Throwable $e) {

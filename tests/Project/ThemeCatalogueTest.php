@@ -27,6 +27,17 @@ final class ThemeCatalogueTest extends TestCase
         self::assertSame($sha,$catalogue->select('demo.app','quartz')['installed_sha']);
         try{$catalogue->select('demo.app','listee');self::fail('Expected rejection');}
         catch(\InvalidArgumentException){self::assertSame('quartz',$catalogue->assignment('demo.app')['theme_id']);}
+        $next=str_repeat('b',40);
+        try {
+            $catalogue->installLocal('demo.app','listee',$next,static function(){throw new \RuntimeException('Copy failed');});
+            self::fail('Expected installation failure');
+        } catch(\RuntimeException) {
+            self::assertSame('quartz',$catalogue->assignment('demo.app')['theme_id']);
+            self::assertSame($sha,$catalogue->assignment('demo.app')['installed_sha']);
+        }
+        $catalogue->installLocal('demo.app','listee',$next,static fn()=>['sha'=>$next]);
+        self::assertSame('listee',$catalogue->assignment('demo.app')['theme_id']);
+        self::assertSame($next,$catalogue->assignment('demo.app')['installed_sha']);
         $this->expectException(\InvalidArgumentException::class);
         $catalogue->select('demo.app','');
     }

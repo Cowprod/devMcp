@@ -701,14 +701,14 @@ final class ProjectTools
         if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
         return $this->remoteTools->themeCatalogue();
     }
-    public function themeInstall(string $project, string $sha): array
+    public function themeInstall(string $project, string $sha, ?string $theme=null): array
     {
         try {
             if(!preg_match('/^[a-f0-9]{40}$/D',$sha))throw new InvalidArgumentException('Invalid SHA');
             $target=$this->localActionProject($project);
             $catalogue=$this->themeCatalogue();
             $selection=$catalogue->assignment($project);
-            $theme=$selection['theme_id']??throw new InvalidArgumentException('Select theme first');
+            $theme=$theme??$selection['theme_id']??throw new InvalidArgumentException('Select theme first');
             $source=$this->localActionProject($catalogue->info($theme)['project']);
             $git=new \Symfony\Component\Process\Process(['git','rev-parse','HEAD'],$source->root);
             $git->mustRun();
