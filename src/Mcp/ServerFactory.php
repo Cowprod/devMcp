@@ -207,6 +207,10 @@ final class ServerFactory
                     'additionalProperties' => false,
                 ],
             )
+            ->addTool([$tools,'themeList'],'theme_list',description:'Catalogue SQL des chartes, dépôts et projets associés.',annotations:new ToolAnnotations(readOnlyHint:true))
+            ->addTool([$tools,'themeInfo'],'theme_info',description:'Informations d’une charte et SHA installés par projet.',annotations:new ToolAnnotations(readOnlyHint:true),inputSchema:['type'=>'object','properties'=>['theme'=>['type'=>'string']],'required'=>['theme'],'additionalProperties'=>false])
+            ->addTool([$tools,'themeSelection'],'theme_selection',description:'Association et SHA installé sur un projet accessible.',annotations:new ToolAnnotations(readOnlyHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string']],'required'=>['project'],'additionalProperties'=>false])
+            ->addTool([$tools,'themeSelect'],'theme_select',description:'Sélectionne une charte existante sur un projet ; chaîne vide pour aucune. Ne copie ni ne supprime de ressources.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'theme'=>['type'=>'string']],'required'=>['project','theme'],'additionalProperties'=>false])
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(
                 [$tools, 'projectCreate'], 'project_create',

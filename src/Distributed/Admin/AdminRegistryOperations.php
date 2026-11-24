@@ -9,6 +9,21 @@ final class AdminRegistryOperations
     public function __construct(private readonly PDO $db,private readonly string $actor) {}
     public function execute(string $method,string $path,array $data): array
     {
+        if($method==='GET'&&$path==='/themes')return ['themes'=>(new \Cowprod\DevMcp\Project\ThemeCatalogue($this->db))->all()];
+        if(preg_match('~^/projects/([a-z0-9][a-z0-9._-]{0,63})/theme$~D',$path,$themeRoute)){
+            $project=$themeRoute[1];
+            $q=$this->db->prepare('SELECT id FROM dm_project WHERE id=?');$q->execute([$project]);
+            if($q->fetchColumn()===false){
+                $q=$this->db->prepare('SELECT project_id FROM dm_local_project_config WHERE project_id=?');$q->execute([$project]);
+                if($q->fetchColumn()===false)throw new AdminReadApiError(404,'not_found');
+            }
+            $catalogue=new \Cowprod\DevMcp\Project\ThemeCatalogue($this->db);
+            if($method==='GET')return $catalogue->assignment($project);
+            if($method==='PUT'){
+                self::keys($data,['theme_id']);
+                return $catalogue->select($project,self::string($data,'theme_id'))+['assets_modified'=>false];
+            }
+        }
         if(self::isDeploymentRoute($method,$path))return $this->deployment($method,$path,$data);
         $editor=new RegistryEditor($this->db,$this->actor);
         if($method==='GET'&&$path==='/assignments'){
@@ -54,7 +69,9 @@ final class AdminRegistryOperations
     }
     public static function supports(string $method,string $path): bool
     {
-        return self::isDeploymentRoute($method,$path)
+        return ($method==='GET'&&$path==='/themes')
+            ||(in_array($method,['GET','PUT'],true)&&preg_match('~^/projects/[a-z0-9][a-z0-9._-]{0,63}/theme$~D',$path))
+            ||self::isDeploymentRoute($method,$path)
             || ($path==='/assignments'&&in_array($method,['GET','POST'],true))
             ||($path==='/machines'&&$method==='POST')||($path==='/projects'&&$method==='POST')
             ||($method==='PATCH'&&preg_match('~^/(machines|projects|assignments)/[a-z0-9][a-z0-9._-]{0,63}$~D',$path))

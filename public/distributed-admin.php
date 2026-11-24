@@ -392,8 +392,9 @@ $themeCatalogue = require dirname(__DIR__).'/config/theme-catalogue.php';
 $themeAssignments = [];
 $themeAvailable = false;
 try {
-    $themeCatalogue = $db->query('SELECT id,name,project,repository,preview,is_default AS `default` FROM dm_theme ORDER BY is_default DESC,name')->fetchAll(PDO::FETCH_ASSOC);
-    $themeAssignments = $db->query('SELECT project_id,theme_id FROM dm_project_theme')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $themeCatalogue = array_map(static fn($t)=>$t+['default'=>$t['is_default']],(new \Cowprod\DevMcp\Project\ThemeCatalogue($db))->all());
+    $themeAssignments = [];
+    foreach($themeCatalogue as $theme)foreach($theme['projects'] as $assignment)$themeAssignments[$assignment['project_id']]=$assignment['theme_id'];
     $themeAvailable = true;
 } catch (PDOException $exception) {
     error_log('devmcp-admin theme catalogue unavailable');

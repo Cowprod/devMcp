@@ -696,6 +696,31 @@ final class ProjectTools
         if($this->remoteTools===null)throw new \InvalidArgumentException('Distributed registry unavailable');
         return $this->remoteTools->deploymentService();
     }
+    private function themeCatalogue(): \Cowprod\DevMcp\Project\ThemeCatalogue
+    {
+        if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
+        return $this->remoteTools->themeCatalogue();
+    }
+    public function themeList(): array {return ['themes'=>$this->themeCatalogue()->all()];}
+    public function themeInfo(string $theme): array
+    {
+        try{return $this->themeCatalogue()->info($theme);}
+        catch(InvalidArgumentException $error){throw new \Mcp\Exception\ToolCallException($error->getMessage());}
+    }
+    public function themeSelection(string $project): array
+    {
+        $this->projectDescribe($project);
+        return $this->themeCatalogue()->assignment($project);
+    }
+    public function themeSelect(string $project,string $theme): array
+    {
+        try{
+            $this->projectDescribe($project);
+            $result=$this->themeCatalogue()->select($project,$theme);
+            $this->audit->append(['project'=>$project,'action'=>'theme.select','theme_id'=>$theme,'outcome'=>'succeeded']);
+            return $result+['assets_modified'=>false];
+        }catch(InvalidArgumentException $error){throw new \Mcp\Exception\ToolCallException($error->getMessage());}
+    }
     public function deploymentTargets(): array{return $this->deploymentCall(fn()=>$this->deploymentService()->targets());}
     public function deploymentList(?string $project=null): array{return $this->deploymentCall(fn()=>['deployments'=>$this->deploymentService()->list($project)]);}
     public function deploymentDescribe(string $deployment_id): array{return $this->deploymentCall(fn()=>$this->deploymentService()->describe($deployment_id));}
