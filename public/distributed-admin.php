@@ -253,6 +253,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             return $configuration;
         };
         switch ($_POST['operation'] ?? '') {
+            case 'project.theme.select':
+                $projectId=(string)($_POST['project_id']??'');
+                $known=in_array($projectId,array_column((new RegistryRepository($writer))->projects(),'id'),true)
+                    || ($localFresh && in_array($projectId,array_column($localSnapshot['projects'],'id'),true));
+                if (!$known) throw new InvalidArgumentException('Projet inconnu');
+                (new \Cowprod\DevMcp\Project\ThemeCatalogue($writer))->select($projectId,(string)($_POST['theme_id']??''));
+                break;
             case 'instance.register':
                 $instances->add((string)($_POST['project_id']??''),(string)($_POST['machine_id']??''),trim((string)($_POST['workspace_path']??''))?:null,$instanceConfiguration(),(string)($_POST['confirmation']??''));
                 break;
@@ -330,7 +337,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
-                'project.runtime.select' => 'projects',
+                'project.runtime.select','project.theme.select' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
                 'instance.register','instance.configure','instance.action' => 'deployments',
@@ -790,7 +797,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th><th>Moteur</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>" data-service-control="<?= !empty($project['service_control_available']) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-theme-id="<?= e($themeAssignments[$project['id']] ?? '') ?>" data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>" data-service-control="<?= !empty($project['service_control_available']) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1"><?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?></span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -1496,6 +1503,24 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
       body.appendChild(card);
     }
     if(name==='projects'){
+      const themeCard=el('section','mt-4');
+      themeCard.appendChild(el('h3','h6','Charte graphique'));
+      const themes=<?= json_encode($themeAvailable ? array_map(static fn($t)=>['id'=>$t['id'],'name'=>$t['name']],$themeCatalogue) : [],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR) ?>;
+      if(themes.length && csrf){
+        const form=el('form');form.method='post';form.action='/';
+        [['csrf',csrf],['operation','project.theme.select'],['project_id',row.cells[0].textContent.trim()]].forEach(([key,value])=>{
+          const hidden=el('input');hidden.type='hidden';hidden.name=key;hidden.value=value;form.appendChild(hidden);
+        });
+        const group=el('div','input-group mb-2');group.appendChild(el('span','input-group-text','Charte'));
+        const picker=el('select','form-select');picker.name='theme_id';
+        const none=el('option','','Aucune charte');none.value='';picker.appendChild(none);
+        themes.forEach(t=>{const o=el('option','',t.name);o.value=t.id;picker.appendChild(o);});
+        picker.value=row.dataset.themeId||'';group.appendChild(picker);form.appendChild(group);
+        const save=el('button','btn btn-success','Enregistrer');save.type='submit';form.appendChild(save);
+        themeCard.appendChild(form);
+        themeCard.appendChild(el('p','small text-secondary','Association uniquement : aucun fichier applicatif modifié.'));
+      }else themeCard.appendChild(el('p','small text-secondary','Catalogue indisponible.'));
+      body.appendChild(themeCard);
       const runtimeCard=el('section','mt-4');
       runtimeCard.appendChild(el('h3','h6','Moteur applicatif'));
       const current=row.dataset.runtimeType||'';
