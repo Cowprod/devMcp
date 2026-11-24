@@ -390,11 +390,15 @@ try {
 }
 $themeCatalogue = require dirname(__DIR__).'/config/theme-catalogue.php';
 $themeAssignments = [];
+$themeInstalled = [];
 $themeAvailable = false;
 try {
     $themeCatalogue = array_map(static fn($t)=>$t+['default'=>$t['is_default']],(new \Cowprod\DevMcp\Project\ThemeCatalogue($db))->all());
     $themeAssignments = [];
-    foreach($themeCatalogue as $theme)foreach($theme['projects'] as $assignment)$themeAssignments[$assignment['project_id']]=$assignment['theme_id'];
+    foreach($themeCatalogue as $theme)foreach($theme['projects'] as $assignment){
+        $themeAssignments[$assignment['project_id']]=$assignment['theme_id'];
+        $themeInstalled[$assignment['project_id']]=$assignment['installed_sha']??'';
+    }
     $themeAvailable = true;
 } catch (PDOException $exception) {
     error_log('devmcp-admin theme catalogue unavailable');
@@ -798,7 +802,7 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 <div class="table-responsive mb-4"><table class="table table-sm table-striped table-hover">
 <thead><tr><th>Identifiant</th><th>Description</th><th>Origine</th><th>Workspace local</th><th>Actions locales</th><th>Dépôt</th><th>Moteur</th></tr></thead><tbody>
 <?php foreach ($projectRows as $project): ?>
-<tr data-theme-id="<?= e($themeAssignments[$project['id']] ?? '') ?>" data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>" data-service-control="<?= !empty($project['service_control_available']) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
+<tr data-theme-sha="<?= e($themeInstalled[$project['id']] ?? '') ?>" data-theme-id="<?= e($themeAssignments[$project['id']] ?? '') ?>" data-registry-editable="<?= array_key_exists($project['id'], array_column($projects, null, 'id')) ? '1' : '0' ?>" data-local-project="<?= in_array($project['id'], array_column($localSnapshot['projects'], 'id'), true) ? '1' : '0' ?>" data-provisioning-state="<?= e($project['provisioning_state'] ?? '') ?>" data-provisioning-machine="<?= e($project['provisioning_machine'] ?? '') ?>" data-preview-url="<?= e($project['preview_url'] ?? '') ?>" data-preview-status="<?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?>" data-local-actions="<?= e(json_encode($project['actions'], JSON_THROW_ON_ERROR)) ?>" data-action-details="<?= e(json_encode($project['action_details'], JSON_THROW_ON_ERROR)) ?>" data-runtime-type="<?= e($project['runtime_type'] ?? '') ?>" data-runtime-revision="<?= (int) ($project['runtime_revision'] ?? 0) ?>" data-runtime-configurable="<?= !empty($project['runtime_configurable']) ? '1' : '0' ?>" data-runtime-state="<?= e($project['runtime_desired_state'] ?? 'stopped') ?>" data-service-control="<?= !empty($project['service_control_available']) ? '1' : '0' ?>"><td><?= e($project['id']) ?></td><td><?= e($project['description']) ?></td>
 <td><span class="badge <?= $project['origin'] === 'Local' ? 'bg-success' : ($project['origin'] === 'Distribué' ? 'bg-info' : 'bg-warning') ?>"><?= e($project['origin']) ?></span><?php if (!empty($project['provisioning_state'])): ?><span class="badge bg-warning text-dark ms-2">Provisionnement : <?= e($project['provisioning_state']) ?></span><?php endif; ?></td>
 <td><code><?= e($project['workspace'] ?: '—') ?></code><?php if (!empty($project['preview_url'])): ?><div class="small mt-1"><a href="<?= e($project['preview_url']) ?>" target="_blank" rel="noopener noreferrer"><?= e($project['preview_url']) ?></a><span class="badge bg-secondary ms-1"><?= e($project['preview_status_label'] ?? 'Port réservé · service non vérifié') ?></span></div><?php endif; ?></td>
 <td><?php if ($project['actions']): ?><details><summary><?= count($project['actions']) ?> actions</summary><div class="small text-break"><?= e(implode(', ', $project['actions'])) ?></div></details><?php else: ?>—<?php endif; ?></td>
@@ -1517,8 +1521,17 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         const none=el('option','','Aucune charte');none.value='';picker.appendChild(none);
         themes.forEach(t=>{const o=el('option','',t.name);o.value=t.id;picker.appendChild(o);});
         picker.value=row.dataset.themeId||'';group.appendChild(picker);form.appendChild(group);
-        const save=el('button','btn btn-success','Enregistrer');save.type='submit';form.appendChild(save);
+        const installed=row.dataset.themeSha||'';
+        picker.disabled=!!installed;
+        const save=el('button','btn btn-success','Enregistrer');save.type='submit';save.disabled=!!installed;form.appendChild(save);
         themeCard.appendChild(form);
+        const status=el('p','small mt-2 mb-1',installed?'SHA installé : '+installed:'Aucune ressource installée');
+        status.classList.add('text-break');themeCard.appendChild(status);
+        if(installed)themeCard.appendChild(el('p','small text-secondary','Charte installée : changement via installateur requis.'));
+        if(row.dataset.localProject==='1'&&row.dataset.themeId){
+          const instructions=el('p','small text-secondary','Installation / mise à jour : utiliser theme_install avec le SHA exact du projet source compilé.');
+          themeCard.appendChild(instructions);
+        }
         themeCard.appendChild(el('p','small text-secondary','Association uniquement : aucun fichier applicatif modifié.'));
       }else themeCard.appendChild(el('p','small text-secondary','Catalogue indisponible.'));
       body.appendChild(themeCard);
