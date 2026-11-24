@@ -16,6 +16,7 @@ final class ThemeInstaller
         $destination = realpath($destination);
         $root = $destination . '/devmcp-theme';
         if (is_link($root) || (!is_dir($root) && !mkdir($root, 0755))) throw new RuntimeException('Invalid managed directory');
+        if (is_link($root . '/.lock')) throw new RuntimeException('Unsafe lock');
         $lock = fopen($root . '/.lock', 'c');
         if (!$lock || !flock($lock, LOCK_EX)) throw new RuntimeException('Cannot lock theme directory');
         $stage = null;
@@ -23,6 +24,7 @@ final class ThemeInstaller
             $files = [];
             foreach ($resources as $path) {
                 if (!is_string($path) || !preg_match('~^[a-zA-Z0-9_-][a-zA-Z0-9_./-]*$~D', $path) || in_array('..', explode('/', $path), true)) throw new RuntimeException('Invalid resource path');
+                if (!preg_match('~\.(css|js|woff2?|ttf|otf|eot|png|jpe?g|webp|ico)$~iD', $path) || preg_match('~\.(php[0-9]*|phtml|phar|cgi|pl|asp[x]?)(\.|/)~i', $path)) throw new RuntimeException('Unsupported asset type');
                 $file = realpath($source . '/' . $path);
                 if ($file === false || !str_starts_with($file, $source . '/') || !is_file($file)) throw new RuntimeException('Missing resource: ' . $path);
                 $files[$path] = $file;

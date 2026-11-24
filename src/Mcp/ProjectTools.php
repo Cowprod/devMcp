@@ -713,7 +713,12 @@ final class ProjectTools
             $git=new \Symfony\Component\Process\Process(['git','rev-parse','HEAD'],$source->root);
             $git->mustRun();
             if(trim($git->getOutput())!==$sha)throw new InvalidArgumentException('Theme workspace SHA differs; sync source first');
-            $manifest=json_decode(file_get_contents($source->root.'/theme.json'),true,512,JSON_THROW_ON_ERROR);
+            $manifestGit=new \Symfony\Component\Process\Process(['git','show',$sha.':theme.json'],$source->root);
+            $manifestGit->mustRun();
+            $manifest=json_decode($manifestGit->getOutput(),true,512,JSON_THROW_ON_ERROR);
+            $dirty=new \Symfony\Component\Process\Process(['git','status','--porcelain','--untracked-files=no'],$source->root);
+            $dirty->mustRun();
+            if(trim($dirty->getOutput())!=='')throw new InvalidArgumentException('Theme source has tracked local modifications');
             if(($manifest['id']??null)!==$theme || ($manifest['distribution']??null)!=='public')throw new InvalidArgumentException('Invalid theme manifest');
             $distribution=$source->root.'/public';
             $resources=array_values($manifest['resources']??[]);
