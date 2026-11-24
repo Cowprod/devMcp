@@ -248,6 +248,8 @@ update_stage=preview-port-migration
 advance
 update_stage=runtime-catalog-migration
 /usr/bin/php /opt/devmcp/bin/migrate-project-runtime-catalog.php --execute MIGRATE_PROJECT_RUNTIMES
+update_stage=theme-catalogue-migration
+/usr/bin/php /opt/devmcp/bin/migrate-theme-catalogue.php --execute MIGRATE_THEMES
 # The agent address table is metadata only; the server remains ZeroTier-only.
 advance
 update_stage=agent-zerotier-address-migration

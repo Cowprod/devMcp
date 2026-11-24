@@ -381,6 +381,16 @@ try {
     http_response_code(503);
     exit('Dashboard temporarily unavailable');
 }
+$themeCatalogue = require dirname(__DIR__).'/config/theme-catalogue.php';
+$themeAssignments = [];
+$themeAvailable = false;
+try {
+    $themeCatalogue = $db->query('SELECT id,name,project,repository,preview,is_default AS `default` FROM dm_theme ORDER BY is_default DESC,name')->fetchAll(PDO::FETCH_ASSOC);
+    $themeAssignments = $db->query('SELECT project_id,theme_id FROM dm_project_theme')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $themeAvailable = true;
+} catch (PDOException $exception) {
+    error_log('devmcp-admin theme catalogue unavailable');
+}
 // History is optional if the read-only SQL account has not yet been granted SELECT.
 $remoteJobs = [];
 $remoteHistoryAvailable = true;
@@ -793,12 +803,12 @@ Les projets locaux sont consultables ici en lecture seule ; leur configuration e
 </tbody></table></div></div></section><?php endif; ?>
 </section>
 <section class="admin-panel" id="panel-themes" data-panel="themes">
-<h2 class="h5">Chartes graphiques</h2>
+<h2 class="h5">Chartes graphiques</h2><?php if (!$themeAvailable): ?><div class="alert alert-warning">Registre SQL indisponible : catalogue initial en lecture seule.</div><?php endif; ?>
 <div class="row g-3">
-<?php foreach (require dirname(__DIR__).'/config/theme-catalogue.php' as $theme): ?>
+<?php foreach ($themeCatalogue as $theme): ?>
 <div class="col-12 col-md-6"><div class="card h-100"><div class="card-body">
 <h3 class="h5"><?= e($theme['name']) ?> <?php if ($theme['default']): ?><span class="badge bg-secondary">Par défaut</span><?php endif; ?></h3>
-<p><?= e($theme['project']) ?></p>
+<p><?= e($theme['project']) ?></p><p>Projets associés : <?= e(implode(', ',array_keys(array_filter($themeAssignments,static fn($id)=>$id===$theme['id']))) ?: 'Aucun') ?></p>
 <a class="btn btn-primary" href="<?= e($theme['preview']) ?>" target="_blank" rel="noopener noreferrer">Prévisualiser</a>
 <a class="btn btn-secondary" href="<?= e($theme['repository']) ?>" target="_blank" rel="noopener noreferrer">Dépôt GitHub</a>
 </div></div></div>
