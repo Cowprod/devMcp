@@ -207,6 +207,8 @@ final class ServerFactory
                     'additionalProperties' => false,
                 ],
             )
+            ->addTool([$tools,'componentList'],'component_list',description:'List locally managed frontend components.',annotations:new ToolAnnotations(readOnlyHint:true))
+            ->addTool([$tools,'componentInstall'],'component_install',description:'Copy a versioned frontend component from its local trusted workspace; no network transfer.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'component'=>['type'=>'string'],'sha'=>['type'=>'string']],'required'=>['project','component','sha'],'additionalProperties'=>false])
             ->addTool([$tools,'themeInstall'],'theme_install',description:'Install, update or switch theme from its local built workspace at the exact SHA. Optional theme selects a replacement atomically. Local public directory only.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'sha'=>['type'=>'string'],'theme'=>['type'=>'string']],'required'=>['project','sha'],'additionalProperties'=>false])
             ->addTool([$tools,'themeList'],'theme_list',description:'Catalogue SQL des chartes, dépôts et projets associés.',annotations:new ToolAnnotations(readOnlyHint:true))
             ->addTool([$tools,'themeInfo'],'theme_info',description:'Informations d’une charte et SHA installés par projet.',annotations:new ToolAnnotations(readOnlyHint:true),inputSchema:['type'=>'object','properties'=>['theme'=>['type'=>'string']],'required'=>['theme'],'additionalProperties'=>false])

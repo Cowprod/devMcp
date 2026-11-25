@@ -7,14 +7,15 @@ use RuntimeException;
 /** Installs from an already trusted, locally built distribution. Never executes theme code. */
 final class ThemeInstaller
 {
-    public function install(string $source, string $destination, string $sha, array $resources): array
+    public function install(string $source, string $destination, string $sha, array $resources, string $namespace = 'devmcp-theme'): array
     {
         if (!preg_match('/^[a-f0-9]{40}$/D', $sha)) throw new RuntimeException('Invalid SHA');
         $source = realpath($source);
         if ($source === false || !is_dir($source)) throw new RuntimeException('Missing distribution');
         if (is_link($destination) || !is_dir($destination)) throw new RuntimeException('Invalid destination root');
         $destination = realpath($destination);
-        $root = $destination . '/devmcp-theme';
+        if (!preg_match('/^devmcp-(theme|component-[a-z0-9-]+)$/D', $namespace)) throw new RuntimeException('Invalid namespace');
+        $root = $destination . '/' . $namespace;
         if (is_link($root) || (!is_dir($root) && !mkdir($root, 0755))) throw new RuntimeException('Invalid managed directory');
         if (is_link($root . '/.lock')) throw new RuntimeException('Unsafe lock');
         $lock = fopen($root . '/.lock', 'c');

@@ -701,6 +701,33 @@ final class ProjectTools
         if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
         return $this->remoteTools->themeCatalogue();
     }
+    private const COMPONENTS = [
+        'fontawesome'=>['theme-quartz','public/assets/fontawesome',['css/all.min.css','webfonts/fa-brands-400.woff2','webfonts/fa-regular-400.woff2','webfonts/fa-solid-900.woff2','webfonts/fa-v4compatibility.woff2']],
+        'bootstrap-js'=>['frontend-components','vendor',['bootstrap/js/bootstrap.bundle.min.js']],
+        'jquery-typing'=>['frontend-components','vendor',['js/jquery.typing-0.2.0.min.js']],
+        'select2'=>['frontend-components','vendor',['js/select2.full.min.js','css/select2.min.css']],
+        'tablednd'=>['frontend-components','vendor',['js/jquery.tablednd.min.js']],
+    ];
+    public function componentList(): array {return ['components'=>array_keys(self::COMPONENTS)];}
+    public function componentInstall(string $project,string $component,string $sha): array
+    {
+        try {
+            if(!preg_match('/^[a-f0-9]{40}$/D',$sha))throw new InvalidArgumentException('Invalid SHA');
+            [$sourceId,$directory,$resources]=self::COMPONENTS[$component]??throw new InvalidArgumentException('Unknown component');
+            $target=$this->localActionProject($project);
+            $source=$this->localActionProject($sourceId);
+            $git=new \Symfony\Component\Process\Process(['git','rev-parse','HEAD'],$source->root);
+            $git->mustRun();
+            if(trim($git->getOutput())!==$sha)throw new InvalidArgumentException('Component source SHA differs; sync source first');
+            $dirty=new \Symfony\Component\Process\Process(['git','status','--porcelain','--untracked-files=no'],$source->root);
+            $dirty->mustRun();
+            if(trim($dirty->getOutput())!=='')throw new InvalidArgumentException('Component source has tracked modifications');
+            $namespace='devmcp-component-'.$component;
+            $result=(new \Cowprod\DevMcp\Project\ThemeInstaller())->install($source->root.'/'.$directory,$target->root.'/public',$sha,$resources,$namespace);
+            $this->audit->append(['project'=>$project,'action'=>'component.install','component'=>$component,'sha'=>$sha,'outcome'=>'succeeded']);
+            return $result+['component'=>$component,'entrypoints'=>array_map(fn($p)=>$namespace.'/'.$sha.'/'.$p,$resources)];
+        }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
     public function themeInstall(string $project, string $sha, ?string $theme=null): array
     {
         try {
