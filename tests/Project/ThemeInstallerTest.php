@@ -59,4 +59,32 @@ final class ThemeInstallerTest extends TestCase
         $this->expectException(\RuntimeException::class);
         (new ThemeInstaller())->install($this->root.'/source',$this->root.'/target',str_repeat('a',40),['test.php']);
     }
+
+    public function testManagedStylesheetSwitchesWithoutChangingOtherPageContent(): void
+    {
+        $installer=new ThemeInstaller();
+        $a=str_repeat('a',40);$b=str_repeat('b',40);
+        $s=$this->root.'/source';$d=$this->root.'/target';
+        $original='<!doctype html><html><head><link rel="stylesheet" href="devmcp-theme/'.$a.'/bootstrap.min.css"></head><body><h1>#1</h1></body></html>';
+        file_put_contents($d.'/index.html',$original);
+        $installer->install($s,$d,$a,['bootstrap.min.css']);
+        $initial=$installer->activate($d,$a);
+        self::assertTrue($initial['page_linked']);
+        self::assertTrue($initial['html_changed']);
+        self::assertStringContainsString('devmcp-theme/current.css?v='.$a,file_get_contents($d.'/index.html'));
+        self::assertStringContainsString($a.'/bootstrap.min.css',file_get_contents($d.'/devmcp-theme/current.css'));
+        self::assertStringContainsString('<h1>#1</h1>',file_get_contents($d.'/index.html'));
+        $savedHtml=file_get_contents($d.'/index.html');
+        $savedCss=file_get_contents($d.'/devmcp-theme/current.css');
+        file_put_contents($s.'/bootstrap.min.css','body{color:blue}');
+        $installer->install($s,$d,$b,['bootstrap.min.css']);
+        $next=$installer->activate($d,$b);
+        self::assertSame('devmcp-theme/current.css?v='.$b,$next['entrypoint']);
+        self::assertStringContainsString($b.'/bootstrap.min.css',file_get_contents($d.'/devmcp-theme/current.css'));
+        self::assertStringContainsString('devmcp-theme/current.css?v='.$b,file_get_contents($d.'/index.html'));
+        ($next['rollback'])();
+        self::assertSame($savedHtml,file_get_contents($d.'/index.html'));
+        self::assertSame($savedCss,file_get_contents($d.'/devmcp-theme/current.css'));
+        self::assertFalse($installer->activate($d,$a)['html_changed']);
+    }
 }

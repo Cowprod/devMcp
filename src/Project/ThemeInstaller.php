@@ -63,4 +63,81 @@ final class ThemeInstaller
             fclose($lock);
         }
     }
+
+    /**
+     * Activate a managed Bootstrap link without modifying unrelated page content.
+     * current.css remains a stable entrypoint; its SHA query busts browser caches.
+     * The returned rollback callable is used if the surrounding SQL transaction fails.
+     */
+    public function activate(string $destination, string $sha): array
+    {
+        if (!preg_match('/^[a-f0-9]{40}$/D', $sha)) throw new RuntimeException('Invalid SHA');
+        if (is_link($destination) || !is_dir($destination)) throw new RuntimeException('Invalid destination root');
+        $destination = realpath($destination);
+        $root = $destination . '/devmcp-theme';
+        $css = $root . '/' . $sha . '/bootstrap.min.css';
+        if (is_link($css) || !is_file($css)) throw new RuntimeException('Missing installed Bootstrap CSS');
+        $index = $destination . '/index.html';
+        if (!file_exists($index)) return ['page_linked'=>false,'html_changed'=>false,'css_changed'=>false];
+        if (is_link($index) || !is_file($index)) throw new RuntimeException('Unsafe HTML entrypoint');
+        $original = file_get_contents($index);
+        if ($original === false) throw new RuntimeException('Cannot read HTML entrypoint');
+        $pattern = '~(<link\b[^>]*\bhref\s*=\s*)(["\x27])devmcp-theme/(?:[a-f0-9]{40}/bootstrap\.min\.css|current\.css(?:\?v=[a-f0-9]{40})?)\2~i';
+        $updated = preg_replace_callback(
+            $pattern,
+            static fn(array $m): string => $m[1] . $m[2] . 'devmcp-theme/current.css?v=' . $sha . $m[2],
+            $original,
+            -1,
+            $count
+        );
+        if ($updated === null) throw new RuntimeException('Invalid HTML stylesheet reference');
+        if ($count === 0) return ['page_linked'=>false,'html_changed'=>false,'css_changed'=>false];
+        $entrypoint = $root . '/current.css';
+        if (is_link($entrypoint) || (file_exists($entrypoint) && !is_file($entrypoint)))
+            throw new RuntimeException('Unsafe CSS entrypoint');
+        $previousCss = is_file($entrypoint) ? file_get_contents($entrypoint) : null;
+        if ($previousCss === false) throw new RuntimeException('Cannot read CSS entrypoint');
+        $nextCss = '@import url("./' . $sha . '/bootstrap.min.css");' . "\n";
+        $cssChanged = $previousCss !== $nextCss;
+        $htmlChanged = $original !== $updated;
+        try {
+            if ($cssChanged) $this->writeManagedFile($entrypoint, $nextCss);
+            if ($htmlChanged) $this->writeManagedFile($index, $updated);
+        } catch (\Throwable $e) {
+            if ($cssChanged) {
+                if ($previousCss === null) @unlink($entrypoint);
+                else $this->writeManagedFile($entrypoint, $previousCss);
+            }
+            throw $e;
+        }
+        $rollback = function () use ($index, $original, $htmlChanged, $entrypoint, $previousCss, $cssChanged): void {
+            if ($htmlChanged) $this->writeManagedFile($index, $original);
+            if ($cssChanged) {
+                if ($previousCss === null) {
+                    if (is_link($entrypoint) || (file_exists($entrypoint) && !is_file($entrypoint)))
+                        throw new RuntimeException('Unsafe CSS rollback entrypoint');
+                    if (is_file($entrypoint) && !unlink($entrypoint)) throw new RuntimeException('Cannot restore CSS entrypoint');
+                } else $this->writeManagedFile($entrypoint, $previousCss);
+            }
+        };
+        return [
+            'page_linked'=>true, 'html_changed'=>$htmlChanged, 'css_changed'=>$cssChanged,
+            'entrypoint'=>'devmcp-theme/current.css?v=' . $sha, 'rollback'=>$rollback,
+        ];
+    }
+
+    private function writeManagedFile(string $path, string $content): void
+    {
+        if (is_link($path) || (file_exists($path) && !is_file($path))) throw new RuntimeException('Unsafe managed file');
+        $tmp = dirname($path) . '/.theme-write-' . bin2hex(random_bytes(12));
+        try {
+            if (file_put_contents($tmp, $content, LOCK_EX) !== strlen($content))
+                throw new RuntimeException('Cannot stage managed file');
+            if (is_file($path) && !chmod($tmp, fileperms($path) & 0777))
+                throw new RuntimeException('Cannot preserve file permissions');
+            if (!rename($tmp, $path)) throw new RuntimeException('Cannot publish managed file');
+        } finally {
+            if (is_file($tmp)) unlink($tmp);
+        }
+    }
 }

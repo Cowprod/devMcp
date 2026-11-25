@@ -67,9 +67,10 @@ final class ThemeCatalogue
         }
     }
 
-    public function installLocal(string $project, string $theme, string $sha, callable $install): array
+    public function installLocal(string $project, string $theme, string $sha, callable $install, ?callable $activate = null): array
     {
         self::validateProject($project);
+        $rollback = null;
         $this->db->beginTransaction();
         try {
             $sql='SELECT theme_id,installed_sha FROM dm_project_theme WHERE project_id=?';
@@ -80,11 +81,18 @@ final class ThemeCatalogue
             $this->info($theme);
             $result=$install();
             if(($result['sha']??null)!==$sha)throw new RuntimeException('Installation SHA mismatch');
+            $activation=$activate===null?[]:$activate();
+            $rollback=$activation['rollback']??null;
+            unset($activation['rollback']);
             $this->db->prepare('UPDATE dm_project_theme SET theme_id=?,installed_sha=? WHERE project_id=?')->execute([$theme,$sha,$project]);
             $this->db->commit();
-            return $result+['project_id'=>$project,'theme_id'=>$theme,'installed_sha'=>$sha];
+            return $result+$activation+['project_id'=>$project,'theme_id'=>$theme,'installed_sha'=>$sha];
         } catch(\Throwable $e) {
             if($this->db->inTransaction())$this->db->rollBack();
+            if($rollback!==null) {
+                try {$rollback();}
+                catch(\Throwable $failure) {throw new RuntimeException('Theme activation rollback failed: '.$failure->getMessage(),0,$e);}
+            }
             throw $e;
         }
     }

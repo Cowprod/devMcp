@@ -729,7 +729,12 @@ final class ProjectTools
                 foreach(glob($fonts.'/*')?:[] as $file)if(is_file($file))$resources[]='assets/fontawesome/webfonts/'.basename($file);
             }
             $public=$target->root.'/public';
-            $result=$catalogue->installLocal($project,$theme,$sha,fn()=>(new \Cowprod\DevMcp\Project\ThemeInstaller())->install($distribution,$public,$sha,$resources));
+            $installer=new \Cowprod\DevMcp\Project\ThemeInstaller();
+            $result=$catalogue->installLocal(
+                $project,$theme,$sha,
+                fn()=>$installer->install($distribution,$public,$sha,$resources),
+                fn()=>$installer->activate($public,$sha)
+            );
             $this->audit->append(['project'=>$project,'action'=>'theme.install','theme_id'=>$theme,'sha'=>$sha,'outcome'=>'succeeded']);
             return $result;
         }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
