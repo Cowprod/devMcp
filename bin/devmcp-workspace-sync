@@ -65,7 +65,25 @@ if ($normalizedOrigin !== strtolower($expectedRepository)) {
 }
 
 $dirty = $run(['/usr/bin/git', 'status', '--porcelain', '--untracked-files=no'], 20);
-if ($dirty !== '') {
+// Recover only the exact legacy theme-generated unstaged HTML change.
+$legacyThemeChange = false;
+if ($dirty === 'M public/index.html' && $run(['/usr/bin/git','diff','--cached','--name-only'],20) === '') {
+    $path = $root . '/public/index.html';
+    $cssPath = $root . '/public/devmcp-theme/current.css';
+    $headFile = new Process(['/usr/bin/git','show','HEAD:public/index.html'], $root);
+    $headFile->mustRun();
+    $css = !is_link($cssPath) && is_file($cssPath) ? file_get_contents($cssPath) : false;
+    if (!is_link($path) && is_file($path) && is_string($css) &&
+        preg_match('~^@import url\("\./([a-f0-9]{40})/bootstrap\.min\.css"\);\n$~D', $css, $m)) {
+        $expected = preg_replace_callback(
+            '~(<link\b[^>]*\bhref\s*=\s*)(["\x27])devmcp-theme/(?:[a-f0-9]{40}/bootstrap\.min\.css|current\.css(?:\?v=[a-f0-9]{40})?)\2~i',
+            static fn(array $link): string => $link[1].$link[2].'devmcp-theme/current.css?v='.$m[1].$link[2],
+            $headFile->getOutput()
+        );
+        $legacyThemeChange = $expected === file_get_contents($path);
+    }
+}
+if ($dirty !== '' && !$legacyThemeChange) {
     fwrite(STDERR, "Workspace refusé : fichiers suivis modifiés." . PHP_EOL);
     fwrite(STDERR, $dirty . PHP_EOL);
     exit(10);
@@ -90,6 +108,7 @@ if ($remoteRefs === '') {
     exit(11);
 }
 
+if ($legacyThemeChange) $run(['/usr/bin/git','restore','--worktree','--','public/index.html'],20);
 $run(['/usr/bin/git', 'checkout', '--detach', $commit], 60);
 $head = strtolower($run(['/usr/bin/git', 'rev-parse', 'HEAD'], 20));
 

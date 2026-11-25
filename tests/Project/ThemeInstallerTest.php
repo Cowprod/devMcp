@@ -34,7 +34,7 @@ final class ThemeInstallerTest extends TestCase
         self::assertFalse($i->install($s,$d,$a,['bootstrap.min.css'])['changed']);
         file_put_contents($s.'/bootstrap.min.css','body{color:blue}');
         self::assertTrue($i->install($s,$d,$b,['bootstrap.min.css'])['changed']);
-        self::assertSame('body{color:red}',file_get_contents($d.'/devmcp-theme/'.$a.'/bootstrap.min.css'));
+        self::assertSame('body{color:red}',file_get_contents($d.'/devmcp-theme/current.css'));
         self::assertSame('body{margin:0}',file_get_contents($d.'/custom.css'));
     }
     public function testFailedInstallDoesNotAdvanceSqlSha(): void
@@ -72,8 +72,8 @@ final class ThemeInstallerTest extends TestCase
         $installer->install($s,$d,$a,['bootstrap.min.css']);
         $initial=$installer->activate($d,$a);
         self::assertTrue($initial['page_linked']);
-        self::assertTrue($initial['html_changed']);
-        self::assertStringContainsString('devmcp-theme/current.css?v='.$a,file_get_contents($d.'/index.html'));
+        self::assertFalse($initial['html_changed']);
+        self::assertStringContainsString('devmcp-theme/current.css',file_get_contents($d.'/index.html'));
         self::assertStringContainsString($a.'/bootstrap.min.css',file_get_contents($d.'/devmcp-theme/current.css'));
         self::assertStringContainsString('<h1>#1</h1>',file_get_contents($d.'/index.html'));
         $savedHtml=file_get_contents($d.'/index.html');
@@ -81,9 +81,10 @@ final class ThemeInstallerTest extends TestCase
         file_put_contents($s.'/bootstrap.min.css','body{color:blue}');
         $installer->install($s,$d,$b,['bootstrap.min.css']);
         $next=$installer->activate($d,$b);
-        self::assertSame('devmcp-theme/current.css?v='.$b,$next['entrypoint']);
+        self::assertSame('devmcp-theme/current.css',$next['entrypoint']);
         self::assertStringContainsString($b.'/bootstrap.min.css',file_get_contents($d.'/devmcp-theme/current.css'));
-        self::assertStringContainsString('devmcp-theme/current.css?v='.$b,file_get_contents($d.'/index.html'));
+        self::assertStringContainsString('devmcp-theme/current.css',file_get_contents($d.'/index.html'));
+        self::assertSame($original,file_get_contents($d.'/index.html'));
         ($next['rollback'])();
         self::assertSame($savedHtml,file_get_contents($d.'/index.html'));
         self::assertSame($savedCss,file_get_contents($d.'/devmcp-theme/current.css'));

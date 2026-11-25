@@ -67,7 +67,7 @@ final class ThemeInstaller
 
     /**
      * Activate a managed Bootstrap link without modifying unrelated page content.
-     * current.css remains a stable entrypoint; its SHA query busts browser caches.
+     * current.css remains a stable entrypoint; HTML is never rewritten.
      * The returned rollback callable is used if the surrounding SQL transaction fails.
      */
     public function activate(string $destination, string $sha): array
@@ -83,16 +83,8 @@ final class ThemeInstaller
         if (is_link($index) || !is_file($index)) throw new RuntimeException('Unsafe HTML entrypoint');
         $original = file_get_contents($index);
         if ($original === false) throw new RuntimeException('Cannot read HTML entrypoint');
-        $pattern = '~(<link\b[^>]*\bhref\s*=\s*)(["\x27])devmcp-theme/(?:[a-f0-9]{40}/bootstrap\.min\.css|current\.css(?:\?v=[a-f0-9]{40})?)\2~i';
-        $updated = preg_replace_callback(
-            $pattern,
-            static fn(array $m): string => $m[1] . $m[2] . 'devmcp-theme/current.css?v=' . $sha . $m[2],
-            $original,
-            -1,
-            $count
-        );
-        if ($updated === null) throw new RuntimeException('Invalid HTML stylesheet reference');
-        if ($count === 0) return ['page_linked'=>false,'html_changed'=>false,'css_changed'=>false];
+        $pattern = '~<link\b[^>]*\bhref\s*=\s*(["\x27])devmcp-theme/current\.css(?:\?v=[a-f0-9]{40})?\1~i';
+        if (!preg_match($pattern, $original)) return ['page_linked'=>false,'html_changed'=>false,'css_changed'=>false];
         $entrypoint = $root . '/current.css';
         if (is_link($entrypoint) || (file_exists($entrypoint) && !is_file($entrypoint)))
             throw new RuntimeException('Unsafe CSS entrypoint');
@@ -100,10 +92,9 @@ final class ThemeInstaller
         if ($previousCss === false) throw new RuntimeException('Cannot read CSS entrypoint');
         $nextCss = '@import url("./' . $sha . '/bootstrap.min.css");' . "\n";
         $cssChanged = $previousCss !== $nextCss;
-        $htmlChanged = $original !== $updated;
+        $htmlChanged = false;
         try {
             if ($cssChanged) $this->writeManagedFile($entrypoint, $nextCss);
-            if ($htmlChanged) $this->writeManagedFile($index, $updated);
         } catch (\Throwable $e) {
             if ($cssChanged) {
                 if ($previousCss === null) @unlink($entrypoint);
@@ -111,8 +102,7 @@ final class ThemeInstaller
             }
             throw $e;
         }
-        $rollback = function () use ($index, $original, $htmlChanged, $entrypoint, $previousCss, $cssChanged): void {
-            if ($htmlChanged) $this->writeManagedFile($index, $original);
+        $rollback = function () use ($entrypoint, $previousCss, $cssChanged): void {
             if ($cssChanged) {
                 if ($previousCss === null) {
                     if (is_link($entrypoint) || (file_exists($entrypoint) && !is_file($entrypoint)))
@@ -123,7 +113,7 @@ final class ThemeInstaller
         };
         return [
             'page_linked'=>true, 'html_changed'=>$htmlChanged, 'css_changed'=>$cssChanged,
-            'entrypoint'=>'devmcp-theme/current.css?v=' . $sha, 'rollback'=>$rollback,
+            'entrypoint'=>'devmcp-theme/current.css', 'rollback'=>$rollback,
         ];
     }
 
