@@ -42,6 +42,8 @@ final class ThemeInstallerTest extends TestCase
         if(!in_array('sqlite',PDO::getAvailableDrivers(),true))self::markTestSkipped('SQLite required');
         $db=new PDO('sqlite::memory:');
         $db->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+        $db->exec("CREATE TABLE dm_theme(id TEXT PRIMARY KEY,name TEXT,project TEXT,repository TEXT,preview TEXT,is_default INT)");
+        $db->exec("INSERT INTO dm_theme VALUES ('quartz','Quartz','theme-quartz','https://github.com/Cowprod/theme-quartz','',1)");
         $db->exec("CREATE TABLE dm_project_theme(project_id TEXT PRIMARY KEY,theme_id TEXT,installed_sha TEXT)");
         $db->exec("INSERT INTO dm_project_theme VALUES ('demo','quartz',NULL)");
         $c=new ThemeCatalogue($db);$i=new ThemeInstaller();$a=str_repeat('a',40);$b=str_repeat('b',40);
