@@ -1,16 +1,6 @@
 name: macOS project hosting
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - '**/*.txt'
-  pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - '**/*.txt'
+  workflow_dispatch:
 
 # Cancel obsolete runs for the same workflow and ref.
 concurrency:

@@ -1,16 +1,6 @@
 name: Distributed agent bootstrap checks
 on:
-  push:
-    branches: [main, feat/distributed-architecture]
-    paths:
-      - 'deploy/distributed/**'
-      - 'bin/distributed-agent.php'
-      - 'public/distributed-admin.php'
-      - 'public/agent-ping.php'
-      - 'src/Distributed/Security/AgentAuthenticator.php'
-      - '.github/workflows/distributed-agent.yml'
-  # Run on every PR: changes to the MCP facade can affect agent-facing safety.
-  pull_request:
+  workflow_dispatch:
 
 # Cancel obsolete runs for the same workflow and ref.
 concurrency:
