@@ -42,7 +42,7 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
-    $migrationPath = dirname(__DIR__) . '/migrations/20261124_theme_catalogue.sql';
+    $migrationPath = dirname(__DIR__) . '/migrations/20261126_template_catalogue.sql';
     $migration = file_get_contents($migrationPath);
     if (!is_string($migration) || trim($migration) === '') {
         throw new RuntimeException('Migration des templates introuvable');

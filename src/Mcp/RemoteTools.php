@@ -30,6 +30,9 @@ final class RemoteTools
     public function themeCatalogue(): \Cowprod\DevMcp\Project\ThemeCatalogue
     {return new \Cowprod\DevMcp\Project\ThemeCatalogue($this->db);}
 
+    public function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue
+    {return new \Cowprod\DevMcp\Project\TemplateCatalogue($this->db);}
+
     public function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
     {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot);}
 

@@ -788,7 +788,8 @@ final class ProjectTools
     }
     private function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue
     {
-        return new \Cowprod\DevMcp\Project\TemplateCatalogue($this->themeDatabase());
+        if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
+        return $this->remoteTools->templateCatalogue();
     }
     public function templateList(?string $project_type=null): array
     {
