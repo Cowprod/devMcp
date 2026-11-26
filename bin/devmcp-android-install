@@ -28,7 +28,7 @@ try{
     $tools=$profile['android']['sdk_root'].'/build-tools/'.$profile['android']['build_tools'];
     $run([$tools.'/apksigner','verify',$apk]);
     $metadata=AndroidInstallation::packageMetadata($run([$tools.'/aapt','dump','badging',$apk]),$artifact);
-    $installed=$run([$adb,'-s',$device,'install','-r','--no-streaming',$apk],180);
+    $installed=$run([$adb,'-s',$device,'install','-r',$apk],90);
     if(!preg_match('/^Success\s*$/m',$installed))throw new RuntimeException('ADB did not confirm installation: '.trim($installed));
     $package=$metadata['package'];$dump=$run([$adb,'-s',$device,'shell','dumpsys','package',$package]);
     if(!preg_match('/versionCode='.preg_quote($metadata['version_code'],'/').'\b/',$dump))throw new RuntimeException('Installed package version differs from the APK');
