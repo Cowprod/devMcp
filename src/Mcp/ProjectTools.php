@@ -814,6 +814,33 @@ final class ProjectTools
             return $result+['files_modified'=>false];
         }catch(InvalidArgumentException $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
     }
+    public function templateApply(string $project,string $sha): array
+    {
+        try{
+            $choice=$this->templateCatalogue()->assignment($project);
+            $template=$choice['template_id']??throw new InvalidArgumentException('Select template first');
+            if(($choice['applied_sha']??null)!==null)throw new InvalidArgumentException('Template already applied');
+            $meta=$this->templateCatalogue()->info($template);
+            if($meta['project_type']!=='cordova')throw new InvalidArgumentException('Template type is not yet supported');
+            $source=$this->localActionProject($meta['source_project']);
+            $target=$this->localActionProject($project);
+            $revision=(new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->apply($source->root,$target->root,$sha,$project);
+            $result=$this->templateCatalogue()->markApplied($project,$template,$sha,$revision);
+            $this->audit->append(['project'=>$project,'action'=>'template.apply','template_id'=>$template,'revision'=>$revision,'outcome'=>'succeeded']);
+            return $result+['git_revision'=>$revision,'committed'=>true,'pushed'=>true];
+        }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
+    public function themePublish(string $project): array
+    {
+        try{
+            $choice=$this->themeCatalogue()->assignment($project);
+            $sha=$choice['installed_sha']??throw new InvalidArgumentException('Install selected theme first');
+            $target=$this->localActionProject($project);
+            $revision=(new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->publishTheme($target->root,$sha);
+            $this->audit->append(['project'=>$project,'action'=>'theme.publish','theme_id'=>$choice['theme_id'],'sha'=>$sha,'revision'=>$revision,'outcome'=>'succeeded']);
+            return ['project_id'=>$project,'theme_id'=>$choice['theme_id'],'theme_sha'=>$sha,'git_revision'=>$revision,'committed'=>true,'pushed'=>true];
+        }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
     public function deploymentTargets(): array{return $this->deploymentCall(fn()=>$this->deploymentService()->targets());}
     public function deploymentList(?string $project=null): array{return $this->deploymentCall(fn()=>['deployments'=>$this->deploymentService()->list($project)]);}
     public function deploymentDescribe(string $deployment_id): array{return $this->deploymentCall(fn()=>$this->deploymentService()->describe($deployment_id));}
