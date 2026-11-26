@@ -68,7 +68,7 @@ final class ProjectTemplatePublisher
         $root=$this->canonical($root);
         if($this->git($root,['status','--porcelain'])!=='') {
             // Managed assets are the sole exception to a clean source.
-            $status=$this->git($root,['status','--porcelain','--untracked-files=all']);
+            $status=$this->git($root,['status','--porcelain','--untracked-files=all'],true);
             foreach(explode("\n",$status) as $line){
                 if($line==='')continue;
                 $name=substr($line,3);
@@ -81,7 +81,7 @@ final class ProjectTemplatePublisher
             throw new RuntimeException('Installed theme assets missing or unsafe');
         $expected='@import url("./'.$sha.'/bootstrap.min.css");';
         if(!str_contains(file_get_contents($base.'/current.css'),$expected))throw new RuntimeException('Theme entrypoint does not match selected SHA');
-        $this->git($root,['add','--','public/devmcp-theme/current.css','public/devmcp-theme/'.$sha]);
+        $this->git($root,['add','-A','--','public/devmcp-theme']);
         $this->git($root,['commit','-m','Bundle selected theme '.$sha.' for native builds']);
         $revision=$this->git($root,['rev-parse','HEAD']);
         $this->git($root,['push','origin','HEAD:main']);
