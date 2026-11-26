@@ -56,6 +56,16 @@ try {
     // A successful DDL statement alone is insufficient if an incompatible
     // table already existed: prove the expected columns are readable.
     $db->query('SELECT id, name, project, repository, preview, is_default FROM dm_theme LIMIT 0');
+    // Compatibility with the installed updater, which already invokes this migration.
+    $templateMigration = file_get_contents(dirname(__DIR__) . '/migrations/20261126_template_catalogue.sql');
+    if (!is_string($templateMigration) || trim($templateMigration) === '') {
+        throw new RuntimeException('Template migration missing');
+    }
+    foreach (preg_split('/;\\s*(?:\\r?\\n|$)/', $templateMigration) ?: [] as $statement) {
+        if (trim($statement) !== '') $db->exec($statement);
+    }
+    $db->query('SELECT id, project_type FROM dm_template LIMIT 0');
+    $db->query('SELECT project_id, template_id, applied_sha FROM dm_project_template LIMIT 0');
     echo "THEMES_MIGRATION_OK\n";
 } catch (Throwable $error) {
     // No SQL errors/config paths/credentials cross the MCP update-request boundary.
