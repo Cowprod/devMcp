@@ -16,7 +16,7 @@ final class DeploymentConfiguration
         if(!is_array($variables)||count($variables)>64)throw new InvalidArgumentException('At most 64 environment variables are supported');
         foreach($variables as $name=>$text){
             if(!is_string($name)||!preg_match('/^[A-Z_][A-Z0-9_]{0,63}$/D',$name)||!is_string($text)||strlen($text)>4096||preg_match('/[\x00-\x1f\x7f]/',$text)
-                ||in_array($name,['HOST','PORT','DATA_DIR','MOBILE_RELEASES_FILE','PATH','HOME','USER','SHELL'],true)||str_starts_with($name,'LD_')||str_starts_with($name,'DYLD_'))throw new InvalidArgumentException('Invalid or reserved deployment environment variable');
+                ||in_array($name,['HOST','PORT','DATA_DIR','MOBILE_RELEASES_FILE','PATH','HOME','USER','SHELL','DEVMCP_DEPLOYMENT_ID','DEVMCP_SOURCE_COMMIT'],true)||str_starts_with($name,'LD_')||str_starts_with($name,'DYLD_'))throw new InvalidArgumentException('Invalid or reserved deployment environment variable');
         }
         return ['port'=>$port,'variables'=>$variables];
     }
