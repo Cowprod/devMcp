@@ -786,6 +786,33 @@ final class ProjectTools
             return $result+['assets_modified'=>false];
         }catch(InvalidArgumentException $error){throw new \Mcp\Exception\ToolCallException($error->getMessage());}
     }
+    private function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue
+    {
+        return new \Cowprod\DevMcp\Project\TemplateCatalogue($this->themeDatabase());
+    }
+    public function templateList(?string $project_type=null): array
+    {
+        return ['templates'=>$this->templateCatalogue()->all($project_type)];
+    }
+    public function templateInfo(string $template): array
+    {
+        try{return $this->templateCatalogue()->info($template);}
+        catch(InvalidArgumentException $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
+    public function templateSelection(string $project): array
+    {
+        $this->projectDescribe($project);
+        return $this->templateCatalogue()->assignment($project);
+    }
+    public function templateSelect(string $project,string $template): array
+    {
+        try{
+            $this->projectDescribe($project);
+            $result=$this->templateCatalogue()->select($project,$template);
+            $this->audit->append(['project'=>$project,'action'=>'template.select','template_id'=>$template,'outcome'=>'succeeded']);
+            return $result+['files_modified'=>false];
+        }catch(InvalidArgumentException $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
+    }
     public function deploymentTargets(): array{return $this->deploymentCall(fn()=>$this->deploymentService()->targets());}
     public function deploymentList(?string $project=null): array{return $this->deploymentCall(fn()=>['deployments'=>$this->deploymentService()->list($project)]);}
     public function deploymentDescribe(string $deployment_id): array{return $this->deploymentCall(fn()=>$this->deploymentService()->describe($deployment_id));}
