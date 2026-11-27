@@ -23,6 +23,13 @@ if ($argc === 3 && $argv[1] === '--status' && preg_match('/\A[a-f0-9]{32}\z/', $
         fwrite(STDERR, "Invalid persisted update result\n");
         exit(1);
     }
+    $schemaFile = "$results/cowprod-schema.json";
+    if (is_file($schemaFile) && !is_link($schemaFile)) {
+        $schema = json_decode((string)file_get_contents($schemaFile, false, null, 0, 65536), true);
+        if (is_array($schema) && ($schema['revision'] ?? null) === ($status['installed_after'] ?? '')) {
+            $status['cowprod_schema'] = $schema;
+        }
+    }
     echo json_encode($status, JSON_THROW_ON_ERROR), "\n";
     exit(0);
 }

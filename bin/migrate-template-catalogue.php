@@ -57,6 +57,25 @@ try {
     // table already existed: prove the expected columns are readable.
     $db->query('SELECT id, name, project_type, source_project, repository, is_default FROM dm_template LIMIT 0');
     echo "TEMPLATES_MIGRATION_OK\n";
+    // Fixed read-only diagnostic, executed by the existing root updater.
+    // Publish only schema metadata, never credentials or table contents.
+    $lines = [];
+    $diagnosticExit = 0;
+    exec(escapeshellarg(PHP_BINARY).' '.escapeshellarg(__DIR__.'/check-cowprod-sql-schema.php').' 2>/dev/null', $lines, $diagnosticExit);
+    $report = json_decode(implode("\n", $lines), true);
+    if (!is_array($report)) $report = ['ok'=>false,'error'=>'schema_check_failed'];
+    $report['exit_code'] = $diagnosticExit;
+    $report['revision'] = trim((string)shell_exec('/usr/bin/git -C /opt/devmcp rev-parse HEAD'));
+    $directory = '/var/lib/devmcp-update-status';
+    if (is_dir($directory)) {
+        $temporary = tempnam($directory, '.schema.');
+        if ($temporary !== false) {
+            file_put_contents($temporary, json_encode($report, JSON_THROW_ON_ERROR));
+            chmod($temporary, 0644);
+            rename($temporary, $directory.'/cowprod-schema.json');
+        }
+    }
+
 } catch (Throwable $error) {
     // No SQL errors/config paths/credentials cross the MCP update-request boundary.
     fwrite(STDERR, 'Migration des templates refusée : ' . get_class($error) . "\n");
