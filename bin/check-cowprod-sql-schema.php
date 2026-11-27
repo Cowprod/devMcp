@@ -4,9 +4,11 @@ declare(strict_types=1);
 require dirname(__DIR__).'/vendor/autoload.php';
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 try {
-    $config = require (getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php');
-    $distributed = require ($config['distributed']['config_path'] ?? '/etc/devmcp/mcp-distributed.php');
-    $db = DatabaseConnection::connect($distributed['dsn'], $distributed['writer_username'], $distributed['writer_password']);
+    $distributedPath = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp-admin/distributed.php';
+    if (!is_file($distributedPath) || !is_readable($distributedPath)) throw new RuntimeException('Distributed config unavailable');
+    $distributed = require $distributedPath;
+    if (!is_array($distributed)) throw new RuntimeException('Distributed config invalid');
+    $db = DatabaseConnection::connect((string)$distributed['dsn'], (string)$distributed['username'], (string)$distributed['password']);
     $map = json_decode(file_get_contents(dirname(__DIR__).'/docs/cowprod-sql-rename-map.json'), true, 512, JSON_THROW_ON_ERROR);
     $actual = [];
     foreach ($db->query('SELECT TABLE_NAME,COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()')->fetchAll(PDO::FETCH_ASSOC) as $row) {

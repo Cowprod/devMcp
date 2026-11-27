@@ -27,6 +27,16 @@ server {
     location = / {
         rewrite ^ /distributed-admin.php last;
     }
+    # Isolated read-only schema diagnostic; no authentication token and no SQL writes.
+    location = /cowprod-sql-check.php {
+        auth_basic off;
+        limit_except GET { deny all; }
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/cowprod-sql-check.php;
+        fastcgi_param HTTPS on;
+        fastcgi_param DEVMCP_DISTRIBUTED_CONFIG /etc/devmcp-admin/distributed.php;
+        fastcgi_pass unix:__FPM_SOCKET__;
+    }
     location = /distributed-admin.php {
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME /opt/devmcp-admin/public/distributed-admin.php;
