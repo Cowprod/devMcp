@@ -15,6 +15,8 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/bin/remote-job-policy.php';
 
 header('Cache-Control: no-store');
+// Read-only SQL diagnostic through the existing Nginx admin route.
+if (isset($_GET['cowprod_sql_check'])) { require __DIR__.'/cowprod-sql-check.php'; exit; }
 if(isset($_GET['ios_artifact'])||isset($_GET['mobile_artifact'])||isset($_GET['local_artifact'])){require __DIR__.'/ios-download.php';exit;}
 
 $configPath = getenv('DEVMCP_DISTRIBUTED_CONFIG');
