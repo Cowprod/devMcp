@@ -91,7 +91,7 @@ final class AdminReadApiTest extends TestCase
         $serialized=json_encode($result);self::assertStringNotContainsString('SECRET_DO_NOT_LEAK',$serialized);self::assertStringNotContainsString('/private/workspace',$serialized);
         self::assertStringNotContainsString('metadata_json',$serialized);self::assertStringNotContainsString('password_hash',$serialized);
         $unassigned=$this->request('/projects/unassigned',$token)['body']['project'];self::assertSame([],$unassigned['assignments']);self::assertNull($unassigned['runtime_type']);
-        $registry=$this->request('/projects/registry-only',$token)['body']['project'];self::assertNull($registry['mobile_builds']);self::assertNull($registry['github']);
+        $registry=$this->request('/projects/registry-only',$token)['body']['project'];self::assertNull($registry['mobile_builds']);self::assertNull($registry['github']);self::assertSame('No deployment',$registry['description']);self::assertSame(['description'=>'No deployment','repository_url'=>null],$registry['registry_metadata']);
         self::assertSame(404,$this->request('/projects/missing',$token)['status']);
     }
     public function testPasswordAuthHasLimitedScopeExpiresAndRevokesOnPasswordReset(): void
