@@ -12,11 +12,10 @@ Documents applicables :
 ## Référentiel technique Cowprod
 
 Dépôt : Cowprod/referenciel
-Commit consulté : 68a0d53af68bf28d53794ec783d78bf58aa9b052
-
-Applicabilité J01 :
-- conventions PHP générales lorsque pertinentes ;
-- aucun frontend ni SQL dans J01.
+Les standards SQL/PHP, frontend et CI s’appliquent conformément à `AGENTS.md`.
+Le [suivi de mise en conformité](COWPROD-SOCLE-MIGRATION.md) recense les écarts,
+les décisions à faire valider et le flux de génération PHP. Le SHA réellement
+distribué à chaque projet figure dans son `socle.lock.json`.
 
 ## Références externes
 

@@ -243,9 +243,16 @@ final class ProjectTools
      * local workspace and automatic lifecycle activation.
      * Never deletes a repository or workspace on partial failure.
      */
-    public function projectCreate(string $project_id, string $description, string $confirmation, string $machine = 'local'): array
+    public function projectCreate(string $project_id, string $description, string $confirmation, string $machine = 'local',
+        string $project_type = 'generic', ?string $template_sha = null): array
     {
+        if (!in_array($project_type, ['generic', 'php'], true) || ($project_type === 'generic' && $template_sha !== null)) {
+            throw new InvalidArgumentException('Type de projet ou révision de socle invalide');
+        }
         if ($machine !== 'local' && $machine !== gethostname()) {
+            if ($project_type === 'php') {
+                throw new InvalidArgumentException('Initialiser le dépôt PHP avec le socle sur le serveur, puis le déployer sur la machine distante');
+            }
             return $this->projectCreateRemote($project_id, $description, $machine, $confirmation);
         }
         if ($confirmation !== 'CREATE_PROJECT') {
@@ -254,6 +261,15 @@ final class ProjectTools
         if ($this->githubCreator === null || $this->localProvisioner === null
             || $this->provisioning === null || $this->remoteTools === null) {
             throw new InvalidArgumentException('Creation integree non configuree');
+        }
+        if ($project_type === 'php') {
+            if ($template_sha === null) {
+                throw new InvalidArgumentException('SHA du socle Cowprod requis');
+            }
+            $aModele = $this->templateCatalogue()->info('php-cowprod');
+            $sSource = $this->localActionProject($aModele['source_project'])->root;
+            $oSocle = new \Cowprod\DevMcp\Project\CowprodPhpSocle();
+            $oSocle->verifier($oSocle->lire($sSource, $template_sha));
         }
         $repository = $this->githubCreator->organization() . '/' . $project_id;
         $this->provisioning->assertLocalProjectCreationReady();
@@ -301,7 +317,23 @@ final class ProjectTools
             }
             throw $error;
         }
-        return [
+        $aGeneration = [];
+        if ($project_type === 'php') {
+            try {
+                $this->templateSelect($project_id, 'php-cowprod');
+                $aGeneration['template'] = $this->templateApply($project_id, $template_sha);
+            } catch (\Throwable $oErreur) {
+                $this->audit->append([
+                    'project' => $project_id, 'action' => 'template.apply',
+                    'outcome' => 'partial_failure', 'error_class' => get_class($oErreur),
+                ]);
+                $aGeneration = [
+                    'state' => 'partial_failure',
+                    'failure' => ['stage' => 'template_publish', 'code' => 'COWPROD_PHP_TEMPLATE_FAILED'],
+                ];
+            }
+        }
+        return $aGeneration + [
             'project' => $project,
             // Normalize the integrated response, not only the intermediate
             // GitHub-only creation step where registration was still pending.

@@ -19,6 +19,13 @@ final class ProjectTemplatePublisher
         if($this->git($target,['status','--porcelain'])!=='')throw new RuntimeException('Target project must be clean');
         $current=$this->git($target,['rev-parse','--abbrev-ref','HEAD']);
         if($current!=='main')throw new RuntimeException('Template target must be on main');
+        if ($type === 'php') {
+            $oSocle = new CowprodPhpSocle();
+            $aFichiers = $oSocle->lire($source, $sha);
+            $oSocle->verifier($aFichiers);
+            $oSocle->appliquer($target, $aFichiers);
+            return $this->publish($target, array_keys($aFichiers), $type);
+        }
         $this->git($source,['cat-file','-e',$sha.'^{commit}']);
         $entries=$this->git($source,['ls-tree','-r','-z',$sha],true);
         $files=explode("\0",$entries);
@@ -38,7 +45,6 @@ final class ProjectTemplatePublisher
         if($type==='cordova' && (!in_array('config.xml',$paths,true) || !in_array('package.json',$paths,true)
             || !in_array('package-lock.json',$paths,true) || !in_array('public/index.html',$paths,true)))
             throw new RuntimeException('Template is not a complete Cordova source');
-        if($type==='php' && (!in_array('public/index.php',$paths,true) || !in_array('AGENTS.md',$paths,true) || !in_array('socle.lock.json',$paths,true)))throw new RuntimeException('PHP template requires entrypoint, agent policy and socle lock');
         $slug=str_replace('-','',$project);
         foreach($paths as $name){
             $content=$this->git($source,['show',$sha.':'.$name],true);
@@ -57,6 +63,11 @@ final class ProjectTemplatePublisher
             if(!is_dir(dirname($dest))&&!mkdir(dirname($dest),0755,true))throw new RuntimeException('Cannot create template directory');
             if(file_put_contents($dest,$content,LOCK_EX)!==strlen($content))throw new RuntimeException('Template file write failed');
         }
+        return $this->publish($target, $paths, $type);
+    }
+
+    private function publish(string $target, array $paths, string $type): string
+    {
         $this->git($target,['add','--',...$paths]);
         $this->git($target,['commit','-m','Initialize project from versioned '.$type.' template']);
         $revision=$this->git($target,['rev-parse','HEAD']);

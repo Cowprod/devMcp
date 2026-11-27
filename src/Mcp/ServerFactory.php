@@ -122,6 +122,8 @@ final class ServerFactory
                 'project_id' => ['type' => 'string', 'maxLength' => 64],
                 'description' => ['type' => 'string', 'maxLength' => 255],
                 'machine' => ['type' => 'string', 'description' => 'local par défaut, ou nom/ID d’une machine équipée de l’agent projets.'],
+                'project_type' => ['type' => 'string', 'enum' => ['generic', 'php']],
+                'template_sha' => ['type' => 'string', 'pattern' => '^[a-f0-9]{40}$', 'description' => 'SHA validé de Cowprod/referenciel pour un projet PHP.'],
                 'confirmation' => ['type' => 'string', 'enum' => ['CREATE_PROJECT']],
             ],
             'required' => ['project_id', 'description', 'confirmation'],
@@ -218,7 +220,7 @@ final class ServerFactory
             ->addTool([$tools,'templateInfo'],'template_info',description:'Describe a registered versioned project template.',annotations:new ToolAnnotations(readOnlyHint:true),inputSchema:['type'=>'object','properties'=>['template'=>['type'=>'string']],'required'=>['template'],'additionalProperties'=>false])
             ->addTool([$tools,'templateSelection'],'template_selection',description:'Read the template selected or applied for a project.',annotations:new ToolAnnotations(readOnlyHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string']],'required'=>['project'],'additionalProperties'=>false])
             ->addTool([$tools,'templateSelect'],'template_select',description:'Choose a template without copying files; applied templates cannot be replaced without migration.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:true),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'template'=>['type'=>'string']],'required'=>['project','template'],'additionalProperties'=>false])
-            ->addTool([$tools,'templateApply'],'template_apply',description:'Initialize a clean local project from a selected Cordova template at exact source Git SHA; adapt unique bundle ID, commit and push. No overwrite.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:false),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'sha'=>['type'=>'string']],'required'=>['project','sha'],'additionalProperties'=>false])
+            ->addTool([$tools,'templateApply'],'template_apply',description:'Initialise un projet propre avec le modèle sélectionné à un SHA exact. Pour PHP, valide le socle Cowprod et ses conventions avant publication.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:false),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string'],'sha'=>['type'=>'string']],'required'=>['project','sha'],'additionalProperties'=>false])
             ->addTool([$tools,'themePublish'],'theme_publish',description:'Commit and push the currently installed and selected project theme assets for remote native builds; requires clean unrelated files.',annotations:new ToolAnnotations(readOnlyHint:false,destructiveHint:false,idempotentHint:false),inputSchema:['type'=>'object','properties'=>['project'=>['type'=>'string']],'required'=>['project'],'additionalProperties'=>false])
             ->addTool([$tools, 'projectList'], 'project_list', description: 'Liste les projets accessibles.')
             ->addTool(

@@ -15,4 +15,5 @@ CREATE TABLE IF NOT EXISTS dm_project_template (
  FOREIGN KEY (template_id) REFERENCES dm_template(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 INSERT IGNORE INTO dm_template VALUES
- ('cordova-tabs','Cordova / navigation par onglets','cordova','cordova-shell','Cowprod/cordova-shell',1);
+ ('cordova-tabs','Cordova / navigation par onglets','cordova','cordova-shell','Cowprod/cordova-shell',1),
+ ('php-cowprod','PHP / socle Cowprod','php','referenciel','Cowprod/referenciel',1);
