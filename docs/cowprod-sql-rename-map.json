@@ -1,0 +1,370 @@
+[
+  {
+    "old": "dm_machine",
+    "target": "T_MACHINE",
+    "columns": {
+      "id": "MAC_CH_ID",
+      "name": "MAC_CH_NAME",
+      "os_family": "MAC_CH_OS_FAMILY",
+      "architecture": "MAC_CH_ARCHITECTURE",
+      "agent_version": "MAC_CH_AGENT_VERSION",
+      "status": "MAC_CH_STATUS",
+      "last_seen_at": "MAC_DT_LAST_SEEN_AT",
+      "created_at": "MAC_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_project",
+    "target": "T_PROJECT",
+    "columns": {
+      "id": "PRO_CH_ID",
+      "description": "PRO_CH_DESCRIPTION",
+      "repository_url": "PRO_CH_REPOSITORY_URL",
+      "created_at": "PRO_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_deployment",
+    "target": "T_DEPLOYMENT",
+    "columns": {
+      "id": "DEP_CH_ID",
+      "machine_id": "DEP_CH_MACHINE_ID",
+      "project_id": "DEP_CH_PROJECT_ID",
+      "workspace_path": "DEP_CH_WORKSPACE_PATH",
+      "enabled": "DEP_BL_ENABLED",
+      "created_at": "DEP_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_action_template",
+    "target": "T_ACTIONTEMPLATE",
+    "columns": {
+      "id": "ACT_CH_ID",
+      "revision": "ACT_N_REVISION",
+      "description": "ACT_CH_DESCRIPTION",
+      "risk": "ACT_CH_RISK",
+      "definition_sha256": "ACT_CH_DEFINITION_SHA256"
+    }
+  },
+  {
+    "old": "dm_deployment_action",
+    "target": "T_DEPLOYMENTACTION",
+    "columns": {
+      "deployment_id": "DPA_CH_DEPLOYMENT_ID",
+      "action_id": "DPA_CH_ACTION_ID",
+      "action_revision": "DPA_N_ACTION_REVISION",
+      "enabled": "DPA_BL_ENABLED"
+    }
+  },
+  {
+    "old": "dm_agent_identity",
+    "target": "T_AGENTIDENTITY",
+    "columns": {
+      "id": "AGI_CH_ID",
+      "machine_id": "AGI_CH_MACHINE_ID",
+      "credential_hash": "AGI_CH_CREDENTIAL_HASH",
+      "expires_at": "AGI_DT_EXPIRES_AT",
+      "revoked_at": "AGI_DT_REVOKED_AT",
+      "created_at": "AGI_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_job",
+    "target": "T_JOB",
+    "columns": {
+      "id": "JOB_CH_ID",
+      "deployment_id": "JOB_CH_DEPLOYMENT_ID",
+      "action_id": "JOB_CH_ACTION_ID",
+      "action_revision": "JOB_N_ACTION_REVISION",
+      "arguments_json": "JOB_CH_ARGUMENTS_JSON",
+      "status": "JOB_CH_STATUS",
+      "idempotency_key": "JOB_CH_IDEMPOTENCY_KEY",
+      "expires_at": "JOB_DT_EXPIRES_AT",
+      "created_at": "JOB_DT_CREATION",
+      "updated_at": "JOB_DT_UPDATED_AT",
+      "policy_revision_id": "JOB_CH_POLICY_REVISION_ID"
+    }
+  },
+  {
+    "old": "dm_job_attempt",
+    "target": "T_JOBATTEMPT",
+    "columns": {
+      "id": "JAT_CH_ID",
+      "job_id": "JAT_CH_JOB_ID",
+      "machine_id": "JAT_CH_MACHINE_ID",
+      "fencing_token": "JAT_N_FENCING_TOKEN",
+      "lease_expires_at": "JAT_DT_LEASE_EXPIRES_AT",
+      "started_at": "JAT_DT_STARTED_AT",
+      "finished_at": "JAT_DT_FINISHED_AT",
+      "exit_code": "JAT_N_EXIT_CODE"
+    }
+  },
+  {
+    "old": "dm_job_event",
+    "target": "T_JOBEVENT",
+    "columns": {
+      "id": "JEV_N_ID",
+      "job_id": "JEV_CH_JOB_ID",
+      "event_type": "JEV_CH_EVENT_TYPE",
+      "details_json": "JEV_CH_DETAILS_JSON",
+      "created_at": "JEV_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_audit_event",
+    "target": "T_AUDITEVENT",
+    "columns": {
+      "id": "AUD_N_ID",
+      "actor": "AUD_CH_ACTOR",
+      "event_type": "AUD_CH_EVENT_TYPE",
+      "object_type": "AUD_CH_OBJECT_TYPE",
+      "object_id": "AUD_CH_OBJECT_ID",
+      "outcome": "AUD_CH_OUTCOME",
+      "details_json": "AUD_CH_DETAILS_JSON",
+      "created_at": "AUD_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_policy_revision",
+    "target": "T_POLICYREVISION",
+    "columns": {
+      "id": "POL_CH_ID",
+      "deployment_id": "POL_CH_DEPLOYMENT_ID",
+      "revision_number": "POL_N_REVISION_NUMBER",
+      "policy_sha256": "POL_CH_POLICY_SHA256",
+      "approved_at": "POL_DT_APPROVED_AT"
+    }
+  },
+  {
+    "old": "dm_enrollment_invitation",
+    "target": "T_ENROLLMENTINVITATION",
+    "columns": {
+      "id": "ENI_CH_ID",
+      "machine_id": "ENI_CH_MACHINE_ID",
+      "token_hash": "ENI_CH_TOKEN_HASH",
+      "expires_at": "ENI_DT_EXPIRES_AT",
+      "consumed_at": "ENI_DT_CONSUMED_AT",
+      "created_at": "ENI_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_workspace_diagnostic",
+    "target": "T_WORKSPACEDIAGNOSTIC",
+    "columns": {
+      "deployment_id": "WDG_CH_DEPLOYMENT_ID",
+      "machine_id": "WDG_CH_MACHINE_ID",
+      "status": "WDG_CH_STATUS",
+      "branch": "WDG_CH_BRANCH",
+      "commit_sha": "WDG_CH_COMMIT_SHA",
+      "inspected_at": "WDG_DT_INSPECTED_AT"
+    }
+  },
+  {
+    "old": "dm_remote_readonly_job",
+    "target": "T_REMOTEREADONLYJOB",
+    "columns": {
+      "id": "RRJ_CH_ID",
+      "deployment_id": "RRJ_CH_DEPLOYMENT_ID",
+      "machine_id": "RRJ_CH_MACHINE_ID",
+      "action_name": "RRJ_CH_ACTION_NAME",
+      "arguments_json": "RRJ_CH_ARGUMENTS_JSON",
+      "state": "RRJ_CH_STATE",
+      "created_at": "RRJ_DT_CREATION",
+      "claimed_at": "RRJ_DT_CLAIMED_AT",
+      "finished_at": "RRJ_DT_FINISHED_AT",
+      "result_json": "RRJ_CH_RESULT_JSON"
+    }
+  },
+  {
+    "old": "dm_remote_hosting_job",
+    "target": "T_REMOTEHOSTINGJOB",
+    "columns": {
+      "id": "RHJ_CH_ID",
+      "deployment_id": "RHJ_CH_DEPLOYMENT_ID",
+      "machine_id": "RHJ_CH_MACHINE_ID",
+      "action_name": "RHJ_CH_ACTION_NAME",
+      "request_json": "RHJ_CH_REQUEST_JSON",
+      "state": "RHJ_CH_STATE",
+      "created_at": "RHJ_DT_CREATION",
+      "expires_at": "RHJ_DT_EXPIRES_AT",
+      "claimed_at": "RHJ_DT_CLAIMED_AT",
+      "finished_at": "RHJ_DT_FINISHED_AT",
+      "result_json": "RHJ_CH_RESULT_JSON"
+    }
+  },
+  {
+    "old": "dm_remote_project",
+    "target": "T_REMOTEPROJECT",
+    "columns": {
+      "project_id": "RPR_CH_PROJECT_ID",
+      "deployment_id": "RPR_CH_DEPLOYMENT_ID",
+      "machine_id": "RPR_CH_MACHINE_ID",
+      "repository": "RPR_CH_REPOSITORY",
+      "workspace_path": "RPR_CH_WORKSPACE_PATH",
+      "config_json": "RPR_CH_CONFIG_JSON",
+      "config_revision": "RPR_N_CONFIG_REVISION",
+      "ready": "RPR_BL_READY",
+      "metadata_json": "RPR_CH_METADATA_JSON"
+    }
+  },
+  {
+    "old": "dm_remote_project_job",
+    "target": "T_REMOTEPROJECTJOB",
+    "columns": {
+      "id": "RPJ_CH_ID",
+      "project_id": "RPJ_CH_PROJECT_ID",
+      "machine_id": "RPJ_CH_MACHINE_ID",
+      "deployment_id": "RPJ_CH_DEPLOYMENT_ID",
+      "operation": "RPJ_CH_OPERATION",
+      "request_json": "RPJ_CH_REQUEST_JSON",
+      "state": "RPJ_CH_STATE",
+      "created_at": "RPJ_DT_CREATION",
+      "claimed_at": "RPJ_DT_CLAIMED_AT",
+      "finished_at": "RPJ_DT_FINISHED_AT",
+      "expires_at": "RPJ_DT_EXPIRES_AT",
+      "result_json": "RPJ_CH_RESULT_JSON"
+    }
+  },
+  {
+    "old": "dm_machine_capability",
+    "target": "T_MACHINECAPABILITY",
+    "columns": {
+      "machine_key": "MCA_CH_MACHINE_KEY",
+      "hosting": "MCA_BL_HOSTING",
+      "cordova_android": "MCA_BL_CORDOVA_ANDROID",
+      "cordova_ios": "MCA_BL_CORDOVA_IOS"
+    }
+  },
+  {
+    "old": "dm_project_provisioning",
+    "target": "T_PROJECTPROVISIONING",
+    "columns": {
+      "project_id": "PPR_CH_PROJECT_ID",
+      "description": "PPR_CH_DESCRIPTION",
+      "repository": "PPR_CH_REPOSITORY",
+      "repository_mode": "PPR_CH_REPOSITORY_MODE",
+      "state": "PPR_CH_STATE",
+      "repository_confirmed": "PPR_BL_REPOSITORY_CONFIRMED",
+      "machine": "PPR_CH_MACHINE",
+      "workspace_path": "PPR_CH_WORKSPACE_PATH",
+      "actions_enabled": "PPR_BL_ACTIONS_ENABLED",
+      "revision": "PPR_N_REVISION",
+      "created_at": "PPR_DT_CREATION",
+      "updated_at": "PPR_DT_UPDATED_AT"
+    }
+  },
+  {
+    "old": "dm_local_project_config",
+    "target": "T_LOCALPROJECTCONFIG",
+    "columns": {
+      "project_id": "LPC_CH_PROJECT_ID",
+      "config_json": "LPC_CH_CONFIG_JSON",
+      "updated_at": "LPC_DT_UPDATED_AT"
+    }
+  },
+  {
+    "old": "dm_shared_action_config",
+    "target": "T_SHAREDACTIONCONFIG",
+    "columns": {
+      "action_id": "SAC_CH_ACTION_ID",
+      "config_json": "SAC_CH_CONFIG_JSON",
+      "updated_at": "SAC_DT_UPDATED_AT"
+    }
+  },
+  {
+    "old": "dm_project_registry_state",
+    "target": "T_PROJECTREGISTRYSTATE",
+    "columns": {
+      "id": "PRS_N_ID",
+      "ready": "PRS_BL_READY",
+      "migrated_at": "PRS_DT_MIGRATED_AT"
+    }
+  },
+  {
+    "old": "dm_preview_port_reservation",
+    "target": "T_PREVIEWPORTRESERVATION",
+    "columns": {
+      "project_id": "PVR_CH_PROJECT_ID",
+      "machine": "PVR_CH_MACHINE",
+      "port": "PVR_N_PORT",
+      "created_at": "PVR_DT_CREATION"
+    }
+  },
+  {
+    "old": "dm_agent_zerotier_address",
+    "target": "T_AGENTZEROTIERADDRESS",
+    "columns": {
+      "machine_id": "AZA_CH_MACHINE_ID",
+      "ipv4": "AZA_CH_IPV4",
+      "observed_at": "AZA_DT_OBSERVED_AT"
+    }
+  },
+  {
+    "old": "dm_runtime_type",
+    "target": "T_RUNTIMETYPE",
+    "columns": {
+      "code": "RTY_CH_CODE",
+      "label": "RTY_CH_LABEL",
+      "protocol": "RTY_CH_PROTOCOL",
+      "supervisor": "RTY_CH_SUPERVISOR",
+      "selectable": "RTY_BL_SELECTABLE"
+    }
+  },
+  {
+    "old": "dm_project_runtime",
+    "target": "T_PROJECTRUNTIME",
+    "columns": {
+      "project_id": "PRT_CH_PROJECT_ID",
+      "runtime_type": "PRT_CH_RUNTIME_TYPE",
+      "desired_state": "PRT_CH_DESIRED_STATE",
+      "entrypoint": "PRT_CH_ENTRYPOINT",
+      "document_root": "PRT_CH_DOCUMENT_ROOT",
+      "health_path": "PRT_CH_HEALTH_PATH",
+      "revision": "PRT_N_REVISION",
+      "updated_at": "PRT_DT_UPDATED_AT"
+    }
+  },
+  {
+    "old": "dm_theme",
+    "target": "T_THEME",
+    "columns": {
+      "id": "THE_CH_ID",
+      "name": "THE_CH_NAME",
+      "project": "THE_CH_PROJECT",
+      "repository": "THE_CH_REPOSITORY",
+      "preview": "THE_CH_PREVIEW",
+      "is_default": "THE_BL_IS_DEFAULT"
+    }
+  },
+  {
+    "old": "dm_project_theme",
+    "target": "T_PROJECTTHEME",
+    "columns": {
+      "project_id": "PTH_CH_PROJECT_ID",
+      "theme_id": "PTH_CH_THEME_ID",
+      "installed_sha": "PTH_CH_INSTALLED_SHA"
+    }
+  },
+  {
+    "old": "dm_template",
+    "target": "T_TEMPLATE",
+    "columns": {
+      "id": "TPL_CH_ID",
+      "name": "TPL_CH_NAME",
+      "project_type": "TPL_CH_PROJECT_TYPE",
+      "source_project": "TPL_CH_SOURCE_PROJECT",
+      "repository": "TPL_CH_REPOSITORY",
+      "is_default": "TPL_BL_IS_DEFAULT"
+    }
+  },
+  {
+    "old": "dm_project_template",
+    "target": "T_PROJECTTEMPLATE",
+    "columns": {
+      "project_id": "PTP_CH_PROJECT_ID",
+      "template_id": "PTP_CH_TEMPLATE_ID",
+      "source_sha": "PTP_CH_SOURCE_SHA",
+      "applied_sha": "PTP_CH_APPLIED_SHA"
+    }
+  }
+]
