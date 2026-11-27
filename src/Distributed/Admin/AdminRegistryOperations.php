@@ -6,10 +6,10 @@ use PDO;
 /** Fixed HTTP operations delegating to the exact Web-admin business services. */
 final class AdminRegistryOperations
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor, private readonly array $themeConfig = []) {}
     public function execute(string $method,string $path,array $data): array
     {
-        if($method==='GET'&&$path==='/themes')return ['themes'=>(new \Cowprod\DevMcp\Project\ThemeCatalogue($this->db))->all()];
+        if($method==='GET'&&$path==='/themes')return ['themes'=>\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->themeConfig, $this->actor)->all()];
         if(preg_match('~^/projects/([a-z0-9][a-z0-9._-]{0,63})/theme$~D',$path,$themeRoute)){
             $project=$themeRoute[1];
             $q=$this->db->prepare('SELECT id FROM dm_project WHERE id=?');$q->execute([$project]);
@@ -17,7 +17,7 @@ final class AdminRegistryOperations
                 $q=$this->db->prepare('SELECT project_id FROM dm_local_project_config WHERE project_id=?');$q->execute([$project]);
                 if($q->fetchColumn()===false)throw new AdminReadApiError(404,'not_found');
             }
-            $catalogue=new \Cowprod\DevMcp\Project\ThemeCatalogue($this->db);
+            $catalogue=\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->themeConfig, $this->actor);
             if($method==='GET')return $catalogue->assignment($project);
             if($method==='PUT'){
                 self::keys($data,['theme_id']);

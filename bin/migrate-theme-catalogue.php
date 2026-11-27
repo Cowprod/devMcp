@@ -42,20 +42,26 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
-    $migrationPath = dirname(__DIR__) . '/migrations/20261124_theme_catalogue.sql';
-    $migration = file_get_contents($migrationPath);
-    if (!is_string($migration) || trim($migration) === '') {
-        throw new RuntimeException('Migration des chartes introuvable');
-    }
-    foreach (preg_split('/;\\s*(?:\\r?\\n|$)/', $migration) ?: [] as $statement) {
-        if (trim($statement) !== '') {
-            $db->exec($statement);
+    if (array_key_exists('cowprod_themes', $distributed)) {
+        // The Cowprod schema is only prepared through the separate pilot CLI.
+        // Once switched, the legacy projection must remain frozen.
+        \Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($db, $distributed)->all();
+    } else {
+        $migrationPath = dirname(__DIR__) . '/migrations/20261124_theme_catalogue.sql';
+        $migration = file_get_contents($migrationPath);
+        if (!is_string($migration) || trim($migration) === '') {
+            throw new RuntimeException('Migration des chartes introuvable');
         }
+        foreach (preg_split('/;\\s*(?:\\r?\\n|$)/', $migration) ?: [] as $statement) {
+            if (trim($statement) !== '') {
+                $db->exec($statement);
+            }
+        }
+        $db->query('SELECT project_id, theme_id, installed_sha FROM dm_project_theme LIMIT 0');
+        // A successful DDL statement alone is insufficient if an incompatible
+        // table already existed: prove the expected columns are readable.
+        $db->query('SELECT id, name, project, repository, preview, is_default FROM dm_theme LIMIT 0');
     }
-    $db->query('SELECT project_id, theme_id, installed_sha FROM dm_project_theme LIMIT 0');
-    // A successful DDL statement alone is insufficient if an incompatible
-    // table already existed: prove the expected columns are readable.
-    $db->query('SELECT id, name, project, repository, preview, is_default FROM dm_theme LIMIT 0');
     // Compatibility with the installed updater, which already invokes this migration.
     $templateMigration = file_get_contents(dirname(__DIR__) . '/migrations/20261126_template_catalogue.sql');
     if (!is_string($templateMigration) || trim($templateMigration) === '') {

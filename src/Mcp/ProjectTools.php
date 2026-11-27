@@ -728,7 +728,7 @@ final class ProjectTools
         if($this->remoteTools===null)throw new \InvalidArgumentException('Distributed registry unavailable');
         return $this->remoteTools->deploymentService();
     }
-    private function themeCatalogue(): \Cowprod\DevMcp\Project\ThemeCatalogue
+    private function themeCatalogue(): \Cowprod\DevMcp\Project\ThemeCatalogue|\Cowprod\DevMcp\Project\CowprodThemeCatalogue
     {
         if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
         return $this->remoteTools->themeCatalogue();

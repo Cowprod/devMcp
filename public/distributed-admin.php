@@ -258,7 +258,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $known=in_array($projectId,array_column((new RegistryRepository($writer))->projects(),'id'),true)
                     || ($localFresh && in_array($projectId,array_column($localSnapshot['projects'],'id'),true));
                 if (!$known) throw new InvalidArgumentException('Projet inconnu');
-                (new \Cowprod\DevMcp\Project\ThemeCatalogue($writer))->select($projectId,(string)($_POST['theme_id']??''));
+                \Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($writer, $config, 'web-admin:'.$adminUser)->select($projectId,(string)($_POST['theme_id']??''));
                 break;
             case 'instance.register':
                 $instances->add((string)($_POST['project_id']??''),(string)($_POST['machine_id']??''),trim((string)($_POST['workspace_path']??''))?:null,$instanceConfiguration(),(string)($_POST['confirmation']??''));
@@ -393,14 +393,14 @@ $themeAssignments = [];
 $themeInstalled = [];
 $themeAvailable = false;
 try {
-    $themeCatalogue = array_map(static fn($t)=>$t+['default'=>$t['is_default']],(new \Cowprod\DevMcp\Project\ThemeCatalogue($db))->all());
+    $themeCatalogue = array_map(static fn($t)=>$t+['default'=>$t['is_default']],\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($db, $config, 'web-admin:'.$adminUser)->all());
     $themeAssignments = [];
     foreach($themeCatalogue as $theme)foreach($theme['projects'] as $assignment){
         $themeAssignments[$assignment['project_id']]=$assignment['theme_id'];
         $themeInstalled[$assignment['project_id']]=$assignment['installed_sha']??'';
     }
     $themeAvailable = true;
-} catch (PDOException $exception) {
+} catch (Throwable $exception) {
     error_log('devmcp-admin theme catalogue unavailable');
 }
 // History is optional if the read-only SQL account has not yet been granted SELECT.

@@ -89,3 +89,78 @@ sécurité d’un module.
 En cas d’échec après création du dépôt, le résultat indique
 `partial_failure/template_publish`. Le dépôt et le workspace restent disponibles
 pour inspection. Vérifier l’état Git et l’affectation existante avant de relancer.
+
+## Pilote des thèmes prêt pour homologation
+
+Les noms retenus sont `T_THEME` (`THE_`) et `T_PROJECTTHEME` (`PTH_`).
+Les slugs publics demeurent les identifiants de projet et de thème dans les
+réponses et entrées MCP, HTTP et Web. Les clés numériques de filiation restent
+internes et ne sont rendues dans aucune réponse. Les routes et la vérification
+des droits des agents et administrateurs continuent d’utiliser leurs contrats
+existants. La revue de l’encodage des clés publiques dans l’ensemble de l’admin
+reste un lot séparé.
+
+Le pilote utilise les helpers de son socle vérifié, des SELECT métier dans
+`src/Project/theme/` et une transaction qui verrouille les opérations d’un même
+projet. Une sélection identique ne crée aucun historique. Un retrait autorisé
+marque directement la ligne comme supprimée. Le changement d’un thème installé
+passe toujours par l’installateur. Un échec SQL restaure l’affectation et appelle
+la compensation d’activation si celle-ci avait eu lieu. Le catalogue de thèmes
+lui-même est en lecture seule à travers les interfaces actuelles.
+
+Les dates et signatures absentes de l’ancien schéma restent à NULL lors de
+l’import. Toute nouvelle création, révision ou suppression reçoit la signature
+issue du point d’entrée authentifié. L’admin Web fournit le login de sa session
+et l’API d’administration l’identifiant de sa session authentifiée. Le tunnel
+MCP utilise une identité de service explicitement configurée dans `mcp_actor`
+car le protocole de cette instance ne transmet pas de login humain vérifiable
+à ces appels. Les arguments MCP ne permettent pas de fournir cette identité.
+
+### Fenêtre de bascule proposée
+
+1. Préparer une sauvegarde vérifiée et suspendre les écritures de thèmes dans
+   le tunnel MCP, l’admin Web et l’API mobile. Suspendre aussi les mises à jour
+   automatiques durant la fenêtre. Les tables initiales restent l’autorité
+   tant que la configuration distribuée ne contient pas `cowprod_themes`.
+2. Installer dans un chemin partagé et administré un socle généré avec
+   `bin/devmcp-socle-php` à sa révision validée. L’arbre du socle est en lecture
+   seule pour PHP et le serveur web. Configurer les droits SQL nécessaires
+   avant activation. Lecteur `SELECT` sur les deux nouvelles tables. Écrivain
+   `SELECT, INSERT, UPDATE` et droits de migration pour le compte opérateur.
+3. Exécuter `php bin/migrate-cowprod-themes --prepare THEME_WRITES_QUIESCED`
+   puis `php bin/migrate-cowprod-themes --verify` avec la configuration
+   distribuée. Le premier crée et remplit les deux nouvelles tables. Le
+   second compare toutes les lignes métier et SHAs actifs. Un écart bloque
+   la bascule. Les DDL sont impliqués dans la fenêtre car MySQL et MariaDB les
+   valident séparément de la transaction de copie.
+4. Ajouter `cowprod_themes` à la configuration distribuée commune. Fournir
+   `socle_root` (chemin absolu), `socle_revision` (SHA complet) et
+   `mcp_actor` (principal de service vérifié pour cette installation).
+   Déployer le même code sur les surfaces Web et MCP et recharger les
+   processus. Contrôler le catalogue et les droits des trois transports
+   avant de rouvrir les écritures.
+5. En cas de retour, suspendre à nouveau les écritures. Garder
+   `cowprod_themes` actif le temps de lancer
+   `php bin/migrate-cowprod-themes --project-back THEME_WRITES_QUIESCED`
+   et `--verify`. Ce retour répercute les écritures récentes dans les tables
+   anciennes, y compris les retraits, et conserve les tables historisées.
+   Retirer le réglage seulement après contrôle, puis recharger les processus.
+   Ne pas réactiver les tables historisées après des écritures dans l’ancien
+   modèle sans réconciliation explicite.
+
+Un seul catalogue est servi à chaque instant. Les anciennes tables conservées
+pendant la fenêtre de retour sont une projection figée, sans double écriture.
+L’auto-update n’exécute pas la migration du pilote.
+
+### Recette reproductible
+
+```sh
+COWPROD_THEME_TEST_DSN='mysql:unix_socket=/chemin/jetable/mysql.sock;charset=utf8mb4' \
+COWPROD_THEME_TEST_SOCLE='/chemin/vers/socle-généré' \
+php tests/cowprod-theme-pilot.php
+```
+
+Le test crée et retire une base au nom aléatoire sur l’instance explicitement
+désignée. Il compare les réponses avant et après bascule, exerce sélection,
+installation, suppression logique, concurrence, signature et compensation en
+cas d’erreur SQL, puis vérifie le retour avec conservation de l’historique.
