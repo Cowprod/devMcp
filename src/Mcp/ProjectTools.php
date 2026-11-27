@@ -821,10 +821,10 @@ final class ProjectTools
             $template=$choice['template_id']??throw new InvalidArgumentException('Select template first');
             if(($choice['applied_sha']??null)!==null)throw new InvalidArgumentException('Template already applied');
             $meta=$this->templateCatalogue()->info($template);
-            if($meta['project_type']!=='cordova')throw new InvalidArgumentException('Template type is not yet supported');
+            if(!in_array($meta['project_type'],['cordova','php'],true))throw new InvalidArgumentException('Template type is not yet supported');
             $source=$this->localActionProject($meta['source_project']);
             $target=$this->localActionProject($project);
-            $revision=(new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->apply($source->root,$target->root,$sha,$project);
+            $revision=(new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->apply($source->root,$target->root,$sha,$project,$meta['project_type']);
             $result=$this->templateCatalogue()->markApplied($project,$template,$sha,$revision);
             $this->audit->append(['project'=>$project,'action'=>'template.apply','template_id'=>$template,'revision'=>$revision,'outcome'=>'succeeded']);
             return $result+['git_revision'=>$revision,'committed'=>true,'pushed'=>true];

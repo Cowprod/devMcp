@@ -9,10 +9,11 @@ use Symfony\Component\Process\Process;
 /** Trusted local Git source -> clean project Git repository; no shell interpreter. */
 final class ProjectTemplatePublisher
 {
-    public function apply(string $source,string $target,string $sha,string $project): string
+    public function apply(string $source,string $target,string $sha,string $project,string $type="cordova"): string
     {
         if(!preg_match('/^[a-f0-9]{40}$/D',$sha) || !preg_match('/^[a-z0-9][a-z0-9-]{0,63}$/D',$project))
             throw new InvalidArgumentException('Invalid template revision or project');
+        if(!in_array($type,["cordova","php"],true))throw new InvalidArgumentException("Unsupported template type");
         $source=$this->canonical($source);$target=$this->canonical($target);
         if($source===$target)throw new InvalidArgumentException('Source equals destination');
         if($this->git($target,['status','--porcelain'])!=='')throw new RuntimeException('Target project must be clean');
@@ -34,17 +35,18 @@ final class ProjectTemplatePublisher
             if(file_exists($dest)||is_link($dest))throw new RuntimeException('Template destination occupied: '.$name);
             $paths[]=$name;
         }
-        if(!in_array('config.xml',$paths,true) || !in_array('package.json',$paths,true)
-            || !in_array('package-lock.json',$paths,true) || !in_array('public/index.html',$paths,true))
+        if($type==='cordova' && (!in_array('config.xml',$paths,true) || !in_array('package.json',$paths,true)
+            || !in_array('package-lock.json',$paths,true) || !in_array('public/index.html',$paths,true)))
             throw new RuntimeException('Template is not a complete Cordova source');
+        if($type==='php' && (!in_array('public/index.php',$paths,true) || !in_array('AGENTS.md',$paths,true) || !in_array('socle.lock.json',$paths,true)))throw new RuntimeException('PHP template requires entrypoint, agent policy and socle lock');
         $slug=str_replace('-','',$project);
         foreach($paths as $name){
             $content=$this->git($source,['show',$sha.':'.$name],true);
-            if($name==='config.xml'){
+            if($type==='cordova' && $name==='config.xml'){
                 $content=preg_replace('/<widget\b([^>]*\bid=")[^"]+(")/','<widget$1com.cowprod.'.$slug.'$2',$content,1,$count);
                 if($count!==1)throw new RuntimeException('Cordova widget ID not found');
                 $content=preg_replace('~<name>[^<]+</name>~','<name>'.$project.'</name>',$content,1);
-            }elseif($name==='package.json' || $name==='package-lock.json'){
+            }elseif($type==='cordova' && ($name==='package.json' || $name==='package-lock.json')){
                 $data=json_decode($content,true,512,JSON_THROW_ON_ERROR);
                 if(!is_array($data))throw new RuntimeException('Invalid package metadata');
                 $data['name']='cowprod-'.$project;
@@ -56,7 +58,7 @@ final class ProjectTemplatePublisher
             if(file_put_contents($dest,$content,LOCK_EX)!==strlen($content))throw new RuntimeException('Template file write failed');
         }
         $this->git($target,['add','--',...$paths]);
-        $this->git($target,['commit','-m','Initialize project from versioned Cordova template']);
+        $this->git($target,['commit','-m','Initialize project from versioned '.$type.' template']);
         $revision=$this->git($target,['rev-parse','HEAD']);
         $this->git($target,['push','origin','HEAD:main']);
         return $revision;
