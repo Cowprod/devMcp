@@ -34,7 +34,9 @@ final class ThemeInstallerTest extends TestCase
         self::assertFalse($i->install($s,$d,$a,['bootstrap.min.css'])['changed']);
         file_put_contents($s.'/bootstrap.min.css','body{color:blue}');
         self::assertTrue($i->install($s,$d,$b,['bootstrap.min.css'])['changed']);
-        self::assertSame('body{color:red}',file_get_contents($d.'/devmcp-theme/current.css'));
+        self::assertFileDoesNotExist($d.'/devmcp-theme/current.css');
+        self::assertSame('body{color:red}', file_get_contents($d.'/devmcp-theme/'.$a.'/bootstrap.min.css'));
+        self::assertSame('body{color:blue}', file_get_contents($d.'/devmcp-theme/'.$b.'/bootstrap.min.css'));
         self::assertSame('body{margin:0}',file_get_contents($d.'/custom.css'));
     }
     public function testFailedInstallDoesNotAdvanceSqlSha(): void
@@ -67,9 +69,14 @@ final class ThemeInstallerTest extends TestCase
         $installer=new ThemeInstaller();
         $a=str_repeat('a',40);$b=str_repeat('b',40);
         $s=$this->root.'/source';$d=$this->root.'/target';
-        $original='<!doctype html><html><head><link rel="stylesheet" href="devmcp-theme/'.$a.'/bootstrap.min.css"></head><body><h1>#1</h1></body></html>';
-        file_put_contents($d.'/index.html',$original);
         $installer->install($s,$d,$a,['bootstrap.min.css']);
+        $legacy = '<!doctype html><html><head><link rel="stylesheet" href="devmcp-theme/'.$a.'/bootstrap.min.css"></head><body><h1>#1</h1></body></html>';
+        file_put_contents($d.'/index.html', $legacy);
+        self::assertFalse($installer->activate($d, $a)['page_linked']);
+        self::assertSame($legacy, file_get_contents($d.'/index.html'));
+
+        $original = str_replace($a.'/bootstrap.min.css', 'current.css', $legacy);
+        file_put_contents($d.'/index.html', $original);
         $initial=$installer->activate($d,$a);
         self::assertTrue($initial['page_linked']);
         self::assertFalse($initial['html_changed']);
