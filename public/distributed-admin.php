@@ -772,6 +772,7 @@ document.getElementById('copy-enrollment-command').addEventListener('click', asy
 </div></section>
 <?php if (!$remoteHistoryAvailable): ?><div class="alert alert-warning">Historique des actions distantes indisponible : vérifier les droits SQL en lecture seule et la migration 005. Les autorisations des agents ne sont pas affectées.</div><?php endif; ?><section class="row g-3 mb-4"><div class="col-12 col-xl-8"><div class="card"><div class="card-body">
 <h2 class="h5">Ajouter un projet</h2>
+<div class="mb-3"><strong>Socle PHP Cowprod</strong> — <a href="https://github.com/Cowprod/referenciel/tree/main/socle" target="_blank" rel="noopener noreferrer">Référentiel commun</a> · <a href="https://github.com/Cowprod/referenciel/blob/main/comparaisons/SUIVI_SOCLE_PHP.md" target="_blank" rel="noopener noreferrer">Suivi de conformité</a><p class="small mb-0">Pour les projets PHP : intégration automatique du socle non encore disponible.</p></div>
 <h3 class="h6">Créer un projet complet via devMcp</h3>
 <form method="post" action="/" class="registry-project-integrated-create">
 <input type="hidden" name="csrf" value="<?= e($_SESSION['csrf']) ?>">
