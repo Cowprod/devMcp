@@ -2,36 +2,41 @@
 
 ## Référence et périmètre
 
-Les règles de `Cowprod/referenciel` s’appliquent au code métier devMCP. Le présent
-chantier n’est pas le Lab Monitor et ne dépend pas de `lab-monitor-schema`.
-La [cartographie SQL](COWPROD-SQL-SCHEMA-INVENTORY.md) recense les 30 tables des
-migrations, leurs colonnes et leurs dépendances. Elle contient des propositions de
-renommage, pas une décision de les déployer. Le relevé des migrations doit être
-comparé à la structure réelle en lecture seule avant tout DDL.
-Le 27 novembre, le précontrôle en lecture seule de TouchDeck a retrouvé les
-30 tables attendues et leurs colonnes, sans divergence sur ces noms. Ce
-contrôle ne couvre pas encore les types, contraintes, index, triggers et vues.
+Les règles de `Cowprod/referenciel` s’appliquent au code métier devMCP. Le
+chantier est indépendant de la branche `lab-monitor-schema`. La
+[cartographie SQL](COWPROD-SQL-SCHEMA-INVENTORY.md) documente le relevé
+initial. Le [manifeste](cowprod-sql-rename-map.json) liste les 30 tables
+d’origine, leurs cibles et les colonnes de chaque table active.
 
 ## État du chantier sur TouchDeck
 
-Le pilote des thèmes, déployé à la révision `1757946`, a repris deux thèmes et
-sept affectations. La révision `13f6c77` a repris les deux modèles et leurs deux
-affectations, avec comparaison des SHA source et appliqués. Les deux modules
-utilisent le socle `a3524fe`. La révision `79dc1ac` a ensuite repris
-les quatre types de runtime et leurs dix-huit configurations.
+Le 28 novembre 2026 à 16 h 49 (Paris), le précontrôle de TouchDeck a
+confirmé **30 tables Cowprod actives sur 30**, avec la révision applicative
+`8651eec`. Les outils MCP et les agents conservent les mêmes identifiants.
+Les vues SQL de compatibilité pointent vers les tables normées. Les
+archives gardées pour le retour arrière sont hors des écritures métier.
 
-Les tables métier du registre des projets sont le prochain lot prioritaire.
-La mise en conformité de l’administration Web reste à traiter. La cartographie SQL recense les propositions
-pour les tables techniques sans valider d’exception.
+La comparaison des données avant et après la dernière bascule est
+identique, et les 17 services applicatifs ont gardé leur PID. L’API
+d’administration et le tunnel ont passé les contrôles. Le registre
+conserve quatre machines, trois identités et huit invitations. Les
+files distantes conservent 17 workspaces et 461 travaux existants. Un
+`git.head` MCP a ensuite abouti sur le Mac mini et produit les deux
+transitions signées attendues.
+
+Le retour des derniers lots a été répété sur des restaurations de
+TouchDeck. La sauvegarde de la base, des configurations et du code
+précédent se trouve dans
+`/var/backups/devmcp/agent-registry-cowprod-20261128T154500Z.gtV0yroj`.
 
 ## Suivi des écarts dans devMCP
 
 | Domaine | Constat dans le code | Correction et état |
 | --- | --- | --- |
-| Tables métier et nommage | Le registre des projets utilise encore des tables `dm_*` et des colonnes génériques. | Les thèmes, modèles et runtimes utilisent leurs tables `T_*` en production. Les autres cibles sont dans la cartographie. |
-| Historisation | Les mises à jour des fiches du registre restent à historiser. | Filiation et instantanés en service pour les affectations de thèmes, de modèles et de runtimes. |
-| Suppression | Plusieurs purges des files et événements sont techniques. | Suppression logique en service pour les affectations de thèmes, de modèles et de runtimes. Documenter les purges techniques par table. |
-| Signatures | Sessions d’admin, audit, identité d’agent et horodatages existent. Les lignes de catalogue ne portent pas toutes les signatures de création et de suppression. | Récupérer l’identité vérifiée à la frontière métier. Faire approuver le traitement des écritures d’agent. Ne jamais inventer une signature historique manquante. |
+| Tables métier et nommage | La cartographie relève les noms d’origine. | Les 30 tables actives sur TouchDeck utilisent leurs noms et préfixes Cowprod. |
+| Historisation | Les mises à jour des registres et les transitions des files modifient l’état courant. | Les mutations historisables conservent des instantanés signés. Les sections par lot décrivent les journaux immuables et les signaux de présence. |
+| Suppression | Le protocole conserve les jobs terminés et les états terminaux des identités. | Les retraits métier, révocations et consommations d’invitation sont logiques. Les procédures par lot décrivent leur effet sur les lectures. |
+| Signatures | Sessions d’admin, audit, identité d’agent et horodatages existent. | Les écritures signées prennent l’acteur vérifié à la frontière métier. La reprise conserve les signatures historiques disponibles. |
 | SQL métier | `src/Project/ThemeCatalogue.php`, `TemplateCatalogue.php`, `ProjectRuntimeCatalog.php` et certaines requêtes de `public/distributed-admin.php` utilisent des requêtes inline, des alias courts et du binding. | Migrer progressivement vers `.sql` + `oRs()` et helpers de préparation. Garder les contrôles existants en technique jusqu’à revue des exceptions. |
 | Identifiants | Les clés texte de projets, machines et jobs sont des contrats MCP/agent. L’admin en expose certaines dans les liens et données de formulaires ou AJAX. | Séparer identifiant navigateur et clé d’API, déchiffrer puis refaire le contrôle d’accès côté serveur. Fournir la clé externe par configuration. Préserver les identifiants MCP, ZeroTier, agents et artefacts. |
 | Organisation PHP | Admin distribué volumineux et vues mêlées aux traitements. Les composants métier ne suivent pas systématiquement `index.php`, `mod*.php`, `sel.php`, `trUpd*.php`, `trSup*.php`. | Extraire un module à la fois. Maintenir les routes MCP et agent existantes. Réutiliser les helpers du socle. |
@@ -43,7 +48,7 @@ métier. Une file de jobs, la progression ou un heartbeat ne deviennent pas mét
 parce qu’ils sont affichés dans le navigateur. Le catalogue projet existant reste
 l’autorité. Aucun deuxième registre n’est créé.
 
-## Ordre de migration proposé
+## Séquence de migration et de recette
 
 1. Extraire en lecture seule le schéma réel et rapprocher les 30 tables de leurs
    lecteurs et écrivains. Regrouper les écarts de structure, les DDL historiques,
