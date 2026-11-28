@@ -144,7 +144,20 @@
       "event_type": "JEV_CH_EVENT_TYPE",
       "details_json": "JEV_CH_DETAILS_JSON",
       "created_at": "JEV_DT_CREATION"
-    }
+    },
+    "archive": "dm_job_event_legacy",
+    "active_config": "cowprod_events",
+    "target_columns": [
+      "JEV_N_ID",
+      "JEV_N_MID",
+      "JEV_CH_JOB_ID",
+      "JEV_CH_EVENT_TYPE",
+      "JEV_CH_DETAILS_JSON",
+      "JEV_DT_CREATION",
+      "JEV_CH_CREATION",
+      "JEV_DT_SUPPRESSION",
+      "JEV_CH_SUPPRESSION"
+    ]
   },
   {
     "old": "dm_audit_event",
@@ -158,7 +171,23 @@
       "outcome": "AUD_CH_OUTCOME",
       "details_json": "AUD_CH_DETAILS_JSON",
       "created_at": "AUD_DT_CREATION"
-    }
+    },
+    "archive": "dm_audit_event_legacy",
+    "active_config": "cowprod_events",
+    "target_columns": [
+      "AUD_N_ID",
+      "AUD_N_MID",
+      "AUD_CH_ACTOR",
+      "AUD_CH_EVENT_TYPE",
+      "AUD_CH_OBJECT_TYPE",
+      "AUD_CH_OBJECT_ID",
+      "AUD_CH_OUTCOME",
+      "AUD_CH_DETAILS_JSON",
+      "AUD_DT_CREATION",
+      "AUD_CH_CREATION",
+      "AUD_DT_SUPPRESSION",
+      "AUD_CH_SUPPRESSION"
+    ]
   },
   {
     "old": "dm_policy_revision",

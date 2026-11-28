@@ -308,6 +308,30 @@ l'activation par un résultat distant dans la recette. Pour revenir, suspendre
 les écrivains, projeter les lignes mères vers l'archive puis retirer le
 réglage. Le nouveau journal reste présent avec son historique.
 
+## Journaux des tâches et de l'audit
+
+`T_JOBEVENT` et `T_AUDITEVENT` conservent les identifiants numériques, les
+séquences, les dates et le contenu des événements. La clé étrangère du
+journal des tâches reste liée à la tâche d'origine. Les vues d'insertion
+gardent l'ordre des écritures et leur transaction avec le changement d'état
+du job. Le journal d'audit conserve son acteur original. Le planificateur
+signe ses nouvelles entrées. Les anciens événements sans acteur gardent une
+signature inconnue.
+
+Le workflow ajoute des événements immuables. Il n'édite et ne supprime
+aucune entrée. Les cibles disposent des champs de filiation et de retrait
+logique. Un éventuel changement de politique de conservation devra aussi
+préserver les preuves d'audit. Les vues de compatibilité excluent les
+instantanés et les lignes retirées.
+
+Après sauvegarde, répéter `migrate-cowprod-events --prepare EVENT_WRITES_QUIESCED`,
+`--activate EVENT_WRITES_QUIESCED`, `--verify` et
+`--project-back EVENT_WRITES_QUIESCED` sur une restauration. En production,
+suspendre les écrivains et vérifier la copie, les droits, la séquence et
+les écritures transactionnelles. Le réglage `cowprod_events` signale la
+bascule dans l'inventaire. Le retour reporte les nouveaux événements
+dans les archives, sans modifier les événements déjà archivés.
+
 ## Runtimes de devMCP en production
 
 Les tables cibles sont `T_RUNTIMETYPE` (`RTY_`) et `T_PROJECTRUNTIME`
