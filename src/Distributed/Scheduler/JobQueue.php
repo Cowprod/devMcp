@@ -17,7 +17,7 @@ use Throwable;
  */
 final class JobQueue
 {
-    public function __construct(private readonly PDO $db)
+    public function __construct(private readonly PDO $db, private readonly ?CowprodSchedulerHistory $history = null)
     {
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
@@ -159,6 +159,7 @@ final class JobQueue
             }
 
             $attemptId = bin2hex(random_bytes(16));
+            $this->history?->job($job['id'], 'agent:'.$machineId);
             $update = $this->db->prepare(
                 'UPDATE dm_job SET status = \'leased\' WHERE id = ? AND status = \'queued\''
             );

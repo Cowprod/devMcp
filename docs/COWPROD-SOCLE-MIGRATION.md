@@ -337,6 +337,13 @@ les écritures transactionnelles. Le réglage `cowprod_events` signale la
 bascule dans l'inventaire. Le retour reporte les nouveaux événements
 dans les archives, sans modifier les événements déjà archivés.
 
+Les deux journaux ont basculé sur TouchDeck le 28 novembre 2026. Les 71
+entrées d'audit ont été conservées. Le journal des tâches était vide.
+Les séquences, la clé étrangère et les insertions transactionnelles ont
+été testées sur les deux moteurs et sur la version de MariaDB de TouchDeck.
+Sauvegardes et résultats dans
+`/var/backups/devmcp/events-cowprod-20261128T151814Z.UAeJWJYQ`.
+
 ## Observations des agents
 
 `T_AGENTZEROTIERADDRESS` et `T_WORKSPACEDIAGNOSTIC` conservent les relations
@@ -357,6 +364,31 @@ Le réglage `cowprod_agent_observations` sélectionne les écritures signées.
 Basculer après suspension des écrivains. Vérifier les droits réels de
 lecture et la remontée d'observations d'un agent. Revenir aux observations
 d'origine avant un éventuel retour des déploiements.
+
+## Planificateur distribué
+
+`T_ACTIONTEMPLATE`, `T_POLICYREVISION`, `T_DEPLOYMENTACTION`, `T_JOB` et
+`T_JOBATTEMPT` gardent les identifiants des échanges agents et les clés
+composées des révisions. Les clés étrangères utilisent les identifiants
+stables des lignes mères. Les deux tables physiques du journal des tâches
+sont raccordées à la même identité de tâche. Les anciennes relations
+internes au groupe restent dans les archives.
+
+Les templates et règles sont versionnés par les révisions existantes.
+L'historique des jobs et tentatives conserve les transitions précédentes et
+leur signature. Le renouvellement d'un bail modifie sa date. Les
+vérifications du propriétaire, de l'autorisation, du bail, de l'idempotence
+et du fencing restent celles du protocole existant. La quarantaine ne
+réinscrit aucune tâche dans la file.
+
+Répéter `migrate-cowprod-scheduler --prepare SCHEDULER_WRITES_QUIESCED`,
+`--activate SCHEDULER_WRITES_QUIESCED`, `--verify` et
+`--project-back SCHEDULER_WRITES_QUIESCED` sur une restauration. Les
+déploiements et journaux normalisés doivent être actifs. Suspendre les
+écrivains, activer le réglage `cowprod_scheduler` et vérifier les lectures
+des deux comptes, les dépendances et les transitions sous verrou. En cas
+de retour, projeter le groupe dans l'ordre des dépendances et rétablir les
+clés du journal avant le redémarrage.
 
 ## Runtimes de devMCP en production
 

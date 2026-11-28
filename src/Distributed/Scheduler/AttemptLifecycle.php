@@ -15,7 +15,7 @@ use Throwable;
  */
 final class AttemptLifecycle
 {
-    public function __construct(private readonly PDO $db)
+    public function __construct(private readonly PDO $db, private readonly ?CowprodSchedulerHistory $history = null)
     {
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
@@ -58,15 +58,27 @@ final class AttemptLifecycle
         if ($limit < 1 || $limit > 1000) {
             throw new InvalidArgumentException('Limite invalide');
         }
-        $stmt = $this->db->prepare(
-            'UPDATE dm_job INNER JOIN dm_job_attempt ON dm_job_attempt.job_id = dm_job.id '
-            . 'SET dm_job.status = \'uncertain\' '
-            . 'WHERE dm_job.status IN (\'leased\',\'running\') '
-            . 'AND dm_job_attempt.lease_expires_at <= UTC_TIMESTAMP(6) '
-            . 'ORDER BY dm_job_attempt.lease_expires_at LIMIT ' . $limit
-        );
-        $stmt->execute();
-        return $stmt->rowCount();
+        $this->db->beginTransaction();
+        try {
+            $jobs = $this->db->query(
+                "SELECT j.id FROM dm_job j JOIN dm_job_attempt a ON a.job_id = j.id
+                WHERE j.status IN ('leased','running') AND a.lease_expires_at <= UTC_TIMESTAMP(6)
+                ORDER BY a.lease_expires_at,j.id LIMIT ".$limit.' FOR UPDATE'
+            )->fetchAll(PDO::FETCH_COLUMN);
+            $update = $this->db->prepare("UPDATE dm_job SET status='uncertain' WHERE id=? AND status IN ('leased','running')");
+            $count = 0;
+            foreach (array_unique($jobs) as $job) {
+                $this->history?->job($job,'service:devmcp-scheduler');
+                $update->execute([$job]);
+                $count += $update->rowCount();
+            }
+            $this->db->commit();
+            return $count;
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction())
+                $this->db->rollBack();
+            throw $error;
+        }
     }
 
     private function transition(
@@ -98,6 +110,8 @@ final class AttemptLifecycle
             if ((int) $valid->fetchColumn() !== 1) {
                 throw new RuntimeException('Bail expire');
             }
+            $this->history?->job($row['id'], 'agent:'.$machineId);
+            $this->history?->tentative($attemptId, 'agent:'.$machineId);
             $update = $this->db->prepare('UPDATE dm_job SET status = ? WHERE id = ? AND status = ?');
             $update->execute([$to, $row['id'], $from]);
             if ($update->rowCount() !== 1) {

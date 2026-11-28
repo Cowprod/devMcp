@@ -6,6 +6,7 @@ use Cowprod\DevMcp\Distributed\Protocol\AgentHttpAdapter;
 use Cowprod\DevMcp\Distributed\Protocol\AgentService;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Scheduler\AttemptLifecycle;
+use Cowprod\DevMcp\Distributed\Scheduler\CowprodSchedulerHistory;
 use Cowprod\DevMcp\Distributed\Scheduler\JobQueue;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 
@@ -37,10 +38,11 @@ try {
     foreach (getallheaders() as $key => $value) {
         $headers[strtolower($key)] = $value;
     }
+    $history = CowprodSchedulerHistory::configured($db,$config);
     $service = new AgentService(
         new AgentAuthenticator($db),
-        new JobQueue($db),
-        new AttemptLifecycle($db),
+        new JobQueue($db,$history),
+        new AttemptLifecycle($db,$history),
     );
     $body = file_get_contents('php://input', false, null, 0, 65537);
     $result = (new AgentHttpAdapter($service))->handle(

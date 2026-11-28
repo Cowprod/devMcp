@@ -80,7 +80,23 @@
       "description": "ACT_CH_DESCRIPTION",
       "risk": "ACT_CH_RISK",
       "definition_sha256": "ACT_CH_DEFINITION_SHA256"
-    }
+    },
+    "archive": "dm_action_template_legacy",
+    "active_config": "cowprod_scheduler",
+    "target_columns": [
+      "ACT_N_ID",
+      "ACT_N_MID",
+      "ACT_CH_ID",
+      "ACT_N_REVISION",
+      "ACT_CH_DESCRIPTION",
+      "ACT_CH_RISK",
+      "ACT_DT_CREATION",
+      "ACT_CH_CREATION",
+      "ACT_DT_SUPPRESSION",
+      "ACT_CH_SUPPRESSION",
+      "ACT_CH_MERE",
+      "ACT_N_REVISIONMERE"
+    ]
   },
   {
     "old": "dm_deployment_action",
@@ -90,7 +106,23 @@
       "action_id": "DPA_CH_ACTION_ID",
       "action_revision": "DPA_N_ACTION_REVISION",
       "enabled": "DPA_BL_ENABLED"
-    }
+    },
+    "archive": "dm_deployment_action_legacy",
+    "active_config": "cowprod_scheduler",
+    "target_columns": [
+      "DPA_N_ID",
+      "DPA_N_MID",
+      "DPA_CH_DEPLOYMENT_ID",
+      "DPA_CH_ACTION_ID",
+      "DPA_N_ACTION_REVISION",
+      "DPA_BL_ENABLED",
+      "DPA_DT_CREATION",
+      "DPA_CH_CREATION",
+      "DPA_DT_SUPPRESSION",
+      "DPA_CH_SUPPRESSION",
+      "DPA_CH_DEPLOYMENTMERE",
+      "DPA_CH_ACTIONMERE"
+    ]
   },
   {
     "old": "dm_agent_identity",
@@ -119,7 +151,30 @@
       "created_at": "JOB_DT_CREATION",
       "updated_at": "JOB_DT_UPDATED_AT",
       "policy_revision_id": "JOB_CH_POLICY_REVISION_ID"
-    }
+    },
+    "archive": "dm_job_legacy",
+    "active_config": "cowprod_scheduler",
+    "target_columns": [
+      "JOB_N_ID",
+      "JOB_N_MID",
+      "JOB_CH_ID",
+      "JOB_CH_DEPLOYMENT_ID",
+      "JOB_CH_ACTION_ID",
+      "JOB_N_ACTION_REVISION",
+      "JOB_CH_ARGUMENTS_JSON",
+      "JOB_CH_STATUS",
+      "JOB_CH_IDEMPOTENCY_KEY",
+      "JOB_DT_EXPIRES_AT",
+      "JOB_DT_CREATION",
+      "JOB_CH_CREATION",
+      "JOB_DT_UPDATED_AT",
+      "JOB_CH_POLICY_REVISION_ID",
+      "JOB_DT_SUPPRESSION",
+      "JOB_CH_SUPPRESSION",
+      "JOB_CH_MERE",
+      "JOB_CH_DEPLOYMENTMERE",
+      "JOB_CH_IDEMPOTENCYMERE"
+    ]
   },
   {
     "old": "dm_job_attempt",
@@ -133,7 +188,28 @@
       "started_at": "JAT_DT_STARTED_AT",
       "finished_at": "JAT_DT_FINISHED_AT",
       "exit_code": "JAT_N_EXIT_CODE"
-    }
+    },
+    "archive": "dm_job_attempt_legacy",
+    "active_config": "cowprod_scheduler",
+    "target_columns": [
+      "JAT_N_ID",
+      "JAT_N_MID",
+      "JAT_CH_ID",
+      "JAT_CH_JOB_ID",
+      "JAT_CH_MACHINE_ID",
+      "JAT_N_FENCING_TOKEN",
+      "JAT_DT_LEASE_EXPIRES_AT",
+      "JAT_DT_STARTED_AT",
+      "JAT_DT_FINISHED_AT",
+      "JAT_N_EXIT_CODE",
+      "JAT_DT_CREATION",
+      "JAT_CH_CREATION",
+      "JAT_DT_SUPPRESSION",
+      "JAT_CH_SUPPRESSION",
+      "JAT_CH_MERE",
+      "JAT_CH_JOBMERE",
+      "JAT_N_FENCINGMERE"
+    ]
   },
   {
     "old": "dm_job_event",
@@ -198,7 +274,24 @@
       "revision_number": "POL_N_REVISION_NUMBER",
       "policy_sha256": "POL_CH_POLICY_SHA256",
       "approved_at": "POL_DT_APPROVED_AT"
-    }
+    },
+    "archive": "dm_policy_revision_legacy",
+    "active_config": "cowprod_scheduler",
+    "target_columns": [
+      "POL_N_ID",
+      "POL_N_MID",
+      "POL_CH_ID",
+      "POL_CH_DEPLOYMENT_ID",
+      "POL_N_REVISION_NUMBER",
+      "POL_DT_APPROVED_AT",
+      "POL_DT_CREATION",
+      "POL_CH_CREATION",
+      "POL_DT_SUPPRESSION",
+      "POL_CH_SUPPRESSION",
+      "POL_CH_MERE",
+      "POL_CH_DEPLOYMENTMERE",
+      "POL_N_REVISIONMERE"
+    ]
   },
   {
     "old": "dm_enrollment_invitation",

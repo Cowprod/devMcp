@@ -113,8 +113,9 @@ final class DeploymentTableMigration
     public function retour(): array
     {
         $this->assertIdle();
-        if ($this->workspaceDiagnosticsActive())
-            throw new RuntimeException('Revenir aux diagnostics historiques avant les déploiements');
+        foreach (['dm_workspace_diagnostic','dm_policy_revision','dm_deployment_action','dm_job'] as $child)
+            if ($this->childViewActive($child))
+                throw new RuntimeException('Revenir à '.$child.' avant les déploiements');
         $this->checkChildren('T_DEPLOYMENT','DEP_CH_MERE',true);
         $result = $this->transaction(function (): array {
             $this->db->exec('INSERT INTO dm_deployment_legacy (id,machine_id,project_id,workspace_path,enabled,created_at) '
@@ -162,7 +163,8 @@ final class DeploymentTableMigration
         $found=[];
         foreach ($q->fetchAll(PDO::FETCH_NUM) as [$table,$constraint,$field,$onUpdate,$onDelete]) {
             $table = strtolower($table);
-            if (isset($found[$table]) || !in_array(strtolower($field), ['deployment_id','wdg_ch_deployment_id'], true)
+            if (isset($found[$table]) || !in_array(strtolower($field), ['deployment_id','wdg_ch_deployment_id',
+                    'pol_ch_deployment_id','dpa_ch_deployment_id','job_ch_deployment_id'], true)
                 || !in_array($onUpdate,['RESTRICT','NO ACTION'],true) || !in_array($onDelete,['RESTRICT','NO ACTION'],true))
                 throw new RuntimeException('Attributs de clé étrangère incompatibles');
             $found[$table] = $constraint;
@@ -170,13 +172,21 @@ final class DeploymentTableMigration
         $expected=self::CHILDREN;
         if ($normalized) {
             $expected=array_map(static fn(string $name): string=>$name.'_cowprod',$expected);
-            if ($this->workspaceDiagnosticsActive()) {
-                $expected['dm_workspace_diagnostic_legacy'] = $expected['dm_workspace_diagnostic'];
-                unset($expected['dm_workspace_diagnostic']);
+            foreach ([
+                'dm_workspace_diagnostic'=>['t_workspacediagnostic','WDG_F_DEPLOYMENT'],
+                'dm_policy_revision'=>['t_policyrevision','POL_F_DEPLOYMENT'],
+                'dm_deployment_action'=>['t_deploymentaction','DPA_F_DEPLOYMENT'],
+                'dm_job'=>['t_job','JOB_F_DEPLOYMENT'],
+            ] as $child=>[$target,$constraint]) {
+                if ($this->childViewActive($child)) {
+                    $expected[$child.'_legacy'] = $expected[$child];
+                    unset($expected[$child]);
+                }
+                $query = $this->db->prepare('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND LOWER(TABLE_NAME)=?');
+                $query->execute([$target]);
+                if ($query->fetchColumn() !== false)
+                    $expected[$target] = $constraint;
             }
-            if ($this->db->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
-                AND LOWER(TABLE_NAME)='t_workspacediagnostic'")->fetchColumn() !== false)
-                $expected['t_workspacediagnostic'] = 'WDG_F_DEPLOYMENT';
         }
         ksort($found);
         ksort($expected);
@@ -184,10 +194,11 @@ final class DeploymentTableMigration
             throw new RuntimeException('Inventaire des clés vers les déploiements différent');
     }
 
-    private function workspaceDiagnosticsActive(): bool
+    private function childViewActive(string $table): bool
     {
-        return $this->db->query("SELECT TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
-            AND TABLE_NAME='dm_workspace_diagnostic'")->fetchColumn() === 'VIEW';
+        $query = $this->db->prepare("SELECT TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+        $query->execute([$table]);
+        return $query->fetchColumn() === 'VIEW';
     }
 
     private function projectReference(): string
