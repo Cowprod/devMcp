@@ -11,6 +11,7 @@ use Cowprod\DevMcp\Distributed\Enrollment\EnrollmentService;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Registry\RegistryRepository;
 use Cowprod\DevMcp\Project\CowprodRuntimeCatalogue;
+use Cowprod\DevMcp\Project\CowprodProjectRegistry;
 use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
 use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
 use Symfony\Component\Process\Process;
@@ -243,7 +244,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             throw new RuntimeException('Write access not configured');
         }
         $writer = DatabaseConnection::connect((string) $config['dsn'], (string) $config['writer_username'], (string) $config['writer_password']);
-        $editor = new RegistryEditor($writer);
+        $projectActor = 'web-admin:'.$adminUser;
+        $editor = new RegistryEditor($writer, $projectActor, CowprodProjectRegistry::configured($writer, $config, $projectActor));
         $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,'web-admin');
         $instanceConfiguration=static function():array{
             $configuration=[];
@@ -314,6 +316,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     throw new InvalidArgumentException('Arrêter le service avant de retirer sa configuration');
                 $catalogue->remove($project, $revision);
                 break;
+            case 'project.remove':
+                $editor->removeProject((string)($_POST['project_id'] ?? ''));
+                break;
             case 'project.update':
                 $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
                     (string) ($_POST['repository_url'] ?? ''));
@@ -355,7 +360,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
-                'project.runtime.select','project.runtime.remove','project.theme.select' => 'projects',
+                'project.runtime.select','project.runtime.remove','project.theme.select','project.remove' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
                 'instance.register','instance.configure','instance.action' => 'deployments',
@@ -1270,6 +1275,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const projectRemovalEnabled = <?= isset($config['cowprod_projects']) ? 'true' : 'false' ?>;
   const runtimeRemovalEnabled = <?= isset($config['cowprod_runtimes']) ? 'true' : 'false' ?>;
   const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   const machineCapabilities = <?= json_encode($machineCapabilities, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
@@ -1728,6 +1734,20 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         card.appendChild(el('p','small text-secondary','Modification autorisée uniquement si l’affectation est désactivée.'));
       }
       const submit=el('button','btn btn-success','Enregistrer');submit.type='submit';form.appendChild(submit);
+      if(projectRemovalEnabled && name==='projects' && row.dataset.registryEditable==='1'
+          && !row.dataset.provisioningState && row.dataset.localProject!=='1'){
+        const remove=el('button','btn btn-danger ms-2','Retirer du registre');
+        remove.type='submit';
+        remove.formNoValidate=true;
+        remove.addEventListener('click', event=>{
+          if(!window.confirm('Retirer ce projet du registre ?')){
+            event.preventDefault();
+            return;
+          }
+          form.elements.namedItem('operation').value='project.remove';
+        });
+        form.appendChild(remove);
+      }
       card.append(title,form);body.appendChild(card);
     }
     // Provisioning is relevant even when SQL-registry metadata is editable.

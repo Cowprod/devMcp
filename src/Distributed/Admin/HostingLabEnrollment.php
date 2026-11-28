@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Distributed\Admin;
 
 use InvalidArgumentException;
+use Cowprod\DevMcp\Project\CowprodProjectRegistry;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -31,7 +32,7 @@ final class HostingLabEnrollment
      *
      * @return array<string,mixed>
      */
-    public static function enroll(PDO $db, string $machineId): array
+    public static function enroll(PDO $db, string $machineId, ?CowprodProjectRegistry $projects = null): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $machineId) !== 1
             || $machineId === str_repeat('0', 32)) {
@@ -72,12 +73,12 @@ final class HostingLabEnrollment
             $ports = [];
             $created = 0;
             $existing = 0;
-            $findProject = $db->prepare(
+            $findProject = $projects === null ? $db->prepare(
                 'SELECT repository_url FROM dm_project WHERE id = ? FOR UPDATE'
-            );
-            $createProject = $db->prepare(
+            ) : null;
+            $createProject = $projects === null ? $db->prepare(
                 'INSERT INTO dm_project (id, description, repository_url) VALUES (?, ?, ?)'
-            );
+            ) : null;
             $findDeployment = $db->prepare(
                 'SELECT id, workspace_path, enabled FROM dm_deployment '
                 . 'WHERE machine_id = ? AND project_id = ? FOR UPDATE'
@@ -95,13 +96,18 @@ final class HostingLabEnrollment
             foreach (self::DEMOS as $runtime => $fixed) {
                 $project = $fixed['project'];
                 $workspace = '/srv/devmcp-hosting/' . $project;
-                $findProject->execute([$project]);
-                $row = $findProject->fetch(PDO::FETCH_ASSOC);
-                if ($row === false) {
-                    $createProject->execute([
-                        $project, 'Isolated devMcp hosting lab (' . $runtime . ')',
-                        self::REPOSITORY_URL,
-                    ]);
+                if ($projects === null) {
+                    $findProject->execute([$project]);
+                    $row = $findProject->fetch(PDO::FETCH_ASSOC) ?: null;
+                } else {
+                    $row = $projects->find($project);
+                }
+                if ($row === null) {
+                    $description = 'Isolated devMcp hosting lab (' . $runtime . ')';
+                    if ($projects === null)
+                        $createProject->execute([$project, $description, self::REPOSITORY_URL]);
+                    else
+                        $projects->create($project, $description, self::REPOSITORY_URL);
                     $audit->execute(['hosting_lab.project.create', 'project', $project]);
                 } elseif ($row['repository_url'] !== self::REPOSITORY_URL) {
                     throw new RuntimeException('Existing lab project has a different repository');

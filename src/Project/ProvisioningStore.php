@@ -17,6 +17,7 @@ final class ProvisioningStore
     public function __construct(
         private readonly PDO $db,
         private readonly ?PreviewPortAllocator $previewPorts = null,
+        private readonly ?CowprodProjectRegistry $projects = null,
     ) {}
 
     /**
@@ -62,13 +63,18 @@ final class ProvisioningStore
         }
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare(
-                'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
-            );
-            $statement->execute([
-                $record['project_id'], $record['description'],
-                'https://github.com/' . $record['repository'],
-            ]);
+            if ($this->projects !== null) {
+                $this->projects->create($record['project_id'], $record['description'],
+                    'https://github.com/'.$record['repository']);
+            } else {
+                $statement = $this->db->prepare(
+                    'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
+                );
+                $statement->execute([
+                    $record['project_id'], $record['description'],
+                    'https://github.com/' . $record['repository'],
+                ]);
+            }
             $statement = $this->db->prepare(
                 'INSERT INTO dm_project_provisioning '
                 . '(project_id, description, repository, repository_mode, state, '
@@ -97,6 +103,8 @@ final class ProvisioningStore
         $query->execute([$record['project_id'], $record['repository']]);
         $ids = $query->fetchAll(PDO::FETCH_COLUMN);
         if ($ids === []) {
+            if ($this->projects?->isReserved($record['project_id']))
+                throw new \InvalidArgumentException('Conflit: identifiant deja enregistre hors du journal');
             $query = $this->db->prepare('SELECT id FROM dm_project WHERE id = ?');
             $query->execute([$record['project_id']]);
             if ($query->fetchColumn() !== false) {
@@ -129,6 +137,8 @@ final class ProvisioningStore
      */
     public function assertAvailableForCreate(string $projectId, string $repository): void
     {
+        if ($this->projects?->isReserved($projectId))
+            throw new \InvalidArgumentException('Conflit: identifiant de projet deja reserve');
         $query = $this->db->prepare(
             'SELECT project_id FROM dm_project_provisioning '
             . 'WHERE project_id = ? OR repository = ? LIMIT 1'

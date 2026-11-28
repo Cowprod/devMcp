@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Distributed\Admin;
 
+use Cowprod\DevMcp\Project\CowprodProjectRegistry;
 use InvalidArgumentException;
 use PDO;
 
 final class RegistryEditor
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin') {}
+    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null) {}
 
     public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
@@ -93,10 +94,14 @@ final class RegistryEditor
         }
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare(
-                'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
-            );
-            $statement->execute([$id, $description, $repositoryUrl === '' ? null : $repositoryUrl]);
+            if ($this->projects !== null) {
+                $this->projects->create($id, $description, $repositoryUrl === '' ? null : $repositoryUrl);
+            } else {
+                $statement = $this->db->prepare(
+                    'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
+                );
+                $statement->execute([$id, $description, $repositoryUrl === '' ? null : $repositoryUrl]);
+            }
             $this->audit('project.create', 'project', $id);
             $this->db->commit();
         } catch (\Throwable $e) {
@@ -157,7 +162,7 @@ final class RegistryEditor
 
     /**
      * Register metadata for a project already proven to exist in the local snapshot.
-     * This only updates dm_project; it never changes executable PHP configuration,
+     * This only updates project metadata; it never changes executable PHP configuration,
      * action allowlists, agents, or the project's local workspace.
      */
     public function registerLocalProjectMetadata(string $id, string $description, string $repositoryUrl): void
@@ -175,10 +180,14 @@ final class RegistryEditor
         try {
             // Do not overwrite an existing distributed project: the normal edit
             // operation owns existing registry records.
-            $statement = $this->db->prepare(
-                'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
-            );
-            $statement->execute([$id, $description, $repositoryUrl === '' ? null : $repositoryUrl]);
+            if ($this->projects !== null) {
+                $this->projects->create($id, $description, $repositoryUrl === '' ? null : $repositoryUrl);
+            } else {
+                $statement = $this->db->prepare(
+                    'INSERT INTO dm_project (id,description,repository_url) VALUES (?,?,?)'
+                );
+                $statement->execute([$id, $description, $repositoryUrl === '' ? null : $repositoryUrl]);
+            }
             $this->audit('project.local_metadata.create', 'project', $id);
             $this->db->commit();
         } catch (\Throwable $error) {
@@ -200,14 +209,34 @@ final class RegistryEditor
         }
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare('UPDATE dm_project SET description=?, repository_url=? WHERE id=?');
-            $statement->execute([$description, $repositoryUrl === '' ? null : $repositoryUrl, $id]);
-            $check = $this->db->prepare('SELECT id FROM dm_project WHERE id=?');
-            $check->execute([$id]);
-            if ($check->fetchColumn() === false) {
-                throw new InvalidArgumentException('Projet distribué introuvable ou en lecture seule');
+            if ($this->projects !== null) {
+                $this->projects->update($id, $description, $repositoryUrl === '' ? null : $repositoryUrl);
+            } else {
+                $statement = $this->db->prepare('UPDATE dm_project SET description=?, repository_url=? WHERE id=?');
+                $statement->execute([$description, $repositoryUrl === '' ? null : $repositoryUrl, $id]);
+                $check = $this->db->prepare('SELECT id FROM dm_project WHERE id=?');
+                $check->execute([$id]);
+                if ($check->fetchColumn() === false) {
+                    throw new InvalidArgumentException('Projet distribué introuvable ou en lecture seule');
+                }
             }
             $this->audit('project.update', 'project', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
+    public function removeProject(string $id): void
+    {
+        if ($this->projects === null)
+            throw new InvalidArgumentException('Retrait du projet indisponible');
+
+        $this->db->beginTransaction();
+        try {
+            $this->projects->remove($id);
+            $this->audit('project.remove', 'project', $id);
             $this->db->commit();
         } catch (\Throwable $error) {
             $this->db->rollBack();

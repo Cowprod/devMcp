@@ -17,19 +17,20 @@ contrôle ne couvre pas encore les types, contraintes, index, triggers et vues.
 Le pilote des thèmes, déployé à la révision `1757946`, a repris deux thèmes et
 sept affectations. La révision `13f6c77` a repris les deux modèles et leurs deux
 affectations, avec comparaison des SHA source et appliqués. Les deux modules
-utilisent le socle `a3524fe`.
+utilisent le socle `a3524fe`. La révision `79dc1ac` a ensuite repris
+les quatre types de runtime et leurs dix-huit configurations.
 
-Les runtimes, les données métier des projets et l’administration Web de
-devMCP restent prioritaires. La cartographie SQL recense les propositions
+Les tables métier du registre des projets sont le prochain lot prioritaire.
+La mise en conformité de l’administration Web reste à traiter. La cartographie SQL recense les propositions
 pour les tables techniques sans valider d’exception.
 
 ## Suivi des écarts dans devMCP
 
 | Domaine | Constat dans le code | Correction et état |
 | --- | --- | --- |
-| Tables métier et nommage | Les catalogues des runtimes et des projets utilisent encore des tables `dm_*` et des colonnes génériques. | Les thèmes et les modèles utilisent `T_THEME`, `T_PROJECTTHEME`, `T_TEMPLATE` et `T_PROJECTTEMPLATE`. Les autres cibles sont dans la cartographie. |
-| Historisation | `ProjectRuntimeCatalog::select` modifie encore les lignes sur place. | Filiation et instantanés en service pour les affectations de thèmes et de modèles. |
-| Suppression | Plusieurs purges des files et événements sont techniques. | Suppression logique en service pour les affectations de thèmes et de modèles. Documenter les purges techniques par table. |
+| Tables métier et nommage | Le registre des projets utilise encore des tables `dm_*` et des colonnes génériques. | Les thèmes, modèles et runtimes utilisent leurs tables `T_*` en production. Les autres cibles sont dans la cartographie. |
+| Historisation | Les mises à jour des fiches du registre restent à historiser. | Filiation et instantanés en service pour les affectations de thèmes, de modèles et de runtimes. |
+| Suppression | Plusieurs purges des files et événements sont techniques. | Suppression logique en service pour les affectations de thèmes, de modèles et de runtimes. Documenter les purges techniques par table. |
 | Signatures | Sessions d’admin, audit, identité d’agent et horodatages existent. Les lignes de catalogue ne portent pas toutes les signatures de création et de suppression. | Récupérer l’identité vérifiée à la frontière métier. Faire approuver le traitement des écritures d’agent. Ne jamais inventer une signature historique manquante. |
 | SQL métier | `src/Project/ThemeCatalogue.php`, `TemplateCatalogue.php`, `ProjectRuntimeCatalog.php` et certaines requêtes de `public/distributed-admin.php` utilisent des requêtes inline, des alias courts et du binding. | Migrer progressivement vers `.sql` + `oRs()` et helpers de préparation. Garder les contrôles existants en technique jusqu’à revue des exceptions. |
 | Identifiants | Les clés texte de projets, machines et jobs sont des contrats MCP/agent. L’admin en expose certaines dans les liens et données de formulaires ou AJAX. | Séparer identifiant navigateur et clé d’API, déchiffrer puis refaire le contrôle d’accès côté serveur. Fournir la clé externe par configuration. Préserver les identifiants MCP, ZeroTier, agents et artefacts. |
@@ -101,7 +102,62 @@ En cas d’échec après création du dépôt, le résultat indique
 `partial_failure/template_publish`. Le dépôt et le workspace restent disponibles
 pour inspection. Vérifier l’état Git et l’affectation existante avant de relancer.
 
-## Lot runtimes de devMCP — prêt pour la bascule après recette
+## Registre des projets préparé sur la branche dédiée
+
+`T_PROJECT` utilise le préfixe `PRO_`, une clé numérique interne et les
+champs Cowprod de filiation, création et suppression. Le slug existant reste
+l’identifiant MCP et agent. Une seule ligne mère peut le porter, y compris
+après un retrait. Les modifications par l’admin utilisent `historiseTable()`
+et l’acteur de la session. Les créations par MCP et par le service d’inscription
+du lab utilisent les identités de leurs services.
+
+Le relevé de TouchDeck a trouvé 54 fiches, 23 déploiements et une seule
+clé étrangère vers le registre, `dm_deployment.fk_deployment_project`.
+La migration accroche cette clé à `T_PROJECT.PRO_CH_ACTIF`, une valeur
+générée et stockée pour les seules fiches actives. La compatibilité des
+lectures agent, MCP et Web est assurée par une vue en lecture seule du même
+nom que l’ancienne table. L’ancienne table est archivée pendant la fenêtre de
+retour et ses métadonnées ne sont plus écrites en fonctionnement courant.
+
+Le retrait logique est refusé tant que subsistent un déploiement, une
+réservation, un workspace ou une affectation de thème, modèle ou runtime.
+Les parcours de provisionnement et les configurations exécutables conservent
+leur schéma actuel dans ce lot.
+
+### Bascule du registre
+
+1. Sauvegarder le registre, les déploiements et les configurations distribuées.
+   Répéter la reprise avec les données restaurées sur une instance MariaDB
+   isolée de la même version. Vérifier les droits réels des lecteurs sur la vue
+   et les colonnes sous-jacentes, et ceux des écrivains sur `T_PROJECT`.
+2. Déployer le code avec la configuration actuelle. Laisser finir les
+   opérations de création et d’affectation en cours. Suspendre les écritures
+   d’administration, MCP, agents et workers, ainsi que les timers de mise à
+   jour, pendant le transfert de la clé et le changement de configuration.
+3. Exécuter `migrate-cowprod-projects --prepare PROJECT_WRITES_QUIESCED`,
+   comparer toutes les fiches et les références, puis exécuter
+   `--activate PROJECT_WRITES_QUIESCED`. Ajouter `cowprod_projects` aux
+   configurations distribuées des transports et de l’inscription du lab.
+   Utiliser le socle déjà approuvé et l’identité de service vérifiée.
+4. Contrôler la clé étrangère, les permissions et la parité des lectures.
+   Rouvrir les transports, puis vérifier la liste des projets, le détail,
+   les déploiements et les parcours admin. Prévoir une fiche jetable pour
+   vérifier modification, historique et retrait dans la recette.
+5. Si un retour est nécessaire, reprendre la suspension des écritures et
+   exécuter `--project-back PROJECT_WRITES_QUIESCED` avec le réglage actif.
+   Vérifier les fiches et la clé étrangère, retirer le réglage puis rouvrir.
+   Les lignes d’historique de `T_PROJECT` sont conservées. Une réactivation
+   après des écritures sur le schéma précédent exige leur réconciliation.
+
+Recette sur une instance jetable
+
+```sh
+COWPROD_PROJECT_TEST_DSN='mysql:unix_socket=/chemin/jetable/mysql.sock;charset=utf8mb4' \
+COWPROD_PROJECT_TEST_SOCLE='/chemin/vers/socle-généré' \
+php tests/cowprod-project-registry.php
+```
+
+## Runtimes de devMCP en production
 
 Les tables cibles sont `T_RUNTIMETYPE` (`RTY_`) et `T_PROJECTRUNTIME`
 (`PRT_`). La reprise conserve le moteur, le protocole, le superviseur,
@@ -115,6 +171,12 @@ ligne mère et permet une nouvelle affectation avec une révision supérieure.
 Le retrait est exposé dans l’administration pour un service local arrêté.
 La fiche d’administration, l’API mobile, le lanceur et contrôleur systemd
 ainsi que les liens des notifications lisent le catalogue actif.
+
+La bascule du 28 novembre 2026 a conservé les 17 unités applicatives actives
+avec les mêmes PID. Le contrôle HTTPS de l’administration a réussi. La
+restauration et la recette du lanceur en réseau isolé ont réussi sur
+MariaDB 10.11.14. Sauvegardes et résultats sur TouchDeck dans
+`/var/backups/devmcp/runtime-cowprod-20261128T092445Z.7WjmweI8`.
 
 ### Procédure de bascule et retour
 

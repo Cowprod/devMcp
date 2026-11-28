@@ -6,10 +6,10 @@ use PDO;
 /** Fixed HTTP operations delegating to the exact Web-admin business services. */
 final class AdminRegistryOperations
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor, private readonly array $themeConfig = []) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor, private readonly array $catalogueConfig = []) {}
     public function execute(string $method,string $path,array $data): array
     {
-        if($method==='GET'&&$path==='/themes')return ['themes'=>\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->themeConfig, $this->actor)->all()];
+        if($method==='GET'&&$path==='/themes')return ['themes'=>\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->catalogueConfig, $this->actor)->all()];
         if(preg_match('~^/projects/([a-z0-9][a-z0-9._-]{0,63})/theme$~D',$path,$themeRoute)){
             $project=$themeRoute[1];
             $q=$this->db->prepare('SELECT id FROM dm_project WHERE id=?');$q->execute([$project]);
@@ -17,7 +17,7 @@ final class AdminRegistryOperations
                 $q=$this->db->prepare('SELECT project_id FROM dm_local_project_config WHERE project_id=?');$q->execute([$project]);
                 if($q->fetchColumn()===false)throw new AdminReadApiError(404,'not_found');
             }
-            $catalogue=\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->themeConfig, $this->actor);
+            $catalogue=\Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->catalogueConfig, $this->actor);
             if($method==='GET')return $catalogue->assignment($project);
             if($method==='PUT'){
                 self::keys($data,['theme_id']);
@@ -25,7 +25,8 @@ final class AdminRegistryOperations
             }
         }
         if(self::isDeploymentRoute($method,$path))return $this->deployment($method,$path,$data);
-        $editor=new RegistryEditor($this->db,$this->actor);
+        $editor=new RegistryEditor($this->db,$this->actor,
+            \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($this->db,$this->catalogueConfig,$this->actor));
         if($method==='GET'&&$path==='/assignments'){
             $rows=(new \Cowprod\DevMcp\Distributed\Registry\RegistryRepository($this->db))->deployments();
             return ['assignments'=>array_map(static fn($r)=>['id'=>$r['id'],'project_id'=>$r['project_id'],'machine_id'=>$r['machine_id'],

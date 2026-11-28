@@ -160,7 +160,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */
@@ -174,7 +174,8 @@ final class RemoteTools
                 $previewConfig['max'] ?? PreviewPortAllocator::DEFAULT_MAX,
             );
         }
-        return new ProvisioningStore($this->db, $allocator);
+        return new ProvisioningStore($this->db, $allocator,
+            \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($this->db, $this->catalogueConfig));
     }
 
     public function mobileCatalogue(\Cowprod\DevMcp\Project\ProjectRegistry $projects,\Cowprod\DevMcp\Execution\FileJobStore $jobs,array $config): \Cowprod\DevMcp\Project\MobileProjectCatalogue
