@@ -314,11 +314,27 @@
     "old": "dm_preview_port_reservation",
     "target": "T_PREVIEWPORTRESERVATION",
     "columns": {
-      "project_id": "PVR_CH_PROJECT_ID",
+      "project_id": "PVR_CH_PROJECT",
       "machine": "PVR_CH_MACHINE",
       "port": "PVR_N_PORT",
       "created_at": "PVR_DT_CREATION"
-    }
+    },
+    "active_config": "cowprod_preview_ports",
+    "archive": "dm_preview_port_reservation_legacy",
+    "target_columns": [
+      "PVR_N_ID",
+      "PVR_N_MID",
+      "PVR_CH_PROJECT",
+      "PVR_CH_MACHINE",
+      "PVR_N_PORT",
+      "PVR_DT_CREATION",
+      "PVR_CH_CREATION",
+      "PVR_DT_SUPPRESSION",
+      "PVR_CH_SUPPRESSION",
+      "PVR_CH_ACTIF",
+      "PVR_CH_MACHINEACTIVE",
+      "PVR_N_PORTACTIF"
+    ]
   },
   {
     "old": "dm_agent_zerotier_address",

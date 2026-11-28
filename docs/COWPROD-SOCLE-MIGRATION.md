@@ -102,7 +102,10 @@ En cas d’échec après création du dépôt, le résultat indique
 `partial_failure/template_publish`. Le dépôt et le workspace restent disponibles
 pour inspection. Vérifier l’état Git et l’affectation existante avant de relancer.
 
-## Capacités des machines préparées sur la branche dédiée
+## Capacités des machines en production
+
+Le 28 novembre 2026, `54c6a47` a migré cinq déclarations sur TouchDeck.
+Le contrôle du tunnel et les lecteurs Web/MCP ont réussi.
 
 La migration de `dm_machine_capability` vers `T_MACHINECAPABILITY`
 (`MCA_`) conserve les ID machine, la valeur `local` et les trois droits
@@ -128,7 +131,12 @@ capacités. Rejouer le retour avec `--project-back CAPABILITY_WRITES_QUIESCED`
 pendant la suspension des écritures et retirer le réglage après contrôle.
 Le retour projette les valeurs courantes et conserve l’historique.
 
-## Registre des projets préparé sur la branche dédiée
+## Registre des projets en production
+
+Le 28 novembre 2026, `54c6a47` a migré 54 fiches et préservé les 23
+déploiements ainsi que les 17 services applicatifs actifs. Sauvegardes et
+journaux des deux bascules sur TouchDeck dans
+`/var/backups/devmcp/registry-capabilities-cowprod-20261128T100335Z.bPOziKH8`.
 
 `T_PROJECT` utilise le préfixe `PRO_`, une clé numérique interne et les
 champs Cowprod de filiation, création et suppression. Le slug existant reste
@@ -182,6 +190,26 @@ COWPROD_PROJECT_TEST_DSN='mysql:unix_socket=/chemin/jetable/mysql.sock;charset=u
 COWPROD_PROJECT_TEST_SOCLE='/chemin/vers/socle-généré' \
 php tests/cowprod-project-registry.php
 ```
+
+## Réservations de ports préparées sur la branche dédiée
+
+La table `T_PREVIEWPORTRESERVATION` conserve le port, la machine, le projet
+et la date de création. L’ancienne affectation est historisée lors d’un
+changement de machine. La libération inscrit une suppression logique. Les
+contraintes s’appliquent aux seules réservations actives. Chaque tentative
+sur un port en conflit annule son historique et préserve la réservation
+précédente avant de réessayer.
+
+Après sauvegarde et recette isolée, suspendre les écrivains du registre.
+Exécuter `migrate-cowprod-preview-ports --prepare PORT_WRITES_QUIESCED`,
+`--verify` et `--activate PORT_WRITES_QUIESCED`. Activer
+`cowprod_preview_ports` dans la configuration distribuée avec l’identité du
+service et le socle déjà approuvé. Vérifier les droits SQL ainsi que la
+lecture par le provisionnement, l’administration et le contrôleur des
+applications. La vue de compatibilité conserve les clés lues par ces
+consommateurs. Le retour `--project-back PORT_WRITES_QUIESCED` projette les
+allocations actives et conserve les retraits et les versions dans la table
+Cowprod.
 
 ## Runtimes de devMCP en production
 

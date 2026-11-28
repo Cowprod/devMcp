@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use PDO;
 use PDOException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Durable preview-port reservation. The caller owns the SQL transaction.
@@ -28,6 +29,7 @@ final class PreviewPortAllocator
         private readonly int $min = self::DEFAULT_MIN,
         private readonly int $max = self::DEFAULT_MAX,
         private readonly ?Closure $isAvailable = null,
+        private readonly ?array $cowprod = null,
     ) {
         if ($min < 1024 || $max > 65535 || $min > $max) {
             throw new InvalidArgumentException('Plage de ports de prévisualisation invalide');
@@ -38,6 +40,8 @@ final class PreviewPortAllocator
     public function assertSchema(): void
     {
         $this->db->query('SELECT project_id, machine, port FROM dm_preview_port_reservation LIMIT 0');
+        if ($this->cowprod !== null)
+            $this->db->query('SELECT PVR_N_ID,PVR_CH_ACTIF,PVR_CH_MACHINE,PVR_N_PORT FROM T_PREVIEWPORTRESERVATION LIMIT 0');
     }
 
     /**
@@ -55,6 +59,9 @@ final class PreviewPortAllocator
             || preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/D', $machine) !== 1) {
             throw new InvalidArgumentException('Projet ou machine invalide');
         }
+
+        if ($this->cowprod !== null)
+            return $this->reserverCowprod($projectId, $machine);
 
         $read = $this->db->prepare('SELECT machine, port FROM dm_preview_port_reservation WHERE project_id = ?');
         $read->execute([$projectId]);
@@ -98,6 +105,15 @@ final class PreviewPortAllocator
         if (!$this->db->inTransaction()) {
             throw new RuntimeException('Libération hors transaction interdite');
         }
+        if ($this->cowprod !== null) {
+            $this->avecSignature(function () use ($projectId): void {
+                $aMere = $this->ligneActive($projectId);
+                if ($aMere !== null)
+                    $this->db->exec('UPDATE T_PREVIEWPORTRESERVATION SET PVR_DT_SUPPRESSION=NOW(6), PVR_CH_SUPPRESSION='
+                        .prepString2Update(sSignature()).' WHERE PVR_N_ID='.prepNum2Update($aMere['PVR_N_ID']));
+            });
+            return;
+        }
         $delete = $this->db->prepare('DELETE FROM dm_preview_port_reservation WHERE project_id = ?');
         $delete->execute([$projectId]);
     }
@@ -110,6 +126,73 @@ final class PreviewPortAllocator
         $read->execute([$projectId]);
         $row = $read->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? ['machine' => $row['machine'], 'port' => (int) $row['port']] : null;
+    }
+
+    private function reserverCowprod(string $sProjet, string $sMachine): int
+    {
+        return $this->avecSignature(function () use ($sProjet, $sMachine): int {
+            $oConn = $this->db;
+            $aMere = $this->ligneActive($sProjet);
+            if ($aMere !== null && $aMere['machine'] === $sMachine)
+                return (int)$aMere['port'];
+
+            $nPlage = $this->max - $this->min + 1;
+            $nDebut = random_int(0, $nPlage - 1);
+            for ($nOffset = 0; $nOffset < $nPlage; $nOffset++) {
+                $nPort = $this->min + (($nDebut + $nOffset) % $nPlage);
+                if (!$this->portIsAvailable($nPort))
+                    continue;
+
+                // A conflicting port must roll back both the candidate and its history.
+                $oConn->exec('SAVEPOINT preview_port_candidate');
+                try {
+                    if ($aMere === null) {
+                        $nId = getIdConPdo('T_PREVIEWPORTRESERVATION', 'PVR_CH_PROJECT', $sProjet, $oConn);
+                        $sCreation = ', PVR_CH_CREATION='.prepString2Update(sSignature());
+                    } else {
+                        $nId = $aMere['PVR_N_ID'];
+                        historiseTable('T_PREVIEWPORTRESERVATION', 'PVR', $nId, $oConn);
+                        $sCreation = '';
+                    }
+                    $oConn->exec('UPDATE T_PREVIEWPORTRESERVATION SET PVR_CH_MACHINE='.prepString2Update($sMachine)
+                        .', PVR_N_PORT='.prepNum2Update($nPort).$sCreation.' WHERE PVR_N_ID='.prepNum2Update($nId));
+                    $oConn->exec('RELEASE SAVEPOINT preview_port_candidate');
+                    return $nPort;
+                } catch (Throwable $oErreur) {
+                    if ($oConn->inTransaction()) {
+                        $oConn->exec('ROLLBACK TO SAVEPOINT preview_port_candidate');
+                        $oConn->exec('RELEASE SAVEPOINT preview_port_candidate');
+                    }
+                    if (!$oErreur instanceof PDOException || $oErreur->getCode() !== '23000')
+                        throw $oErreur;
+                }
+            }
+            throw new RuntimeException('Aucun port de prévisualisation TCP libre sur cette machine');
+        });
+    }
+
+    private function ligneActive(string $sProjet): ?array
+    {
+        return oRs('', __DIR__.'/previewPortReservation/modPreviewPortReservation.sql',
+            'PVR_CH_PROJECT='.urlencode(prepString2Update($sProjet)), false, '', $this->db)[0] ?? null;
+    }
+
+    private function avecSignature(callable $fOperation): mixed
+    {
+        $sActeur = CowprodPhpSocle::chargerPourCatalogue($this->cowprod);
+        if (trim($sActeur) === '' || mb_strlen($sActeur) > 191 || preg_match('/[\x00-\x1f]/', $sActeur))
+            throw new InvalidArgumentException('Signature de la réservation indisponible');
+        $bSession = array_key_exists('_SESSION', $GLOBALS);
+        $aSession = $_SESSION ?? [];
+        try {
+            $_SESSION = ['logged'=>'1', 'sUser'=>$sActeur] + $aSession;
+            return $fOperation();
+        } finally {
+            if ($bSession)
+                $_SESSION = $aSession;
+            else
+                unset($_SESSION);
+        }
     }
 
     private function portIsAvailable(int $port): bool

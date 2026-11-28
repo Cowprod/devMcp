@@ -160,7 +160,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */
@@ -172,6 +172,9 @@ final class RemoteTools
                 $this->db,
                 $previewConfig['min'] ?? PreviewPortAllocator::DEFAULT_MIN,
                 $previewConfig['max'] ?? PreviewPortAllocator::DEFAULT_MAX,
+                cowprod: array_key_exists('cowprod_preview_ports', $this->catalogueConfig)
+                    ? $this->catalogueConfig['cowprod_preview_ports'] ?? throw new \RuntimeException('Configuration des ports indisponible')
+                    : null,
             );
         }
         return new ProvisioningStore($this->db, $allocator,

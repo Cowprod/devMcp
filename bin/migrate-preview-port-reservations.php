@@ -42,6 +42,12 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
+    if (array_key_exists('cowprod_preview_ports', $distributed)) {
+        $catalogue = new \Cowprod\DevMcp\Project\PreviewPortAllocator($db, cowprod: $distributed['cowprod_preview_ports']);
+        $catalogue->assertSchema();
+        echo "COWPROD_PREVIEW_PORTS_RUNTIME_OK\n";
+        exit(0);
+    }
     $migrationPath = dirname(__DIR__) . '/migrations/20261101_preview_port_reservation.sql';
     $migration = file_get_contents($migrationPath);
     if (!is_string($migration) || trim($migration) === '') {
