@@ -287,19 +287,47 @@
     "old": "dm_local_project_config",
     "target": "T_LOCALPROJECTCONFIG",
     "columns": {
-      "project_id": "LPC_CH_PROJECT_ID",
-      "config_json": "LPC_CH_CONFIG_JSON",
-      "updated_at": "LPC_DT_UPDATED_AT"
-    }
+      "project_id": "LPC_CH_PROJECT",
+      "config_json": "LPC_CH_CONFIG",
+      "updated_at": "LPC_DT_UPDATE"
+    },
+    "active_config": "cowprod_sql_project_config",
+    "archive": "dm_local_project_config_legacy",
+    "target_columns": [
+      "LPC_N_ID",
+      "LPC_N_MID",
+      "LPC_CH_PROJECT",
+      "LPC_CH_CONFIG",
+      "LPC_DT_UPDATE",
+      "LPC_DT_CREATION",
+      "LPC_CH_CREATION",
+      "LPC_DT_SUPPRESSION",
+      "LPC_CH_SUPPRESSION",
+      "LPC_CH_ACTIF"
+    ]
   },
   {
     "old": "dm_shared_action_config",
     "target": "T_SHAREDACTIONCONFIG",
     "columns": {
-      "action_id": "SAC_CH_ACTION_ID",
-      "config_json": "SAC_CH_CONFIG_JSON",
-      "updated_at": "SAC_DT_UPDATED_AT"
-    }
+      "action_id": "SAC_CH_ACTION",
+      "config_json": "SAC_CH_CONFIG",
+      "updated_at": "SAC_DT_UPDATE"
+    },
+    "active_config": "cowprod_sql_project_config",
+    "archive": "dm_shared_action_config_legacy",
+    "target_columns": [
+      "SAC_N_ID",
+      "SAC_N_MID",
+      "SAC_CH_ACTION",
+      "SAC_CH_CONFIG",
+      "SAC_DT_UPDATE",
+      "SAC_DT_CREATION",
+      "SAC_CH_CREATION",
+      "SAC_DT_SUPPRESSION",
+      "SAC_CH_SUPPRESSION",
+      "SAC_CH_ACTIF"
+    ]
   },
   {
     "old": "dm_project_registry_state",
@@ -307,8 +335,16 @@
     "columns": {
       "id": "PRS_N_ID",
       "ready": "PRS_BL_READY",
-      "migrated_at": "PRS_DT_MIGRATED_AT"
-    }
+      "migrated_at": "PRS_DT_CREATION"
+    },
+    "active_config": "cowprod_sql_project_config",
+    "archive": "dm_project_registry_state_legacy",
+    "target_columns": [
+      "PRS_N_ID",
+      "PRS_BL_READY",
+      "PRS_DT_CREATION",
+      "PRS_CH_CREATION"
+    ]
   },
   {
     "old": "dm_preview_port_reservation",

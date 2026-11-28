@@ -10,6 +10,6 @@ try{
     $config=require(getenv('DEVMCP_CONFIG')?:'/etc/devmcp/global.php');
     $settings=require($config['distributed']['config_path']??(getenv('DEVMCP_DISTRIBUTED_CONFIG')?:'/etc/devmcp/mcp-distributed.php'));
     $db=DatabaseConnection::connect($settings['dsn'],$settings['writer_username'],$settings['writer_password']);
-    $modified=DiagnosticsMigration::apply($db,require dirname(__DIR__).'/config/shared-actions.php');
+    $modified=DiagnosticsMigration::apply($db,(require dirname(__DIR__).'/config/shared-actions.php'),$settings);
     echo json_encode(['android_diagnostics_ready'=>true,'projects_modified'=>$modified],JSON_THROW_ON_ERROR),"\n";
 }catch(Throwable $e){fwrite(STDERR,'Android diagnostics migration failed: '.get_class($e)."\n");exit(1);}

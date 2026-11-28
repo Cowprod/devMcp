@@ -41,7 +41,7 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
-    $sql = new SqlProjectConfiguration($db);
+    $sql = SqlProjectConfiguration::forRuntime($db, $distributed, 'service:devmcp-update');
     if (!$sql->isReady()) {
         throw new RuntimeException('Registre SQL non prêt');
     }
@@ -57,12 +57,9 @@ try {
     }
     $db->beginTransaction();
     try {
-        $upsert = $db->prepare(
-            'INSERT INTO dm_shared_action_config (action_id, config_json) VALUES (?, ?) '
-            . 'ON DUPLICATE KEY UPDATE config_json = VALUES(config_json)'
-        );
+        $sql->lockCowprodDefinitions();
         foreach (['sass.version', 'sass.build', 'sass.prepare'] as $id) {
-            $upsert->execute([$id, json_encode($actions[$id], JSON_THROW_ON_ERROR)]);
+            $sql->upsertSharedDefinition($id, json_encode($actions[$id], JSON_THROW_ON_ERROR));
         }
 
         // Upgrade only provisioned, active workspaces on THIS machine.
@@ -74,9 +71,6 @@ try {
             . 'FOR UPDATE'
         );
         $read->execute([$hostname]);
-        $update = $db->prepare(
-            'UPDATE dm_local_project_config SET config_json = ? WHERE project_id = ?'
-        );
         $modified = 0;
         foreach ($read->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $item = json_decode($row['config_json'], true, 64, JSON_THROW_ON_ERROR);
@@ -92,7 +86,7 @@ try {
                 }
             }
             if (!$changed) continue;
-            $update->execute([json_encode($item, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), $row['project_id']]);
+            $sql->updateLocalDefinition($row['project_id'], json_encode($item, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
             $modified++;
         }
         $db->commit();

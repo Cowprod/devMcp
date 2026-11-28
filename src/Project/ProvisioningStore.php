@@ -18,6 +18,7 @@ final class ProvisioningStore
         private readonly PDO $db,
         private readonly ?PreviewPortAllocator $previewPorts = null,
         private readonly ?CowprodProjectRegistry $projects = null,
+        private readonly array $catalogueConfig = [],
     ) {}
 
     /**
@@ -26,7 +27,7 @@ final class ProvisioningStore
      */
     public function assertLocalProjectCreationReady(): void
     {
-        (new SqlProjectConfiguration($this->db))->assertDefaultActionsAvailable();
+        (SqlProjectConfiguration::forRuntime($this->db, $this->catalogueConfig))->assertDefaultActionsAvailable();
         $this->previewPorts?->assertSchema();
     }
 
@@ -189,7 +190,7 @@ final class ProvisioningStore
                     $this->previewPorts->release($id);
                 }
             }
-            $sql = new SqlProjectConfiguration($this->db);
+            $sql = SqlProjectConfiguration::forRuntime($this->db, $this->catalogueConfig);
             if ($next === 'machine_assigned' && $current['state'] === 'active') {
                 // An inactive/reassigned workspace must no longer be executable.
                 $sql->deactivateLocalProject($id);

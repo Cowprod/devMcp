@@ -9,9 +9,9 @@ use RuntimeException;
 /** Grant the updater and its status lookup only to the local administration project. */
 final class AdminUpdateMigration
 {
-    public static function apply(PDO $db, array $templates): array
+    public static function apply(PDO $db, array $templates, array $settings = []): array
     {
-        $sql = new SqlProjectConfiguration($db);
+        $sql = SqlProjectConfiguration::forRuntime($db, $settings, 'service:devmcp-update');
         if (!$sql->isReady()) throw new RuntimeException('SQL registry is not ready');
         $actions = ['devmcp.update', 'devmcp.update.status'];
         foreach ($actions as $action) {
@@ -21,6 +21,7 @@ final class AdminUpdateMigration
         }
         $db->beginTransaction();
         try {
+            $sql->lockCowprodDefinitions();
             $query = 'SELECT project_id, config_json FROM dm_local_project_config ORDER BY project_id';
             if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') $query .= ' FOR UPDATE';
             $rows = $db->query($query)->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -49,11 +50,11 @@ final class AdminUpdateMigration
                 }
                 $canonical['description'] = 'devMCP — serveur, administration et outils de développement génériques';
                 $json = json_encode($canonical, JSON_THROW_ON_ERROR);
-                $write = isset($rows['devmcp'])
-                    ? 'UPDATE dm_local_project_config SET config_json=? WHERE project_id=?'
-                    : 'INSERT INTO dm_local_project_config(config_json,project_id) VALUES (?,?)';
-                $db->prepare($write)->execute([$json, 'devmcp']);
-                $db->prepare('DELETE FROM dm_local_project_config WHERE project_id=?')->execute(['devmcp-admin']);
+                if (isset($rows['devmcp']))
+                    $sql->updateLocalDefinition('devmcp', $json);
+                else
+                    $sql->insertLocalDefinition('devmcp', $json);
+                $sql->deactivateLocalProject('devmcp-admin');
                 unset($rows['devmcp-admin']);
                 $rows['devmcp'] = $json;
             }
@@ -63,7 +64,6 @@ final class AdminUpdateMigration
             }
             $project = json_decode($rows['devmcp'], true, 512, JSON_THROW_ON_ERROR);
             $read = $db->prepare('SELECT config_json FROM dm_shared_action_config WHERE action_id=?');
-            $insert = $db->prepare('INSERT INTO dm_shared_action_config(action_id,config_json) VALUES (?,?)');
             foreach ($actions as $action) {
                 if (isset($project['actions'][$action])) {
                     throw new RuntimeException('Refusing to overwrite a project-specific updater');
@@ -72,7 +72,7 @@ final class AdminUpdateMigration
                 $read->execute([$action]);
                 $existing = $read->fetchColumn();
                 if ($existing === false) {
-                    $insert->execute([$action, json_encode($definition, JSON_THROW_ON_ERROR)]);
+                    $sql->insertSharedDefinition($action, json_encode($definition, JSON_THROW_ON_ERROR));
                 } elseif (json_decode($existing, true, 512, JSON_THROW_ON_ERROR) !== $definition) {
                     throw new RuntimeException('Refusing to overwrite a customized updater template');
                 }
@@ -80,8 +80,7 @@ final class AdminUpdateMigration
             $missing = array_diff($actions, $project['shared_actions'] ?? []);
             if ($missing !== []) {
                 $project['shared_actions'] = [...($project['shared_actions'] ?? []), ...$missing];
-                $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')
-                    ->execute([json_encode($project, JSON_THROW_ON_ERROR), 'devmcp']);
+                $sql->updateLocalDefinition('devmcp', json_encode($project, JSON_THROW_ON_ERROR));
             }
             // The server updater belongs to administration, never an application.
             $removed = [];
@@ -90,8 +89,7 @@ final class AdminUpdateMigration
                 $item = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
                 if (array_intersect($actions, $item['shared_actions'] ?? []) === []) continue;
                 $item['shared_actions'] = array_values(array_diff($item['shared_actions'], $actions));
-                $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')
-                    ->execute([json_encode($item, JSON_THROW_ON_ERROR), $id]);
+                $sql->updateLocalDefinition($id, json_encode($item, JSON_THROW_ON_ERROR));
                 $removed[] = $id;
             }
             $db->commit();

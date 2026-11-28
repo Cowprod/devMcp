@@ -191,7 +191,11 @@ COWPROD_PROJECT_TEST_SOCLE='/chemin/vers/socle-généré' \
 php tests/cowprod-project-registry.php
 ```
 
-## Réservations de ports préparées sur la branche dédiée
+## Réservations de ports en production
+
+La révision `810a79f` a migré 25 réservations sur TouchDeck. La comparaison
+des lignes et les lectures MCP ont confirmé les ports existants. Sauvegardes
+et résultats dans `/var/backups/devmcp/preview-ports-cowprod-20261128T100945Z.t9sybVTk`.
 
 La table `T_PREVIEWPORTRESERVATION` conserve le port, la machine, le projet
 et la date de création. L’ancienne affectation est historisée lors d’un
@@ -210,6 +214,24 @@ applications. La vue de compatibilité conserve les clés lues par ces
 consommateurs. Le retour `--project-back PORT_WRITES_QUIESCED` projette les
 allocations actives et conserve les retraits et les versions dans la table
 Cowprod.
+
+## Registre des configurations SQL préparé
+
+Les tables `T_LOCALPROJECTCONFIG`, `T_SHAREDACTIONCONFIG` et
+`T_PROJECTREGISTRYSTATE` reprennent les définitions et le marqueur
+d’installation existants. Les scripts d’import, de diagnostics, de
+provisionnement et d’auto-update passent par le registre PHP existant.
+Les définitions sont historisées avant modification, le retrait d’une
+définition locale est logique. Le marqueur d’installation est créé une fois
+comme dans le registre d’origine. Les vues conservent les lectures existantes.
+
+Après sauvegarde et recette isolée, suspendre les écrivains du registre.
+Exécuter `migrate-cowprod-sql-project-config --prepare SQL_CONFIG_WRITES_QUIESCED`,
+`--verify`, puis `--activate SQL_CONFIG_WRITES_QUIESCED`. Activer le réglage
+`cowprod_sql_project_config` dans les configurations distribuées et vérifier
+la lecture, la mise à jour des actions et le provisionnement. Le retour
+`--project-back SQL_CONFIG_WRITES_QUIESCED` préserve les définitions actives
+et laisse les historiques dans les tables Cowprod.
 
 ## Runtimes de devMCP en production
 

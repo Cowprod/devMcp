@@ -42,7 +42,7 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password']
     );
-    $sql = new SqlProjectConfiguration($db);
+    $sql = SqlProjectConfiguration::forRuntime($db, $distributed, 'service:devmcp-sql-import');
     if ($sql->isReady()) {
         echo "SQL project registry already active; nothing imported.\n";
         exit(0);
@@ -51,13 +51,15 @@ try {
     // projects, before the import transaction is committed.
     // DDL auto-commits in MariaDB. The readiness flag remains unset until all
     // project/template rows have been inserted in one subsequent transaction.
-    $migration = file_get_contents(dirname(__DIR__) . '/migrations/20261031_sql_project_registry.sql');
-    if (!is_string($migration) || trim($migration) === '') {
-        throw new RuntimeException('Migration SQL introuvable');
-    }
-    foreach (preg_split('/;\s*(?:\r?\n|$)/', $migration) ?: [] as $statement) {
-        if (trim($statement) !== '') {
-            $db->exec($statement);
+    if (!$sql->usesCowprod()) {
+        $migration = file_get_contents(dirname(__DIR__) . '/migrations/20261031_sql_project_registry.sql');
+        if (!is_string($migration) || trim($migration) === '') {
+            throw new RuntimeException('Migration SQL introuvable');
+        }
+        foreach (preg_split('/;\s*(?:\r?\n|$)/', $migration) ?: [] as $statement) {
+            if (trim($statement) !== '') {
+                $db->exec($statement);
+            }
         }
     }
     if ($sql->isReady()) {
@@ -109,27 +111,18 @@ try {
 
     $db->beginTransaction();
     try {
-        $insertAction = $db->prepare(
-            'INSERT INTO dm_shared_action_config (action_id, config_json) VALUES (?, ?)'
-        );
+        $sql->lockCowprodDefinitions();
         foreach ($legacyActions as $id => $definition) {
             if (!is_string($id) || !is_array($definition)) {
                 throw new RuntimeException('Action partagée non valide');
             }
-            $insertAction->execute([
-                $id, json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
-            ]);
+            $sql->insertSharedDefinition($id, json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         }
-        $insertProject = $db->prepare(
-            'INSERT INTO dm_local_project_config (project_id, config_json) VALUES (?, ?)'
-        );
         foreach ($legacyProjects as $id => $definition) {
             if (!is_string($id) || !is_array($definition)) {
                 throw new RuntimeException('Projet local non valide');
             }
-            $insertProject->execute([
-                $id, json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
-            ]);
+            $sql->insertLocalDefinition($id, json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         }
         if ($provisionedIds !== []) {
             $activate = $db->prepare(
@@ -140,7 +133,7 @@ try {
                 $activate->execute([$id, $hostname]);
             }
         }
-        $db->exec('INSERT INTO dm_project_registry_state (id, ready) VALUES (1, 1)');
+        $sql->markReady();
         $db->commit();
     } catch (Throwable $error) {
         if ($db->inTransaction()) {

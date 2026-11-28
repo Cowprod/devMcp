@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Project\SqlProjectConfiguration;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 if (posix_geteuid() !== 0 || ($argv[1] ?? null) !== '--execute' || ($argv[2] ?? null) !== 'MIGRATE_REMOTE_PROJECTS') {
@@ -58,16 +59,17 @@ if ($capabilitiesActive) {
     $db->query('SELECT MCA_N_ID,MCA_CH_ACTIF,MCA_BL_HOSTING,MCA_BL_CORDOVA_ANDROID,MCA_BL_CORDOVA_IOS FROM T_MACHINECAPABILITY LIMIT 0');
     $db->query('SELECT machine_key,hosting,cordova_android,cordova_ios FROM dm_machine_capability LIMIT 0');
 }
+$configuration = SqlProjectConfiguration::forRuntime($db, $runtime, 'service:devmcp-update');
 $actions=require dirname(__DIR__).'/config/shared-actions.php';
 $db->beginTransaction();
 try {
+    $configuration->lockCowprodDefinitions();
     foreach (['project.create.remote', 'project.provision.remote', 'admin.password.bootstrap', 'machine.capabilities.set', 'android.install', 'android.devices'] as $id) {
-    $db->prepare('INSERT INTO dm_shared_action_config (action_id,config_json) VALUES (?,?) ON DUPLICATE KEY UPDATE config_json=VALUES(config_json)')
-        ->execute([$id,json_encode($actions[$id],JSON_THROW_ON_ERROR)]);
+    $configuration->upsertSharedDefinition($id,json_encode($actions[$id],JSON_THROW_ON_ERROR));
     $q=$db->prepare('SELECT config_json FROM dm_local_project_config WHERE project_id=? FOR UPDATE');$q->execute(['devmcp']);
     $raw=$q->fetchColumn();
     if($raw!==false){$p=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!in_array($id,$p['shared_actions'],true))$p['shared_actions'][]=$id;
-        $db->prepare('UPDATE dm_local_project_config SET config_json=? WHERE project_id=?')->execute([json_encode($p,JSON_THROW_ON_ERROR),'devmcp']);}
+        $configuration->updateLocalDefinition('devmcp',json_encode($p,JSON_THROW_ON_ERROR));}
     }
     $db->commit();
 }catch(Throwable $e){$db->rollBack();throw $e;}

@@ -13,7 +13,7 @@ try {
     $config = require(getenv('DEVMCP_CONFIG') ?: '/etc/devmcp/global.php');
     $settings = require($config['distributed']['config_path'] ?? '/etc/devmcp/mcp-distributed.php');
     $db = DatabaseConnection::connect($settings['dsn'], $settings['writer_username'], $settings['writer_password']);
-    $result = AdminUpdateMigration::apply($db, require dirname(__DIR__) . '/config/shared-actions.php');
+    $result = AdminUpdateMigration::apply($db, (require dirname(__DIR__) . '/config/shared-actions.php'), $settings);
     echo json_encode(['admin_update_ready' => true] + $result, JSON_THROW_ON_ERROR), "\n";
 } catch (Throwable $error) {
     fwrite(STDERR, 'Admin update migration failed: ' . get_class($error) . "\n");
