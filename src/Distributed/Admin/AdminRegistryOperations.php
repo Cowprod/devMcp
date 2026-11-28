@@ -27,7 +27,8 @@ final class AdminRegistryOperations
         if(self::isDeploymentRoute($method,$path))return $this->deployment($method,$path,$data);
         $editor=new RegistryEditor($this->db,$this->actor,
             \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($this->db,$this->catalogueConfig,$this->actor),
-            array_intersect_key($this->catalogueConfig, ['cowprod_machine_capabilities'=>true]));
+            array_intersect_key($this->catalogueConfig, ['cowprod_machine_capabilities'=>true]),
+            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor));
         if($method==='GET'&&$path==='/assignments'){
             $rows=(new \Cowprod\DevMcp\Distributed\Registry\RegistryRepository($this->db))->deployments();
             return ['assignments'=>array_map(static fn($r)=>['id'=>$r['id'],'project_id'=>$r['project_id'],'machine_id'=>$r['machine_id'],
@@ -91,7 +92,8 @@ final class AdminRegistryOperations
     }
     private function deployment(string $method,string $path,array $data):array
     {
-        $service=new \Cowprod\DevMcp\Project\DeploymentService($this->db,$this->actor);
+        $service=new \Cowprod\DevMcp\Project\DeploymentService($this->db,$this->actor,
+            cowprod:\Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor));
         if($method==='GET'&&$path==='/deployment-targets')return $service->targets();
         if($method==='GET'&&$path==='/deployments')return ['deployments'=>$service->list()];
         if($method==='POST'&&$path==='/deployments'){

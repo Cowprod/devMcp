@@ -49,6 +49,12 @@ try {
             $known[$table['archive']] = true;
 
         $active = isset($table['active_config']) && array_key_exists($table['active_config'], $distributed);
+        foreach ($table['active_views'] ?? [] as $view) {
+            $viewKey = strtolower($view);
+            $known[$viewKey] = true;
+            if ($active && ($objects[$viewKey]['TABLE_TYPE'] ?? null) !== 'VIEW')
+                $issues[$view] = 'Missing compatibility view';
+        }
         $previous = $actual[$old] ?? [];
         $prepared = $actual[$target] ?? [];
         $states[$old] = $active ? 'active' : ($prepared === [] ? 'legacy' : 'prepared');

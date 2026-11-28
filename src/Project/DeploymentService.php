@@ -8,7 +8,7 @@ use InvalidArgumentException;
 /** One business service for MCP and Web; typed jobs use the existing authenticated agent queue. */
 final class DeploymentService
 {
-    public function __construct(private readonly PDO $db, private readonly string $actor='mcp-admin', private readonly string $sourceRoot='/var/lib/devmcp/remote-sources') {}
+    public function __construct(private readonly PDO $db, private readonly string $actor='mcp-admin', private readonly string $sourceRoot='/var/lib/devmcp/remote-sources', private readonly ?CowprodDeploymentRegistry $cowprod=null) {}
     public function targets(): array
     {
         $rows=$this->db->query("SELECT id,name,os_family,architecture,agent_version FROM dm_machine WHERE status='active' ORDER BY name,id")->fetchAll(PDO::FETCH_ASSOC);$out=[];
@@ -55,7 +55,10 @@ final class DeploymentService
             if($q->fetchColumn()!==false)throw new InvalidArgumentException('A deployment already exists for this project/machine or workspace; inspect it instead of adopting/overwriting automatically');
             $q=$this->db->prepare('SELECT repository FROM dm_remote_project WHERE project_id=?');$q->execute([$project]);
             foreach($q->fetchAll(PDO::FETCH_COLUMN) as $existing)if($existing!==$repository)throw new InvalidArgumentException('Registered project repository differs from an existing managed instance');
-            $this->db->prepare('INSERT INTO dm_deployment(id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,1)')->execute([$id,$project,$machine,$workspace]);
+            if ($this->cowprod !== null)
+                $this->cowprod->create($id,$project,$machine,$workspace,true);
+            else
+                $this->db->prepare('INSERT INTO dm_deployment(id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,1)')->execute([$id,$project,$machine,$workspace]);
             $this->db->prepare('INSERT INTO dm_remote_project(deployment_id,project_id,machine_id,repository,workspace_path,config_json,config_revision) VALUES (?,?,?,?,?,?,1)')->execute([$id,$project,$machine,$repository,$workspace,json_encode($config,JSON_THROW_ON_ERROR)]);
             $this->audit('deployment.register',$id);$this->db->commit();
         }catch(\Throwable $e){$this->db->rollBack();throw $e;}
@@ -82,7 +85,10 @@ final class DeploymentService
             }
             $this->assertPort($row['machine_id'],$config['port'],$id);
             $this->db->prepare('UPDATE dm_remote_project SET config_json=?,config_revision=config_revision+1,workspace_path=? WHERE deployment_id=?')->execute([json_encode($config,JSON_THROW_ON_ERROR),$workspace,$id]);
-            $this->db->prepare('UPDATE dm_deployment SET workspace_path=? WHERE id=?')->execute([$workspace,$id]);
+            if ($this->cowprod !== null)
+                $this->cowprod->updatePath($id,$workspace);
+            else
+                $this->db->prepare('UPDATE dm_deployment SET workspace_path=? WHERE id=?')->execute([$workspace,$id]);
             $this->audit('deployment.configure',$id);$this->db->commit();
         }catch(\Throwable $e){$this->db->rollBack();throw $e;}
         return $this->describe($id);

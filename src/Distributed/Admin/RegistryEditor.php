@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Distributed\Admin;
 
 use Cowprod\DevMcp\Project\CowprodProjectRegistry;
+use Cowprod\DevMcp\Project\CowprodDeploymentRegistry;
 use InvalidArgumentException;
 use PDO;
 
 final class RegistryEditor
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null, private readonly array $capabilityConfig=[]) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null, private readonly array $capabilityConfig=[], private readonly ?CowprodDeploymentRegistry $deployments=null) {}
 
     public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
@@ -123,8 +124,12 @@ final class RegistryEditor
         $deploymentId = bin2hex(random_bytes(16));
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare('INSERT INTO dm_deployment (id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,0)');
-            $statement->execute([$deploymentId, $projectId, $machineId, $workspacePath]);
+            if ($this->deployments !== null) {
+                $this->deployments->create($deploymentId,$projectId,$machineId,$workspacePath,false);
+            } else {
+                $statement = $this->db->prepare('INSERT INTO dm_deployment (id,project_id,machine_id,workspace_path,enabled) VALUES (?,?,?,?,0)');
+                $statement->execute([$deploymentId, $projectId, $machineId, $workspacePath]);
+            }
             $this->audit('deployment.create', 'deployment', $deploymentId);
             $this->db->commit();
         } catch (\Throwable $error) {
@@ -255,18 +260,38 @@ final class RegistryEditor
         }
         $this->db->beginTransaction();
         try {
-            $check = $this->db->prepare('SELECT enabled FROM dm_deployment WHERE id=? FOR UPDATE');
-            $check->execute([$id]);
-            $enabled = $check->fetchColumn();
-            if ($enabled === false) {
-                throw new InvalidArgumentException('Affectation introuvable');
+            if ($this->deployments !== null) {
+                $this->deployments->updatePath($id,$workspacePath,true);
+            } else {
+                $check = $this->db->prepare('SELECT enabled FROM dm_deployment WHERE id=? FOR UPDATE');
+                $check->execute([$id]);
+                $enabled = $check->fetchColumn();
+                if ($enabled === false) {
+                    throw new InvalidArgumentException('Affectation introuvable');
+                }
+                if ((int) $enabled !== 0) {
+                    throw new InvalidArgumentException('Désactivez l’affectation avant de modifier son répertoire');
+                }
+                $statement = $this->db->prepare('UPDATE dm_deployment SET workspace_path=? WHERE id=?');
+                $statement->execute([$workspacePath, $id]);
             }
-            if ((int) $enabled !== 0) {
-                throw new InvalidArgumentException('Désactivez l’affectation avant de modifier son répertoire');
-            }
-            $statement = $this->db->prepare('UPDATE dm_deployment SET workspace_path=? WHERE id=?');
-            $statement->execute([$workspacePath, $id]);
             $this->audit('deployment.update_path', 'deployment', $id);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+    }
+
+    public function removeDeployment(string $id): void
+    {
+        if ($this->deployments === null)
+            throw new InvalidArgumentException('Retrait d’affectation indisponible');
+
+        $this->db->beginTransaction();
+        try {
+            $this->deployments->remove($id);
+            $this->audit('deployment.remove','deployment',$id);
             $this->db->commit();
         } catch (\Throwable $error) {
             $this->db->rollBack();

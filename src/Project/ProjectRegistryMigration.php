@@ -45,10 +45,15 @@ final class ProjectRegistryMigration
 
         $sObjet = $this->oConn->query("SELECT TABLE_TYPE FROM information_schema.TABLES
             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dm_project'")->fetchColumn();
-        $aLien = $this->oConn->query("SELECT LOWER(REFERENCED_TABLE_NAME), LOWER(REFERENCED_COLUMN_NAME)
+        $bDeployments = $this->oConn->query("SELECT TABLE_TYPE FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dm_deployment'")->fetchColumn() === 'VIEW';
+        $sCondition = $bDeployments
+            ? "LOWER(TABLE_NAME)='t_deployment' AND LOWER(COLUMN_NAME)='dep_ch_project_id'"
+            : "TABLE_NAME='dm_deployment' AND COLUMN_NAME='project_id'";
+        $aLien = $this->oConn->query('SELECT LOWER(REFERENCED_TABLE_NAME), LOWER(REFERENCED_COLUMN_NAME)
             FROM information_schema.KEY_COLUMN_USAGE
-            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dm_deployment' AND COLUMN_NAME='project_id'
-                AND REFERENCED_TABLE_NAME IS NOT NULL")->fetchAll(PDO::FETCH_NUM);
+            WHERE TABLE_SCHEMA=DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL AND '.$sCondition)
+            ->fetchAll(PDO::FETCH_NUM);
         if (!in_array($sObjet, ['BASE TABLE','VIEW'], true)
             || $aLien !== ($sObjet === 'VIEW' ? [['t_project','pro_ch_actif']] : [['dm_project','id']]))
             throw new RuntimeException('Clé étrangère du registre des projets incohérente');
@@ -84,6 +89,9 @@ final class ProjectRegistryMigration
 
     public function retour(): array
     {
+        if ($this->oConn->query("SELECT TABLE_TYPE FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dm_deployment'")->fetchColumn() !== 'BASE TABLE')
+            throw new RuntimeException('Revenir au schéma précédent des déploiements en premier');
         $aResultat = $this->transaction(function (): array {
             $this->oConn->exec('INSERT INTO dm_project_legacy (id,description,repository_url,created_at) '
                 .self::PROJECTS.' ON DUPLICATE KEY UPDATE description=VALUES(description),

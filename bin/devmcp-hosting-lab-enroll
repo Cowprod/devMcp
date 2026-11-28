@@ -111,7 +111,8 @@ try {
         $schema = HostingLabSchemaMigration::apply($migration);
     }
     $result = HostingLabEnrollment::enroll($db, $machineId,
-        \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($db, $config, 'service:devmcp-hosting-lab-enroll'));
+        \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($db, $config, 'service:devmcp-hosting-lab-enroll'),
+        \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($db, $config, 'service:devmcp-hosting-lab-enroll'));
     if ($byName) {
         $result['machine_name'] = $consent['machine_name'];
     }

@@ -34,11 +34,13 @@ final class RemoteTools
     {return \Cowprod\DevMcp\Project\TemplateCatalogue::forRuntime($this->db, $this->catalogueConfig);}
 
     public function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
-    {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot);}
+    {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot,
+        \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig));}
 
     public function projectQueue(): \Cowprod\DevMcp\Project\RemoteProjectQueue
     {
-        return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db,$this->deploymentId);
+        return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db,$this->deploymentId,
+            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig));
     }
 
     public function uploadChunk(string $project, string $path, int $offset, int $size, string $sha256, string $data): array
@@ -160,7 +162,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true, 'cowprod_deployments' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */
@@ -455,10 +457,11 @@ final class RemoteTools
             throw new InvalidArgumentException('limit doit être compris entre 1 et 100');
         }
 
+        $deploymentTable=array_key_exists('cowprod_deployments',$this->catalogueConfig) ? 'V_DEPLOYMENTHISTORY' : 'dm_deployment';
         $query = $this->db->prepare(
             'SELECT j.action_name, j.state, j.created_at, j.claimed_at, j.finished_at '
             . 'FROM dm_remote_readonly_job AS j '
-            . 'INNER JOIN dm_deployment AS d ON d.id = j.deployment_id '
+            . 'INNER JOIN '.$deploymentTable.' AS d ON d.id = j.deployment_id '
             . 'WHERE d.project_id = ? '
             . 'ORDER BY j.created_at DESC, j.id DESC LIMIT ?'
         );

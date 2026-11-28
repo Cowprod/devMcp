@@ -10,7 +10,7 @@ use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 
 final class RemoteProjectQueue
 {
-    public function __construct(private readonly PDO $db, private readonly ?string $deploymentId=null) {}
+    public function __construct(private readonly PDO $db, private readonly ?string $deploymentId=null, private readonly ?CowprodDeploymentRegistry $cowprod=null) {}
 
     public function assertReady(): void
     {
@@ -42,7 +42,8 @@ final class RemoteProjectQueue
         if (!$this->hasSchema()) {
             return null;
         }
-        $q = $this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=?'.($this->deploymentId===null?'':' AND p.deployment_id=?'));
+        $q = $this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id'.
+            ($this->cowprod===null?'':' JOIN dm_deployment d ON d.id=p.deployment_id').' WHERE p.project_id=?'.($this->deploymentId===null?'':' AND p.deployment_id=?'));
         $q->execute($this->deploymentId===null?[$project]:[$project,$this->deploymentId]);
         $rows=$q->fetchAll(PDO::FETCH_ASSOC);
         if(count($rows)>1)DeploymentRegistry::ambiguous($project,(new DeploymentRegistry($this->db))->list($project));
@@ -52,7 +53,8 @@ final class RemoteProjectQueue
     public function instances(string $project): array
     {
         if(!$this->hasSchema())return [];
-        $q=$this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id WHERE p.project_id=? ORDER BY m.name');
+        $q=$this->db->prepare('SELECT p.*,m.name AS machine,m.os_family FROM dm_remote_project p JOIN dm_machine m ON m.id=p.machine_id'.
+            ($this->cowprod===null?'':' JOIN dm_deployment d ON d.id=p.deployment_id').' WHERE p.project_id=? ORDER BY m.name');
         $q->execute([$project]);return $q->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -77,8 +79,11 @@ final class RemoteProjectQueue
                 || $binding['repository'] !== $repository || $binding['machine'] !== $machine) {
                 throw new RuntimeException('Remote project assignment changed before registration');
             }
-            $this->db->prepare('INSERT INTO dm_deployment (id,machine_id,project_id,workspace_path,enabled) VALUES (?,?,?,?,1)')
-                ->execute([$deployment, $machine, $project, $workspace]);
+            if ($this->cowprod !== null)
+                $this->cowprod->create($deployment,$project,$machine,$workspace,true);
+            else
+                $this->db->prepare('INSERT INTO dm_deployment (id,machine_id,project_id,workspace_path,enabled) VALUES (?,?,?,?,1)')
+                    ->execute([$deployment, $machine, $project, $workspace]);
             $this->db->prepare('INSERT INTO dm_remote_project (project_id,deployment_id,machine_id,repository,workspace_path) VALUES (?,?,?,?,?)')
                 ->execute([$project, $deployment, $machine, $repository, $workspace]);
             $this->db->commit();
@@ -96,10 +101,28 @@ final class RemoteProjectQueue
 
     public function enqueue(string $project, string $operation, array $details = []): array
     {
+        if ($this->cowprod === null || $this->db->inTransaction())
+            return $this->enqueueRequest($project,$operation,$details);
+
+        $this->db->beginTransaction();
+        try {
+            $job = $this->enqueueRequest($project,$operation,$details);
+            $this->db->commit();
+            return $job;
+        } catch (\Throwable $error) {
+            if ($this->db->inTransaction())
+                $this->db->rollBack();
+            throw $error;
+        }
+    }
+
+    private function enqueueRequest(string $project, string $operation, array $details): array
+    {
         $record = $this->project($project);
         if ($record === null) {
             throw new RuntimeException('Remote project is not registered');
         }
+        $this->cowprod?->lockActive($record['deployment_id']);
         $this->assertOperationAllowed($record,$operation);
         $id = bin2hex(random_bytes(16));
         $request = ['id' => $id, 'machine_id' => $record['machine_id'],

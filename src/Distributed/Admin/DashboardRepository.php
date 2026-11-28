@@ -8,7 +8,7 @@ use PDO;
 
 final class DashboardRepository
 {
-    public function __construct(private readonly PDO $db)
+    public function __construct(private readonly PDO $db, private readonly bool $cowprodDeployments = false)
     {
     }
 
@@ -16,11 +16,12 @@ final class DashboardRepository
     public function recentJobs(int $limit = 50): array
     {
         $limit = max(1, min(100, $limit));
+        $deploymentSource = $this->cowprodDeployments ? 'V_DEPLOYMENTHISTORY AS dm_deployment' : 'dm_deployment';
         return $this->db->query(
             'SELECT dm_job.id, dm_job.status, dm_job.action_id, dm_job.created_at, '
             . 'dm_project.id AS project_id, dm_machine.name AS machine_name '
             . 'FROM dm_job '
-            . 'INNER JOIN dm_deployment ON dm_deployment.id = dm_job.deployment_id '
+            . 'INNER JOIN '.$deploymentSource.' ON dm_deployment.id = dm_job.deployment_id '
             . 'INNER JOIN dm_project ON dm_project.id = dm_deployment.project_id '
             . 'INNER JOIN dm_machine ON dm_machine.id = dm_deployment.machine_id '
             . 'ORDER BY dm_job.created_at DESC LIMIT ' . $limit
@@ -36,13 +37,14 @@ final class DashboardRepository
     public function recentRemoteReadonlyJobs(int $limit = 100): array
     {
         $limit = max(1, min(100, $limit));
+        $deploymentSource = $this->cowprodDeployments ? 'V_DEPLOYMENTHISTORY AS dm_deployment' : 'dm_deployment';
         return $this->db->query(
             'SELECT dm_remote_readonly_job.id, dm_remote_readonly_job.deployment_id, '
             . 'dm_deployment.project_id, dm_remote_readonly_job.action_name, '
             . 'dm_remote_readonly_job.state, dm_remote_readonly_job.created_at, '
             . 'dm_remote_readonly_job.finished_at '
             . 'FROM dm_remote_readonly_job '
-            . 'INNER JOIN dm_deployment ON dm_deployment.id = dm_remote_readonly_job.deployment_id '
+            . 'INNER JOIN '.$deploymentSource.' ON dm_deployment.id = dm_remote_readonly_job.deployment_id '
             . 'ORDER BY dm_remote_readonly_job.created_at DESC, dm_remote_readonly_job.id DESC LIMIT ' . $limit
         )->fetchAll(PDO::FETCH_ASSOC);
     }

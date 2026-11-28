@@ -31,7 +31,7 @@ $operations=static function(string $method,string $path,array $data,array $princ
     $config=require $configPath;
     if($method==='GET')$db=DatabaseConnection::connect($config['dsn'],$config['username'],$config['password']);
     else $db=DatabaseConnection::connect($config['dsn'],$config['writer_username'],$config['writer_password']);
-    return (new AdminRegistryOperations($db,'mobile-admin:'.($principal['session_id']??'legacy'), array_intersect_key($config, ['cowprod_themes' => true, 'cowprod_projects' => true, 'cowprod_machine_capabilities' => true])))->execute($method,$path,$data);
+    return (new AdminRegistryOperations($db,'mobile-admin:'.($principal['session_id']??'legacy'), array_intersect_key($config, ['cowprod_themes' => true, 'cowprod_projects' => true, 'cowprod_machine_capabilities' => true, 'cowprod_deployments' => true])))->execute($method,$path,$data);
 };
 $api=new AdminReadApi($tokens,$snapshot,operations:$operations);
 AdminReadApi::emit($api->handle($_SERVER['REQUEST_METHOD']??'GET',parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)?:'/',

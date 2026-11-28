@@ -6,6 +6,7 @@ namespace Cowprod\DevMcp\Distributed\Admin;
 
 use InvalidArgumentException;
 use Cowprod\DevMcp\Project\CowprodProjectRegistry;
+use Cowprod\DevMcp\Project\CowprodDeploymentRegistry;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -32,7 +33,7 @@ final class HostingLabEnrollment
      *
      * @return array<string,mixed>
      */
-    public static function enroll(PDO $db, string $machineId, ?CowprodProjectRegistry $projects = null): array
+    public static function enroll(PDO $db, string $machineId, ?CowprodProjectRegistry $projects = null, ?CowprodDeploymentRegistry $deployments = null): array
     {
         if (preg_match('/^[a-f0-9]{32}$/D', $machineId) !== 1
             || $machineId === str_repeat('0', 32)) {
@@ -83,11 +84,11 @@ final class HostingLabEnrollment
                 'SELECT id, workspace_path, enabled FROM dm_deployment '
                 . 'WHERE machine_id = ? AND project_id = ? FOR UPDATE'
             );
-            $createDeployment = $db->prepare(
+            $createDeployment = $deployments === null ? $db->prepare(
                 'INSERT INTO dm_deployment '
                 . '(id, machine_id, project_id, workspace_path, enabled) '
                 . 'VALUES (?, ?, ?, ?, 1)'
-            );
+            ) : null;
             $audit = $db->prepare(
                 "INSERT INTO dm_audit_event "
                 . "(actor, event_type, object_type, object_id, outcome) "
@@ -117,7 +118,10 @@ final class HostingLabEnrollment
                 $deployment = $findDeployment->fetch(PDO::FETCH_ASSOC);
                 if ($deployment === false) {
                     $id = bin2hex(random_bytes(16));
-                    $createDeployment->execute([$id, $machineId, $project, $workspace]);
+                    if ($deployments !== null)
+                        $deployments->create($id,$project,$machineId,$workspace,true);
+                    else
+                        $createDeployment->execute([$id, $machineId, $project, $workspace]);
                     $audit->execute(['hosting_lab.deployment.enable', 'deployment', $id]);
                     $created++;
                 } else {

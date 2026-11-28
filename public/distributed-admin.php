@@ -12,6 +12,7 @@ use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Registry\RegistryRepository;
 use Cowprod\DevMcp\Project\CowprodRuntimeCatalogue;
 use Cowprod\DevMcp\Project\CowprodProjectRegistry;
+use Cowprod\DevMcp\Project\CowprodDeploymentRegistry;
 use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
 use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
 use Symfony\Component\Process\Process;
@@ -141,7 +142,7 @@ if (isset($_GET['remote_jobs']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GE
             (string) ($config['username'] ?? ''),
             (string) ($config['password'] ?? ''),
         );
-        $recent = (new DashboardRepository($readDb))->recentRemoteReadonlyJobs();
+        $recent = (new DashboardRepository($readDb, array_key_exists('cowprod_deployments',$config)))->recentRemoteReadonlyJobs();
         echo json_encode(['jobs' => $recent], JSON_HEX_TAG | JSON_HEX_AMP
             | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
     } catch (Throwable $exception) {
@@ -246,8 +247,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $writer = DatabaseConnection::connect((string) $config['dsn'], (string) $config['writer_username'], (string) $config['writer_password']);
         $projectActor = 'web-admin:'.$adminUser;
         $editor = new RegistryEditor($writer, $projectActor, CowprodProjectRegistry::configured($writer, $config, $projectActor),
-            array_intersect_key($config, ['cowprod_machine_capabilities'=>true]));
-        $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,'web-admin');
+            array_intersect_key($config, ['cowprod_machine_capabilities'=>true]),
+            CowprodDeploymentRegistry::configured($writer,$config,$projectActor));
+        $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,$projectActor,
+            cowprod:CowprodDeploymentRegistry::configured($writer,$config,$projectActor));
         $instanceConfiguration=static function():array{
             $configuration=[];
             if(isset($_POST['instance_port']))$configuration['port']=trim((string)$_POST['instance_port'])===''?null:(int)$_POST['instance_port'];
@@ -332,6 +335,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $editor->registerLocalProjectMetadata($projectId, (string) ($_POST['description'] ?? ''),
                     (string) ($_POST['repository_url'] ?? ''));
                 break;
+            case 'deployment.remove':
+                $editor->removeDeployment((string)($_POST['deployment_id'] ?? ''));
+                break;
             case 'deployment.update_path':
                 $editor->updateDeploymentPath((string) ($_POST['deployment_id'] ?? ''),
                     (string) ($_POST['workspace_path'] ?? ''));
@@ -363,7 +369,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 'machine.update' => 'machines', 'project.update' => 'projects',
                 'project.runtime.select','project.runtime.remove','project.theme.select','project.remove' => 'projects',
                 'project.local_metadata.create' => 'projects',
-                'deployment.update_path' => 'deployments',
+                'deployment.update_path','deployment.remove' => 'deployments',
                 'instance.register','instance.configure','instance.action' => 'deployments',
                 'remote.readonly.enqueue' => 'projects', default => 'dashboard'
             };
@@ -401,7 +407,7 @@ try {
         (string) ($config['password'] ?? ''),
     );
     $registry = new RegistryRepository($db);
-    $dashboard = new DashboardRepository($db);
+    $dashboard = new DashboardRepository($db, array_key_exists('cowprod_deployments',$config));
     $machines = $registry->machines();
     $machineCapabilities = (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($db))->all();
     $projects = $registry->projects();
@@ -1276,6 +1282,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const deploymentRemovalEnabled = <?= isset($config['cowprod_deployments']) ? 'true' : 'false' ?>;
   const projectRemovalEnabled = <?= isset($config['cowprod_projects']) ? 'true' : 'false' ?>;
   const runtimeRemovalEnabled = <?= isset($config['cowprod_runtimes']) ? 'true' : 'false' ?>;
   const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
@@ -1746,6 +1753,19 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
             return;
           }
           form.elements.namedItem('operation').value='project.remove';
+        });
+        form.appendChild(remove);
+      }
+      if(deploymentRemovalEnabled && name==='deployments' && row.dataset.enabled!=='1'){
+        const remove=el('button','btn btn-danger ms-2','Retirer l’affectation');
+        remove.type='submit';
+        remove.formNoValidate=true;
+        remove.addEventListener('click', event=>{
+          if(!window.confirm('Retirer ce déploiement du registre ?')){
+            event.preventDefault();
+            return;
+          }
+          form.elements.namedItem('operation').value='deployment.remove';
         });
         form.appendChild(remove);
       }

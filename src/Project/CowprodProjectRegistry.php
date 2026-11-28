@@ -83,7 +83,8 @@ final class CowprodProjectRegistry
             $aProjet = $this->lockActive($sProjet);
             $oConn = $this->oConn;
             $sFiltre = 'WHERE project_id='.prepString2Update($sProjet);
-            foreach (['dm_deployment', 'dm_preview_port_reservation'] as $sTable)
+            $sDeploiements = array_key_exists('cowprod_deployments',$this->aConfig) ? 'V_DEPLOYMENTHISTORY' : 'dm_deployment';
+            foreach ([$sDeploiements, 'dm_preview_port_reservation'] as $sTable)
                 if ((int)getField('COUNT(*)', $sTable, $sFiltre, $oConn) !== 0)
                     throw new InvalidArgumentException('Détacher les affectations et les ports avant le retrait');
             foreach (['dm_project_provisioning', 'dm_local_project_config'] as $sTable)

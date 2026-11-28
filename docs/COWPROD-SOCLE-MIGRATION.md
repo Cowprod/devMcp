@@ -215,7 +215,12 @@ consommateurs. Le retour `--project-back PORT_WRITES_QUIESCED` projette les
 allocations actives et conserve les retraits et les versions dans la table
 Cowprod.
 
-## Registre des configurations SQL préparé
+## Registre des configurations SQL en production
+
+La révision `93c3366` a repris 30 configurations locales, 52 actions
+partagées et le marqueur d’installation sur TouchDeck. Les listes d’actions
+MCP et les identifiants ont été contrôlés à l’identique. Sauvegardes et
+résultats dans `/var/backups/devmcp/sql-project-definitions-cowprod-20261128T101720Z.2KpFmbvi`.
 
 Les tables `T_LOCALPROJECTCONFIG`, `T_SHAREDACTIONCONFIG` et
 `T_PROJECTREGISTRYSTATE` reprennent les définitions et le marqueur
@@ -232,6 +237,44 @@ Exécuter `migrate-cowprod-sql-project-config --prepare SQL_CONFIG_WRITES_QUIESC
 la lecture, la mise à jour des actions et le provisionnement. Le retour
 `--project-back SQL_CONFIG_WRITES_QUIESCED` préserve les définitions actives
 et laisse les historiques dans les tables Cowprod.
+
+## Déploiements préparés sur la branche dédiée
+
+Le relevé de production compte 23 déploiements. La clé projet de
+`dm_deployment` référence `T_PROJECT.PRO_CH_ACTIF` et sa clé machine
+référence `dm_machine.id`. Sept tables référencent l’identifiant de
+déploiement. Leurs contraintes réelles sont documentées dans la cartographie.
+
+`T_DEPLOYMENT` utilise le préfixe `DEP_`, un identifiant numérique interne
+et une clé de filiation. L’identifiant de déploiement utilisé par les agents
+reste celui de la ligne mère. Les sept clés étrangères pointent vers lui
+même après retrait. Les scripts d’exécution voient les affectations actives.
+La vue `V_DEPLOYMENTHISTORY` conserve les relations des travaux terminés pour
+l’administration, les notifications et le journal MCP.
+
+Les modifications de chemin sont historisées et signées. Un retrait exige
+une affectation désactivée, une file sans opération en cours et un workspace
+géré détaché. La ligne mère est conservée avec sa signature de retrait. La
+vue de compatibilité active utilise MERGE pour conserver les verrous
+`FOR UPDATE`. Tous les écrivains applicatifs sont dirigés vers le registre
+Cowprod quand le réglage est actif.
+
+### Bascule des déploiements
+
+1. Sauvegarder la base et les configurations distribuées. Répéter la reprise
+   et le retour sur une restauration de la base réelle. Vérifier les sept
+   contraintes, leurs règles et le contenu des tables enfants.
+2. Déployer le code et laisser finir les opérations actives. Suspendre les
+   transports et les écrivains. Utiliser
+   `migrate-cowprod-deployments --prepare DEPLOYMENT_WRITES_QUIESCED`,
+   `--verify` et `--activate DEPLOYMENT_WRITES_QUIESCED`.
+3. Ajouter `cowprod_deployments` dans les configurations distribuées des
+   écrivains et des lecteurs, avec le socle et l’identité locale de confiance.
+   Vérifier clés, permissions, lectures MCP/HTTPS, polling et historique.
+4. Le retour utilise `--project-back DEPLOYMENT_WRITES_QUIESCED` après
+   suspension des écritures et avant retrait du réglage. Les déploiements
+   retirés restent présents et désactivés en ancien mode pour leurs jobs.
+   Le retour du registre des projets intervient après celui des déploiements.
 
 ## Runtimes de devMCP en production
 

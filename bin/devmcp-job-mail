@@ -40,7 +40,7 @@ try {
     $machine = gethostname() ?: '';
     $previewIp = $config['preview_zerotier_ipv4'] ?? ($machine === 'touchdeck' ? '192.168.194.189' : '');
     $sites = $db === null ? null : new PublishedSites($db, $machine, $previewIp, array_intersect_key($dbConfig, ['cowprod_runtimes'=>true]));
-    $remoteJobs = $db === null ? [] : FinishedJobs::remote($db, $since);
+    $remoteJobs = $db === null ? [] : FinishedJobs::remote($db, $since, array_key_exists('cowprod_deployments',$dbConfig));
 
     $failed = false;
     $sent = 0;

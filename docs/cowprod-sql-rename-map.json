@@ -48,7 +48,28 @@
       "workspace_path": "DEP_CH_WORKSPACE_PATH",
       "enabled": "DEP_BL_ENABLED",
       "created_at": "DEP_DT_CREATION"
-    }
+    },
+    "active_config": "cowprod_deployments",
+    "archive": "dm_deployment_legacy",
+    "active_views": [
+      "V_DEPLOYMENTHISTORY"
+    ],
+    "target_columns": [
+      "DEP_N_ID",
+      "DEP_N_MID",
+      "DEP_CH_ID",
+      "DEP_CH_MACHINE_ID",
+      "DEP_CH_PROJECT_ID",
+      "DEP_CH_WORKSPACE_PATH",
+      "DEP_BL_ENABLED",
+      "DEP_DT_CREATION",
+      "DEP_CH_CREATION",
+      "DEP_DT_SUPPRESSION",
+      "DEP_CH_SUPPRESSION",
+      "DEP_CH_MERE",
+      "DEP_CH_MACHINEMERE",
+      "DEP_CH_PROJECTMERE"
+    ]
   },
   {
     "old": "dm_action_template",
