@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Project;
 
 use PDO;
-use PDOException;
 use RuntimeException;
 
 /**
@@ -38,15 +37,7 @@ final class ProvisioningStore
             || !is_string($record['repository'] ?? null)) {
             throw new RuntimeException('Invalid initial provisioning record');
         }
-        $query = $this->db->prepare(
-            'INSERT INTO dm_project_provisioning '
-            . '(project_id, description, repository, repository_mode, state, repository_confirmed, machine, workspace_path, actions_enabled, revision) '
-            . 'VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, 0, 1)'
-        );
-        $query->execute([
-            $record['project_id'], $record['description'], $record['repository'],
-            $record['repository_mode'], 'planned',
-        ]);
+        $this->insert($record, 'planned');
         return $this->get($record['project_id']);
     }
 
@@ -76,16 +67,7 @@ final class ProvisioningStore
                     'https://github.com/' . $record['repository'],
                 ]);
             }
-            $statement = $this->db->prepare(
-                'INSERT INTO dm_project_provisioning '
-                . '(project_id, description, repository, repository_mode, state, '
-                . 'repository_confirmed, machine, workspace_path, actions_enabled, revision) '
-                . "VALUES (?, ?, ?, ?, 'registered', 0, NULL, NULL, 0, 1)"
-            );
-            $statement->execute([
-                $record['project_id'], $record['description'],
-                $record['repository'], $record['repository_mode'],
-            ]);
+            $this->insert($record, 'registered');
             $created = $this->get($record['project_id']);
             $this->db->commit();
         } catch (\Throwable $error) {
@@ -200,17 +182,22 @@ final class ProvisioningStore
                 $sql->activateLocalProject($updated);
                 $updated['actions_enabled'] = true;
             }
-            $query = $this->db->prepare(
-                'UPDATE dm_project_provisioning SET state = ?, repository_confirmed = ?, machine = ?, workspace_path = ?, '
-                . 'actions_enabled = ?, revision = revision + 1 '
-                . 'WHERE project_id = ? AND revision = ?'
-            );
-            $query->execute([
-                $updated['state'], $updated['repository_confirmed'] ? 1 : 0, $updated['machine'], $updated['workspace_path'],
-                $updated['actions_enabled'] ? 1 : 0, $id, $expectedRevision,
-            ]);
-            if ($query->rowCount() !== 1) {
-                throw new RuntimeException('Concurrent provisioning modification');
+            $cowprod = CowprodProvisioningRegistry::configured($this->db, $this->catalogueConfig);
+            if ($cowprod !== null) {
+                $cowprod->avancer($id, $expectedRevision, $updated);
+            } else {
+                $query = $this->db->prepare(
+                    'UPDATE dm_project_provisioning SET state = ?, repository_confirmed = ?, machine = ?, workspace_path = ?, '
+                    . 'actions_enabled = ?, revision = revision + 1 '
+                    . 'WHERE project_id = ? AND revision = ?'
+                );
+                $query->execute([
+                    $updated['state'], $updated['repository_confirmed'] ? 1 : 0, $updated['machine'], $updated['workspace_path'],
+                    $updated['actions_enabled'] ? 1 : 0, $id, $expectedRevision,
+                ]);
+                if ($query->rowCount() !== 1) {
+                    throw new RuntimeException('Concurrent provisioning modification');
+                }
             }
             $this->db->commit();
         } catch (\Throwable $error) {
@@ -218,6 +205,19 @@ final class ProvisioningStore
             throw $error;
         }
         return $this->get($id);
+    }
+
+    private function insert(array $record, string $state): void
+    {
+        $cowprod = CowprodProvisioningRegistry::configured($this->db, $this->catalogueConfig);
+        if ($cowprod !== null) {
+            $cowprod->creer($record, $state);
+            return;
+        }
+        $query = $this->db->prepare('INSERT INTO dm_project_provisioning
+            (project_id, description, repository, repository_mode, state) VALUES (?,?,?,?,?)');
+        $query->execute([$record['project_id'], $record['description'], $record['repository'],
+            $record['repository_mode'], $state]);
     }
 
     public function list(): array

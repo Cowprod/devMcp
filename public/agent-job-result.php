@@ -76,7 +76,7 @@ try {
         echo json_encode(['protocol_version'=>1,'ok'=>true,'upload'=>$upload],JSON_THROW_ON_ERROR);exit;
     }
     if ($projectQueue) {
-        (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db))->finish($machineId, $payload['job_id'], $payload['result']);
+        (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db, catalogueConfig: $config))->finish($machineId, $payload['job_id'], $payload['result']);
         echo '{"protocol_version":1,"ok":true}';
         exit;
     }

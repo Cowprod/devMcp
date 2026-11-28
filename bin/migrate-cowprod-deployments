@@ -25,9 +25,8 @@ try {
     $bActif = array_key_exists('cowprod_deployments', $aConfig);
     if ((in_array($sMode, ['--prepare', '--activate'], true) && $bActif) || ($sMode === '--project-back' && !$bActif))
         throw new RuntimeException('Mode incompatible avec le catalogue actif');
-    $sCompte = $sMode === '--verify' ? 'username' : 'writer_username';
-    $sSecret = $sMode === '--verify' ? 'password' : 'writer_password';
-    $oConn = DatabaseConnection::connect($aConfig['dsn'], $aConfig[$sCompte], $aConfig[$sSecret]);
+    // Verification requires visibility of all foreign keys in information_schema.
+    $oConn = DatabaseConnection::connect($aConfig['dsn'], $aConfig['writer_username'], $aConfig['writer_password']);
     $oMigration = new DeploymentTableMigration($oConn);
     $aResultat = match ($sMode) {
         '--prepare' => $oMigration->preparer(),

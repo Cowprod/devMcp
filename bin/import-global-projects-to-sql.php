@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Project\CowprodProvisioningRegistry;
 use Cowprod\DevMcp\Project\ProjectRegistry;
 use Cowprod\DevMcp\Project\SqlProjectConfiguration;
 
@@ -125,12 +126,17 @@ try {
             $sql->insertLocalDefinition($id, json_encode($definition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         }
         if ($provisionedIds !== []) {
-            $activate = $db->prepare(
-                'UPDATE dm_project_provisioning SET actions_enabled = 1 '
-                . "WHERE project_id = ? AND state = 'active' AND machine = ?"
-            );
-            foreach ($provisionedIds as $id) {
-                $activate->execute([$id, $hostname]);
+            $provisioning = CowprodProvisioningRegistry::configured($db, $distributed, 'service:devmcp-sql-import');
+            if ($provisioning !== null) {
+                foreach ($provisionedIds as $id) {
+                    $provisioning->activerActions($id, $hostname);
+                }
+            } else {
+                $activate = $db->prepare('UPDATE dm_project_provisioning SET actions_enabled = 1 '
+                    . "WHERE project_id = ? AND state = 'active' AND machine = ?");
+                foreach ($provisionedIds as $id) {
+                    $activate->execute([$id, $hostname]);
+                }
             }
         }
         $sql->markReady();

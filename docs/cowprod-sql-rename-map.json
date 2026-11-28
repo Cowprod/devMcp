@@ -301,8 +301,31 @@
       "actions_enabled": "PPR_BL_ACTIONS_ENABLED",
       "revision": "PPR_N_REVISION",
       "created_at": "PPR_DT_CREATION",
-      "updated_at": "PPR_DT_UPDATED_AT"
-    }
+      "updated_at": "PPR_DT_MAJ"
+    },
+    "active_config": "cowprod_project_provisioning",
+    "archive": "dm_project_provisioning_legacy",
+    "target_columns": [
+      "PPR_N_ID",
+      "PPR_N_MID",
+      "PPR_CH_PROJECT_ID",
+      "PPR_CH_DESCRIPTION",
+      "PPR_CH_REPOSITORY",
+      "PPR_CH_REPOSITORY_MODE",
+      "PPR_CH_STATE",
+      "PPR_BL_REPOSITORY_CONFIRMED",
+      "PPR_CH_MACHINE",
+      "PPR_CH_WORKSPACE_PATH",
+      "PPR_BL_ACTIONS_ENABLED",
+      "PPR_N_REVISION",
+      "PPR_DT_CREATION",
+      "PPR_CH_CREATION",
+      "PPR_DT_MAJ",
+      "PPR_DT_SUPPRESSION",
+      "PPR_CH_SUPPRESSION",
+      "PPR_CH_PROJECTMERE",
+      "PPR_CH_REPOSITORYMERE"
+    ]
   },
   {
     "old": "dm_local_project_config",

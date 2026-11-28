@@ -162,7 +162,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true, 'cowprod_deployments' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true, 'cowprod_deployments' => true, 'cowprod_project_provisioning' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */

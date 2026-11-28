@@ -10,7 +10,7 @@ use Cowprod\DevMcp\Distributed\Admin\PreviewHttpProbe;
 
 final class RemoteProjectQueue
 {
-    public function __construct(private readonly PDO $db, private readonly ?string $deploymentId=null, private readonly ?CowprodDeploymentRegistry $cowprod=null) {}
+    public function __construct(private readonly PDO $db, private readonly ?string $deploymentId=null, private readonly ?CowprodDeploymentRegistry $cowprod=null, private readonly array $catalogueConfig=[]) {}
 
     public function assertReady(): void
     {
@@ -225,8 +225,13 @@ final class RemoteProjectQueue
                 }
                 $this->db->prepare('UPDATE dm_remote_project SET ready=1,metadata_json=? WHERE deployment_id=?')
                     ->execute([json_encode($data, JSON_THROW_ON_ERROR), $r['deployment_id']]);
-                $this->db->prepare("UPDATE dm_project_provisioning SET state='active',workspace_path=?,actions_enabled=1,revision=revision+1 WHERE project_id=? AND machine=? AND state='machine_assigned'")
-                    ->execute([$p['workspace_path'], $r['project_id'], $machine]);
+                $provisioning = CowprodProvisioningRegistry::configured($this->db, $this->catalogueConfig, 'agent:'.$machine);
+                if ($provisioning !== null) {
+                    $provisioning->activerDistant($r['project_id'], $machine, $p['workspace_path']);
+                } else {
+                    $this->db->prepare("UPDATE dm_project_provisioning SET state='active',workspace_path=?,actions_enabled=1,revision=revision+1 WHERE project_id=? AND machine=? AND state='machine_assigned'")
+                        ->execute([$p['workspace_path'], $r['project_id'], $machine]);
+                }
             }
             if(($result['ok']??null)===true&&in_array($r['operation'],['status','stop','restart'],true)&&isset($result['data']['deployment_id'])){
                 $p=(new self($this->db,$r['deployment_id']))->project($r['project_id']);$data=$result['data'];

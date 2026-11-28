@@ -276,6 +276,38 @@ Cowprod quand le réglage est actif.
    retirés restent présents et désactivés en ancien mode pour leurs jobs.
    Le retour du registre des projets intervient après celui des déploiements.
 
+La bascule du 28 novembre 2026 a conservé 23 déploiements. Les données des
+sept tables enfants sont identiques et les 17 services applicatifs ont gardé
+leurs PID. L'API HTTPS authentifiée, le connecteur MCP et une nouvelle
+exécution de l'auto-update ont répondu après la bascule. Sauvegardes et
+résultats sur TouchDeck dans
+`/var/backups/devmcp/deployments-cowprod-20261128T150632Z.q94vZ5AA`.
+
+## Journal de provisionnement
+
+`T_PROJECTPROVISIONING` conserve les identifiants projet, droits, révisions,
+dates et réservations de dépôts. Le provisionnement comporte des étapes
+antérieures à l'entrée d'un projet dans le catalogue. Il n'a donc pas de clé
+étrangère vers `T_PROJECT`. Les réservations d'identifiant et de dépôt sont
+uniques au niveau des lignes mères et restent réservées. Le workflow actuel
+ne propose aucune suppression. La structure et la vue prévoient la
+suppression logique des lignes mères.
+
+Les mutations sont signées par l'acteur MCP de confiance, l'agent authentifié
+qui termine le travail ou le service d'import. La copie d'historique précède
+la mutation réelle dans la transaction de l'opération. Une révision
+périmée ou un second résultat distant identique ne produit aucun historique.
+
+Répéter `migrate-cowprod-provisioning --prepare PROVISIONING_WRITES_QUIESCED`,
+`--activate PROVISIONING_WRITES_QUIESCED`, `--verify` et
+`--project-back PROVISIONING_WRITES_QUIESCED` sur une restauration. Pour
+basculer, suspendre les écrivains, comparer la projection de toutes les
+lignes et ajouter `cowprod_project_provisioning` à la configuration
+distribuée. Vérifier les droits des comptes, les lectures MCP et
+l'activation par un résultat distant dans la recette. Pour revenir, suspendre
+les écrivains, projeter les lignes mères vers l'archive puis retirer le
+réglage. Le nouveau journal reste présent avec son historique.
+
 ## Runtimes de devMCP en production
 
 Les tables cibles sont `T_RUNTIMETYPE` (`RTY_`) et `T_PROJECTRUNTIME`
