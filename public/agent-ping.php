@@ -109,7 +109,7 @@ try {
         }
         // REMOTE_ADDR is the connecting peer at the ZeroTier-only nginx
         // location, NOT an untrusted forwarded header or client-supplied URL.
-        (new VerifiedZeroTierAddress($db))->record(
+        (new VerifiedZeroTierAddress($db, $config))->record(
             $machineId, $reportedIp, (string) ($_SERVER['REMOTE_ADDR'] ?? '')
         );
         $response['zerotier_address_saved'] = true;

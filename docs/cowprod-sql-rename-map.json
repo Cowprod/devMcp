@@ -222,7 +222,24 @@
       "branch": "WDG_CH_BRANCH",
       "commit_sha": "WDG_CH_COMMIT_SHA",
       "inspected_at": "WDG_DT_INSPECTED_AT"
-    }
+    },
+    "archive": "dm_workspace_diagnostic_legacy",
+    "active_config": "cowprod_agent_observations",
+    "target_columns": [
+      "WDG_N_ID",
+      "WDG_N_MID",
+      "WDG_CH_DEPLOYMENT_ID",
+      "WDG_CH_MACHINE_ID",
+      "WDG_CH_STATUS",
+      "WDG_CH_BRANCH",
+      "WDG_CH_COMMIT_SHA",
+      "WDG_DT_INSPECTED_AT",
+      "WDG_DT_CREATION",
+      "WDG_CH_CREATION",
+      "WDG_DT_SUPPRESSION",
+      "WDG_CH_SUPPRESSION",
+      "WDG_CH_MERE"
+    ]
   },
   {
     "old": "dm_remote_readonly_job",
@@ -452,7 +469,20 @@
       "machine_id": "AZA_CH_MACHINE_ID",
       "ipv4": "AZA_CH_IPV4",
       "observed_at": "AZA_DT_OBSERVED_AT"
-    }
+    },
+    "archive": "dm_agent_zerotier_address_legacy",
+    "active_config": "cowprod_agent_observations",
+    "target_columns": [
+      "AZA_N_ID",
+      "AZA_N_MID",
+      "AZA_CH_MACHINE_ID",
+      "AZA_DT_OBSERVED_AT",
+      "AZA_DT_CREATION",
+      "AZA_CH_CREATION",
+      "AZA_DT_SUPPRESSION",
+      "AZA_CH_SUPPRESSION",
+      "AZA_CH_MERE"
+    ]
   },
   {
     "old": "dm_runtime_type",

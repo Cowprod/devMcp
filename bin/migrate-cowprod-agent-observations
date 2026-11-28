@@ -1,0 +1,41 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Distributed\Registry\AgentObservationTableMigration;
+
+require dirname(__DIR__).'/vendor/autoload.php';
+
+$sMode = $argv[1] ?? '';
+if (!in_array($sMode, ['--prepare', '--verify', '--activate', '--project-back'], true)
+    || ($sMode === '--verify' ? $argc !== 2 : ($argc !== 3 || $argv[2] !== 'OBSERVATION_WRITES_QUIESCED'))) {
+    fwrite(STDERR, "Usage: migrate-cowprod-agent-observations --verify | (--prepare|--activate|--project-back) OBSERVATION_WRITES_QUIESCED\n");
+    exit(2);
+}
+
+try {
+    $sConfig = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php';
+    if (!is_file($sConfig) || !is_readable($sConfig))
+        throw new RuntimeException('Configuration distribuée indisponible');
+    $aConfig = require $sConfig;
+    if (!is_array($aConfig))
+        throw new RuntimeException('Configuration distribuée invalide');
+    $bActif = array_key_exists('cowprod_agent_observations', $aConfig);
+    if ((in_array($sMode, ['--prepare', '--activate'], true) && $bActif) || ($sMode === '--project-back' && !$bActif))
+        throw new RuntimeException('Mode incompatible avec le catalogue actif');
+    // Verification requires visibility of all foreign keys in information_schema.
+    $oConn = DatabaseConnection::connect($aConfig['dsn'], $aConfig['writer_username'], $aConfig['writer_password']);
+    $oMigration = new AgentObservationTableMigration($oConn);
+    $aResultat = match ($sMode) {
+        '--prepare' => $oMigration->preparer(),
+        '--project-back' => $oMigration->retour(),
+        '--verify' => $oMigration->verifier(),
+        '--activate' => $oMigration->activer(),
+    };
+    echo json_encode($aResultat, JSON_THROW_ON_ERROR).PHP_EOL;
+} catch (Throwable $oErreur) {
+    fwrite(STDERR, 'Migration des observations refusée : '.get_class($oErreur).PHP_EOL);
+    exit(1);
+}

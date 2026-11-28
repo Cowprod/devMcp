@@ -113,6 +113,8 @@ final class DeploymentTableMigration
     public function retour(): array
     {
         $this->assertIdle();
+        if ($this->workspaceDiagnosticsActive())
+            throw new RuntimeException('Revenir aux diagnostics historiques avant les déploiements');
         $this->checkChildren('T_DEPLOYMENT','DEP_CH_MERE',true);
         $result = $this->transaction(function (): array {
             $this->db->exec('INSERT INTO dm_deployment_legacy (id,machine_id,project_id,workspace_path,enabled,created_at) '
@@ -159,16 +161,33 @@ final class DeploymentTableMigration
         $q->execute([strtolower($parent),strtolower($column)]);
         $found=[];
         foreach ($q->fetchAll(PDO::FETCH_NUM) as [$table,$constraint,$field,$onUpdate,$onDelete]) {
-            if (isset($found[$table]) || $field !== 'deployment_id'
+            $table = strtolower($table);
+            if (isset($found[$table]) || !in_array(strtolower($field), ['deployment_id','wdg_ch_deployment_id'], true)
                 || !in_array($onUpdate,['RESTRICT','NO ACTION'],true) || !in_array($onDelete,['RESTRICT','NO ACTION'],true))
                 throw new RuntimeException('Attributs de clé étrangère incompatibles');
             $found[$table] = $constraint;
         }
         $expected=self::CHILDREN;
-        if ($normalized)
+        if ($normalized) {
             $expected=array_map(static fn(string $name): string=>$name.'_cowprod',$expected);
+            if ($this->workspaceDiagnosticsActive()) {
+                $expected['dm_workspace_diagnostic_legacy'] = $expected['dm_workspace_diagnostic'];
+                unset($expected['dm_workspace_diagnostic']);
+            }
+            if ($this->db->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
+                AND LOWER(TABLE_NAME)='t_workspacediagnostic'")->fetchColumn() !== false)
+                $expected['t_workspacediagnostic'] = 'WDG_F_DEPLOYMENT';
+        }
+        ksort($found);
+        ksort($expected);
         if ($found !== $expected)
             throw new RuntimeException('Inventaire des clés vers les déploiements différent');
+    }
+
+    private function workspaceDiagnosticsActive(): bool
+    {
+        return $this->db->query("SELECT TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
+            AND TABLE_NAME='dm_workspace_diagnostic'")->fetchColumn() === 'VIEW';
     }
 
     private function projectReference(): string

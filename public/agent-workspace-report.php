@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+use Cowprod\DevMcp\Distributed\Agent\CowprodAgentObservations;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Security\AgentAuthenticator;
 
@@ -46,13 +47,18 @@ try {
     $config = require $configPath;
     $db = DatabaseConnection::connect((string) ($config['dsn'] ?? ''), (string) ($config['writer_username'] ?? ''), (string) ($config['writer_password'] ?? ''));
     (new AgentAuthenticator($db))->authenticate($machineId, $match[1], true);
-    $statement = $db->prepare('SELECT id FROM dm_deployment WHERE id = ? AND machine_id = ?');
-    $statement->execute([$payload['deployment_id'], $machineId]);
-    if ($statement->fetchColumn() === false) {
-        throw new RuntimeException('Unknown deployment');
+    $observations = CowprodAgentObservations::configured($db, $config, $machineId);
+    if ($observations !== null) {
+        $observations->enregistrerWorkspace($payload['deployment_id'], $payload['status'], $payload['branch'], $payload['commit']);
+    } else {
+        $statement = $db->prepare('SELECT id FROM dm_deployment WHERE id = ? AND machine_id = ?');
+        $statement->execute([$payload['deployment_id'], $machineId]);
+        if ($statement->fetchColumn() === false) {
+            throw new RuntimeException('Unknown deployment');
+        }
+        $statement = $db->prepare('INSERT INTO dm_workspace_diagnostic (deployment_id,machine_id,status,branch,commit_sha,inspected_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE status=VALUES(status),branch=VALUES(branch),commit_sha=VALUES(commit_sha),inspected_at=UTC_TIMESTAMP(6)');
+        $statement->execute([$payload['deployment_id'], $machineId, $payload['status'], $payload['branch'], $payload['commit']]);
     }
-    $statement = $db->prepare('INSERT INTO dm_workspace_diagnostic (deployment_id,machine_id,status,branch,commit_sha,inspected_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE status=VALUES(status),branch=VALUES(branch),commit_sha=VALUES(commit_sha),inspected_at=UTC_TIMESTAMP(6)');
-    $statement->execute([$payload['deployment_id'], $machineId, $payload['status'], $payload['branch'], $payload['commit']]);
     echo '{"protocol_version":1,"ok":true}';
 } catch (Throwable $exception) {
     error_log('devmcp-workspace-report: ' . get_class($exception) . ': ' . substr($exception->getMessage(), 0, 200));

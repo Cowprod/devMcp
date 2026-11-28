@@ -308,6 +308,11 @@ l'activation par un résultat distant dans la recette. Pour revenir, suspendre
 les écrivains, projeter les lignes mères vers l'archive puis retirer le
 réglage. Le nouveau journal reste présent avec son historique.
 
+TouchDeck utilise la nouvelle structure depuis le 28 novembre 2026. Les
+48 dossiers, leurs droits et révisions ont été comparés avant et après.
+Sauvegardes et résultats dans
+`/var/backups/devmcp/provisioning-cowprod-20261128T151317Z.r2CuitxS`.
+
 ## Journaux des tâches et de l'audit
 
 `T_JOBEVENT` et `T_AUDITEVENT` conservent les identifiants numériques, les
@@ -331,6 +336,27 @@ suspendre les écrivains et vérifier la copie, les droits, la séquence et
 les écritures transactionnelles. Le réglage `cowprod_events` signale la
 bascule dans l'inventaire. Le retour reporte les nouveaux événements
 dans les archives, sans modifier les événements déjà archivés.
+
+## Observations des agents
+
+`T_AGENTZEROTIERADDRESS` et `T_WORKSPACEDIAGNOSTIC` conservent les relations
+avec l'agent et l'affectation, ainsi que le dernier horodatage connu.
+L'agent doit rester propriétaire de l'affectation. Une adresse ZeroTier
+doit correspondre au pair TLS authentifié et à un agent actif.
+
+L'agent signe les nouvelles observations. Une adresse, une branche, un
+commit ou un état différent déclenchent une historisation atomique. Un
+rafraîchissement avec les mêmes valeurs ne modifie que l'horodatage
+d'observation. Il ne crée aucune nouvelle version de l'état.
+
+Le registre des déploiements doit déjà être actif. Répéter
+`migrate-cowprod-agent-observations --prepare OBSERVATION_WRITES_QUIESCED`,
+`--activate OBSERVATION_WRITES_QUIESCED`, `--verify` et
+`--project-back OBSERVATION_WRITES_QUIESCED` sur une restauration.
+Le réglage `cowprod_agent_observations` sélectionne les écritures signées.
+Basculer après suspension des écrivains. Vérifier les droits réels de
+lecture et la remontée d'observations d'un agent. Revenir aux observations
+d'origine avant un éventuel retour des déploiements.
 
 ## Runtimes de devMCP en production
 

@@ -16,7 +16,7 @@ use PDO;
  */
 final class VerifiedZeroTierAddress
 {
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(private readonly PDO $db, private readonly array $aConfig = []) {}
 
     public static function validIpv4(string $value): bool
     {
@@ -40,6 +40,12 @@ final class VerifiedZeroTierAddress
             || !self::validIpv4($requestIpv4)
             || !hash_equals($interfaceIpv4, $requestIpv4)) {
             throw new InvalidArgumentException('Unverified ZeroTier address');
+        }
+
+        $oObservations = CowprodAgentObservations::configured($this->db, $this->aConfig, $machineId);
+        if ($oObservations !== null) {
+            $oObservations->enregistrerAdresse($interfaceIpv4);
+            return;
         }
 
         // Authentication is performed before this call. Double-check active
