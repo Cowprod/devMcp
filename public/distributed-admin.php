@@ -250,7 +250,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             array_intersect_key($config, ['cowprod_machine_capabilities'=>true]),
             CowprodDeploymentRegistry::configured($writer,$config,$projectActor));
         $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,$projectActor,
-            cowprod:CowprodDeploymentRegistry::configured($writer,$config,$projectActor));
+            cowprod:CowprodDeploymentRegistry::configured($writer,$config,$projectActor),catalogueConfig:$config);
         $instanceConfiguration=static function():array{
             $configuration=[];
             if(isset($_POST['instance_port']))$configuration['port']=trim((string)$_POST['instance_port'])===''?null:(int)$_POST['instance_port'];

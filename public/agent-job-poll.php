@@ -44,7 +44,7 @@ try {
         exit;
     }
     if ($projectQueue) {
-        $job = (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db))->claim($machineId);
+        $job = (new \Cowprod\DevMcp\Project\RemoteProjectQueue($db, catalogueConfig: $config))->claim($machineId);
         echo json_encode(['protocol_version' => 1, 'project_jobs' => $job === null ? [] : [$job]], JSON_THROW_ON_ERROR);
         exit;
     }
@@ -58,6 +58,8 @@ try {
         echo '{"protocol_version":1,"jobs":[]}';
         exit;
     }
+    $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+    $history?->archiver('dm_remote_readonly_job',$job['id']);
     $arguments = json_decode($job['arguments_json'], true, 8, JSON_THROW_ON_ERROR);
     if (!is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments)) {
         $reject = $db->prepare("UPDATE dm_remote_readonly_job SET state = 'failed', finished_at = UTC_TIMESTAMP(6), result_json = ? WHERE id = ?");

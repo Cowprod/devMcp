@@ -390,6 +390,29 @@ des deux comptes, les dépendances et les transitions sous verrou. En cas
 de retour, projeter le groupe dans l'ordre des dépendances et rétablir les
 clés du journal avant le redémarrage.
 
+## Workspaces et files distantes
+
+`T_REMOTEPROJECT`, `T_REMOTEPROJECTJOB`, `T_REMOTEREADONLYJOB` et
+`T_REMOTEHOSTINGJOB` conservent les identifiants de déploiement, les
+autorisations et les résultats finaux. Les vues n'exposent que les lignes
+mères existantes. Les actions, revendications et résultats restent liés à
+l'agent et au déploiement autorisés.
+
+L'historique signé enregistre les transitions de file et les changements de
+configuration. Les anciennes valeurs d'environnement, les preuves
+d'hébergement et les contenus de requêtes et résultats sont neutralisés
+dans les snapshots de la même transaction. La ligne courante conserve les
+données requises pour exécuter les actions et consulter les résultats.
+Le signal de vie d'un build met à jour son bail.
+
+Répéter `migrate-cowprod-remote-work --prepare REMOTE_WORK_WRITES_QUIESCED`,
+`--activate REMOTE_WORK_WRITES_QUIESCED`, `--verify` et
+`--project-back REMOTE_WORK_WRITES_QUIESCED` sur une restauration.
+Suspendre les écrivains avant d'activer `cowprod_remote_work`. Vérifier les
+travaux en cours, les permissions et l'auto-update après bascule. Le retour
+projette les états courants dans les archives en gardant l'historique.
+Le registre des déploiements doit rester actif durant le retour.
+
 ## Runtimes de devMCP en production
 
 Les tables cibles sont `T_RUNTIMETYPE` (`RTY_`) et `T_PROJECTRUNTIME`

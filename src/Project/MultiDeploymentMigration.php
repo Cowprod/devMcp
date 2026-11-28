@@ -9,6 +9,16 @@ final class MultiDeploymentMigration
     public static function apply(PDO $db,?string $backupDirectory=null): void
     {
         if($db->inTransaction())throw new RuntimeException('Migration requires an idle database connection');
+        $oTypes=$db->query("SELECT TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('dm_remote_project','dm_remote_project_job')");
+        $aTypes=$oTypes->fetchAll(PDO::FETCH_KEY_PAIR);
+        if (in_array('VIEW',$aTypes,true)) {
+            if (count($aTypes)!==2 || count(array_unique($aTypes))!==1)
+                throw new RuntimeException('Managed deployment schema is only partially migrated');
+            $db->query('SELECT deployment_id,config_json,config_revision FROM dm_remote_project LIMIT 0');
+            $db->query('SELECT deployment_id,state FROM dm_remote_project_job LIMIT 0');
+            return;
+        }
         $columns=static function(string $table)use($db):array{return array_column($db->query('SHOW COLUMNS FROM `'.$table.'`')->fetchAll(PDO::FETCH_ASSOC),'Field');};
         $initial=$db->query('SHOW INDEX FROM dm_remote_project')->fetchAll(PDO::FETCH_ASSOC);
         $oldPrimary=array_values(array_filter($initial,static fn($i)=>$i['Key_name']==='PRIMARY'));

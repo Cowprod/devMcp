@@ -93,7 +93,7 @@ final class AdminRegistryOperations
     private function deployment(string $method,string $path,array $data):array
     {
         $service=new \Cowprod\DevMcp\Project\DeploymentService($this->db,$this->actor,
-            cowprod:\Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor));
+            cowprod:\Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor),catalogueConfig:$this->catalogueConfig);
         if($method==='GET'&&$path==='/deployment-targets')return $service->targets();
         if($method==='GET'&&$path==='/deployments')return ['deployments'=>$service->list()];
         if($method==='POST'&&$path==='/deployments'){

@@ -58,13 +58,19 @@ try {
     $db->beginTransaction();
     try {
         // An offline agent must never claim a stale privileged request.
-        $expire = $db->prepare(
-            "UPDATE dm_remote_hosting_job SET state = 'expired',
-             finished_at = UTC_TIMESTAMP(6), result_json = ?
-             WHERE machine_id = ? AND state = 'queued'
-               AND expires_at <= UTC_TIMESTAMP(6)"
-        );
-        $expire->execute(['{"ok":false,"error":"hosting_job_expired"}', $machineId]);
+        $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+        if ($history !== null) {
+            $history->modifier('dm_remote_hosting_job',"state='expired',finished_at=UTC_TIMESTAMP(6),result_json=?",
+                ['{"ok":false,"error":"hosting_job_expired"}'],"machine_id=? AND state='queued' AND expires_at<=UTC_TIMESTAMP(6)",[$machineId]);
+        } else {
+            $expire = $db->prepare(
+                "UPDATE dm_remote_hosting_job SET state = 'expired',
+                 finished_at = UTC_TIMESTAMP(6), result_json = ?
+                 WHERE machine_id = ? AND state = 'queued'
+                   AND expires_at <= UTC_TIMESTAMP(6)"
+            );
+            $expire->execute(['{"ok":false,"error":"hosting_job_expired"}', $machineId]);
+        }
         $query = $db->prepare(
             "SELECT j.id, j.deployment_id, j.action_name, j.request_json
              FROM dm_remote_hosting_job j
@@ -81,6 +87,7 @@ try {
             echo '{"protocol_version":1,"jobs":[]}' . "\n";
             exit;
         }
+        $history?->archiver('dm_remote_hosting_job',$job['id']);
         $request = json_decode((string) $job['request_json'], true, 8, JSON_THROW_ON_ERROR);
         $valid = is_array($request)
             && hostingQueueRequest((string) $job['action_name'], $request)

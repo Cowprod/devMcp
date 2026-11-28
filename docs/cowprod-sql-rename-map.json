@@ -350,7 +350,27 @@
       "claimed_at": "RRJ_DT_CLAIMED_AT",
       "finished_at": "RRJ_DT_FINISHED_AT",
       "result_json": "RRJ_CH_RESULT_JSON"
-    }
+    },
+    "archive": "dm_remote_readonly_job_legacy",
+    "active_config": "cowprod_remote_work",
+    "target_columns": [
+      "RRJ_N_ID",
+      "RRJ_N_MID",
+      "RRJ_CH_ID",
+      "RRJ_CH_DEPLOYMENT_ID",
+      "RRJ_CH_MACHINE_ID",
+      "RRJ_CH_ACTION_NAME",
+      "RRJ_CH_ARGUMENTS_JSON",
+      "RRJ_CH_STATE",
+      "RRJ_DT_CREATION",
+      "RRJ_DT_CLAIMED_AT",
+      "RRJ_DT_FINISHED_AT",
+      "RRJ_CH_RESULT_JSON",
+      "RRJ_CH_CREATION",
+      "RRJ_DT_SUPPRESSION",
+      "RRJ_CH_SUPPRESSION",
+      "RRJ_CH_MERE"
+    ]
   },
   {
     "old": "dm_remote_hosting_job",
@@ -367,7 +387,28 @@
       "claimed_at": "RHJ_DT_CLAIMED_AT",
       "finished_at": "RHJ_DT_FINISHED_AT",
       "result_json": "RHJ_CH_RESULT_JSON"
-    }
+    },
+    "archive": "dm_remote_hosting_job_legacy",
+    "active_config": "cowprod_remote_work",
+    "target_columns": [
+      "RHJ_N_ID",
+      "RHJ_N_MID",
+      "RHJ_CH_ID",
+      "RHJ_CH_DEPLOYMENT_ID",
+      "RHJ_CH_MACHINE_ID",
+      "RHJ_CH_ACTION_NAME",
+      "RHJ_CH_REQUEST_JSON",
+      "RHJ_CH_STATE",
+      "RHJ_DT_CREATION",
+      "RHJ_DT_EXPIRES_AT",
+      "RHJ_DT_CLAIMED_AT",
+      "RHJ_DT_FINISHED_AT",
+      "RHJ_CH_RESULT_JSON",
+      "RHJ_CH_CREATION",
+      "RHJ_DT_SUPPRESSION",
+      "RHJ_CH_SUPPRESSION",
+      "RHJ_CH_MERE"
+    ]
   },
   {
     "old": "dm_remote_project",
@@ -382,7 +423,29 @@
       "config_revision": "RPR_N_CONFIG_REVISION",
       "ready": "RPR_BL_READY",
       "metadata_json": "RPR_CH_METADATA_JSON"
-    }
+    },
+    "archive": "dm_remote_project_legacy",
+    "active_config": "cowprod_remote_work",
+    "target_columns": [
+      "RPR_N_ID",
+      "RPR_N_MID",
+      "RPR_CH_PROJECT_ID",
+      "RPR_CH_DEPLOYMENT_ID",
+      "RPR_CH_MACHINE_ID",
+      "RPR_CH_REPOSITORY",
+      "RPR_CH_WORKSPACE_PATH",
+      "RPR_CH_CONFIG_JSON",
+      "RPR_N_CONFIG_REVISION",
+      "RPR_BL_READY",
+      "RPR_CH_METADATA_JSON",
+      "RPR_DT_CREATION",
+      "RPR_CH_CREATION",
+      "RPR_DT_SUPPRESSION",
+      "RPR_CH_SUPPRESSION",
+      "RPR_CH_MERE",
+      "RPR_CH_PROJECTMERE",
+      "RPR_CH_MACHINEMERE"
+    ]
   },
   {
     "old": "dm_remote_project_job",
@@ -400,7 +463,29 @@
       "finished_at": "RPJ_DT_FINISHED_AT",
       "expires_at": "RPJ_DT_EXPIRES_AT",
       "result_json": "RPJ_CH_RESULT_JSON"
-    }
+    },
+    "archive": "dm_remote_project_job_legacy",
+    "active_config": "cowprod_remote_work",
+    "target_columns": [
+      "RPJ_N_ID",
+      "RPJ_N_MID",
+      "RPJ_CH_ID",
+      "RPJ_CH_PROJECT_ID",
+      "RPJ_CH_MACHINE_ID",
+      "RPJ_CH_DEPLOYMENT_ID",
+      "RPJ_CH_OPERATION",
+      "RPJ_CH_REQUEST_JSON",
+      "RPJ_CH_STATE",
+      "RPJ_DT_CREATION",
+      "RPJ_DT_CLAIMED_AT",
+      "RPJ_DT_FINISHED_AT",
+      "RPJ_DT_EXPIRES_AT",
+      "RPJ_CH_RESULT_JSON",
+      "RPJ_CH_CREATION",
+      "RPJ_DT_SUPPRESSION",
+      "RPJ_CH_SUPPRESSION",
+      "RPJ_CH_MERE"
+    ]
   },
   {
     "old": "dm_machine_capability",

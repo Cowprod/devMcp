@@ -91,6 +91,8 @@ try {
             }
         }
         $json = json_encode($payload['result'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId)
+            ?->archiver('dm_remote_hosting_job',$payload['job_id']);
         $stmt = $db->prepare(
             "UPDATE dm_remote_hosting_job SET state = ?, result_json = ?,
              finished_at = UTC_TIMESTAMP(6)

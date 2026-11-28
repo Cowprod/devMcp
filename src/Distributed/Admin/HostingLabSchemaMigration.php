@@ -42,13 +42,16 @@ final class HostingLabSchemaMigration
     public static function state(PDO $db): string
     {
         $table = $db->query(
-            "SELECT ENGINE FROM information_schema.TABLES "
+            "SELECT ENGINE,TABLE_TYPE FROM information_schema.TABLES "
             . "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dm_remote_hosting_job'"
         )->fetch(PDO::FETCH_ASSOC);
         if ($table === false) {
             return 'missing';
         }
-        if (!is_array($table) || strtoupper((string) ($table['ENGINE'] ?? '')) !== 'INNODB') {
+        $cowprodView = ($table['TABLE_TYPE'] ?? null) === 'VIEW'
+            && $db->query("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
+                AND LOWER(TABLE_NAME)='t_remotehostingjob'")->fetchColumn() === 'InnoDB';
+        if (!$cowprodView && (!is_array($table) || strtoupper((string) ($table['ENGINE'] ?? '')) !== 'INNODB')) {
             throw new RuntimeException('Unexpected hosting queue storage engine');
         }
         $stmt = $db->query(
@@ -71,7 +74,7 @@ final class HostingLabSchemaMigration
         if ($kind === self::CURRENT) {
             return 'ready';
         }
-        if ($kind === self::LEGACY) {
+        if (!$cowprodView && $kind === self::LEGACY) {
             return '006_only';
         }
         throw new RuntimeException('Hosting queue action allowlist has drifted');

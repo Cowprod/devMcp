@@ -8,7 +8,7 @@ use InvalidArgumentException;
 /** One business service for MCP and Web; typed jobs use the existing authenticated agent queue. */
 final class DeploymentService
 {
-    public function __construct(private readonly PDO $db, private readonly string $actor='mcp-admin', private readonly string $sourceRoot='/var/lib/devmcp/remote-sources', private readonly ?CowprodDeploymentRegistry $cowprod=null) {}
+    public function __construct(private readonly PDO $db, private readonly string $actor='mcp-admin', private readonly string $sourceRoot='/var/lib/devmcp/remote-sources', private readonly ?CowprodDeploymentRegistry $cowprod=null, private readonly array $catalogueConfig=[]) {}
     public function targets(): array
     {
         $rows=$this->db->query("SELECT id,name,os_family,architecture,agent_version FROM dm_machine WHERE status='active' ORDER BY name,id")->fetchAll(PDO::FETCH_ASSOC);$out=[];
@@ -84,6 +84,7 @@ final class DeploymentService
                 $q=$this->db->prepare('SELECT id FROM dm_deployment WHERE machine_id=? AND workspace_path=? AND id<>?');$q->execute([$row['machine_id'],$workspace,$id]);if($q->fetchColumn()!==false)throw new InvalidArgumentException('Workspace already assigned');
             }
             $this->assertPort($row['machine_id'],$config['port'],$id);
+            CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,$this->actor)?->archiver('dm_remote_project',$id);
             $this->db->prepare('UPDATE dm_remote_project SET config_json=?,config_revision=config_revision+1,workspace_path=? WHERE deployment_id=?')->execute([json_encode($config,JSON_THROW_ON_ERROR),$workspace,$id]);
             if ($this->cowprod !== null)
                 $this->cowprod->updatePath($id,$workspace);
@@ -121,16 +122,34 @@ final class DeploymentService
     /** Called only by the central devmcp worker: Web never needs its GitHub SSH key. */
     public function prepareNext(): bool
     {
-        $this->db->exec("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE state='preparing' AND expires_at<=UTC_TIMESTAMP(6)");
+        $this->modifierPreparation("state='expired',finished_at=UTC_TIMESTAMP(6)", [], "state='preparing' AND expires_at<=UTC_TIMESTAMP(6)", []);
         $row=$this->db->query("SELECT j.id,j.project_id,j.request_json FROM dm_remote_project_job j JOIN dm_deployment d ON d.id=j.deployment_id WHERE j.state='preparing' AND d.enabled=1 AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
         if($row===false)return false;
         try{
             $request=json_decode($row['request_json'],true,32,JSON_THROW_ON_ERROR);
             $request['package']=(new RemoteProjectSource($this->sourceRoot))->snapshot($row['project_id'],$request['source']['repository'],$request['source']['revision']);unset($request['source']);
-            $this->db->prepare("UPDATE dm_remote_project_job SET request_json=?,state='queued' WHERE id=? AND state='preparing' AND expires_at>UTC_TIMESTAMP(6)")->execute([json_encode($request,JSON_THROW_ON_ERROR),$row['id']]);
-        }catch(\Throwable $e){$this->db->prepare("UPDATE dm_remote_project_job SET state='failed',finished_at=UTC_TIMESTAMP(6),result_json=? WHERE id=? AND state='preparing'")->execute([json_encode(['ok'=>false,'code'=>'SOURCE_PREPARATION_FAILED','error'=>($e::class===RuntimeException::class||$e instanceof LocalWorkspaceProvisioningException)?$e->getMessage():'Source preparation failed; inspect the central worker diagnostics.'],JSON_THROW_ON_ERROR),$row['id']]);error_log('devMcp deployment source preparation failed for job '.$row['id'].': '.get_class($e));}
+            $this->modifierPreparation("request_json=?,state='queued'",[json_encode($request,JSON_THROW_ON_ERROR)],
+                "id=? AND state='preparing' AND expires_at>UTC_TIMESTAMP(6)",[$row['id']]);
+        } catch (\Throwable $e) {
+            $result = json_encode(['ok'=>false,'code'=>'SOURCE_PREPARATION_FAILED',
+                'error'=>($e::class===RuntimeException::class||$e instanceof LocalWorkspaceProvisioningException)
+                    ? $e->getMessage() : 'Source preparation failed; inspect the central worker diagnostics.'], JSON_THROW_ON_ERROR);
+            $this->modifierPreparation("state='failed',finished_at=UTC_TIMESTAMP(6),result_json=?",[$result],
+                "id=? AND state='preparing'",[$row['id']]);
+            error_log('devMcp deployment source preparation failed for job '.$row['id'].': '.get_class($e));
+        }
         return true;
     }
+    private function modifierPreparation(string $set,array $values,string $where,array $filter): void
+    {
+        $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'service:devmcp-project-control');
+        if ($history !== null) {
+            $history->modifier('dm_remote_project_job',$set,$values,$where,$filter);
+            return;
+        }
+        $this->db->prepare('UPDATE dm_remote_project_job SET '.$set.' WHERE '.$where)->execute([...$values,...$filter]);
+    }
+
     private function requireHosting(string $id):void
     {
         if(!(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($id)['hosting'])throw new InvalidArgumentException('Hosting capability is not enabled for this machine');

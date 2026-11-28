@@ -113,7 +113,8 @@ final class DeploymentTableMigration
     public function retour(): array
     {
         $this->assertIdle();
-        foreach (['dm_workspace_diagnostic','dm_policy_revision','dm_deployment_action','dm_job'] as $child)
+        foreach (['dm_workspace_diagnostic','dm_policy_revision','dm_deployment_action','dm_job',
+            'dm_remote_project','dm_remote_readonly_job','dm_remote_hosting_job'] as $child)
             if ($this->childViewActive($child))
                 throw new RuntimeException('Revenir à '.$child.' avant les déploiements');
         $this->checkChildren('T_DEPLOYMENT','DEP_CH_MERE',true);
@@ -164,7 +165,8 @@ final class DeploymentTableMigration
         foreach ($q->fetchAll(PDO::FETCH_NUM) as [$table,$constraint,$field,$onUpdate,$onDelete]) {
             $table = strtolower($table);
             if (isset($found[$table]) || !in_array(strtolower($field), ['deployment_id','wdg_ch_deployment_id',
-                    'pol_ch_deployment_id','dpa_ch_deployment_id','job_ch_deployment_id'], true)
+                    'pol_ch_deployment_id','dpa_ch_deployment_id','job_ch_deployment_id',
+                    'rpr_ch_deployment_id','rrj_ch_deployment_id','rhj_ch_deployment_id'], true)
                 || !in_array($onUpdate,['RESTRICT','NO ACTION'],true) || !in_array($onDelete,['RESTRICT','NO ACTION'],true))
                 throw new RuntimeException('Attributs de clé étrangère incompatibles');
             $found[$table] = $constraint;
@@ -177,6 +179,9 @@ final class DeploymentTableMigration
                 'dm_policy_revision'=>['t_policyrevision','POL_F_DEPLOYMENT'],
                 'dm_deployment_action'=>['t_deploymentaction','DPA_F_DEPLOYMENT'],
                 'dm_job'=>['t_job','JOB_F_DEPLOYMENT'],
+                'dm_remote_project'=>['t_remoteproject','RPR_F_DEPLOYMENT'],
+                'dm_remote_readonly_job'=>['t_remotereadonlyjob','RRJ_F_DEPLOYMENT'],
+                'dm_remote_hosting_job'=>['t_remotehostingjob','RHJ_F_DEPLOYMENT'],
             ] as $child=>[$target,$constraint]) {
                 if ($this->childViewActive($child)) {
                     $expected[$child.'_legacy'] = $expected[$child];

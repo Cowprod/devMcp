@@ -84,10 +84,17 @@ try {
     if (strlen($result) > 65536) {
         throw new RuntimeException('result_size');
     }
-    $statement = $db->prepare("UPDATE dm_remote_readonly_job SET state = ?, result_json = ?, finished_at = UTC_TIMESTAMP(6) WHERE id = ? AND machine_id = ? AND state = 'claimed'");
-    $statement->execute([($payload['result']['ok'] ?? false) === true ? 'succeeded' : 'failed',
-        $result, $payload['job_id'], $machineId]);
-    if ($statement->rowCount() !== 1) {
+    $state = ($payload['result']['ok'] ?? false) === true ? 'succeeded' : 'failed';
+    $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+    if ($history !== null) {
+        $changed = $history->modifier('dm_remote_readonly_job','state=?,result_json=?,finished_at=UTC_TIMESTAMP(6)',
+            [$state,$result],"id=? AND machine_id=? AND state='claimed'",[$payload['job_id'],$machineId]);
+    } else {
+        $statement = $db->prepare("UPDATE dm_remote_readonly_job SET state = ?, result_json = ?, finished_at = UTC_TIMESTAMP(6) WHERE id = ? AND machine_id = ? AND state = 'claimed'");
+        $statement->execute([$state,$result,$payload['job_id'],$machineId]);
+        $changed = $statement->rowCount();
+    }
+    if ($changed !== 1) {
         throw new RuntimeException('job_not_claimed');
     }
     echo '{"protocol_version":1,"ok":true}';

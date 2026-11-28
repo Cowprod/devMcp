@@ -35,12 +35,12 @@ final class RemoteTools
 
     public function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
     {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot,
-        \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig));}
+        \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig),$this->catalogueConfig);}
 
     public function projectQueue(): \Cowprod\DevMcp\Project\RemoteProjectQueue
     {
         return new \Cowprod\DevMcp\Project\RemoteProjectQueue($this->db,$this->deploymentId,
-            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig));
+            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig),$this->catalogueConfig);
     }
 
     public function uploadChunk(string $project, string $path, int $offset, int $size, string $sha256, string $data): array
@@ -162,7 +162,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true, 'cowprod_deployments' => true, 'cowprod_project_provisioning' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true, 'cowprod_projects' => true, 'cowprod_preview_ports' => true, 'cowprod_sql_project_config' => true, 'cowprod_deployments' => true, 'cowprod_project_provisioning' => true, 'cowprod_remote_work' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */

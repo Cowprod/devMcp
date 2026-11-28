@@ -163,12 +163,24 @@ final class RemoteProjectQueue
         $this->db->beginTransaction();
         try {
             // Late jobs from an older central process retain their exact project+machine binding.
-            $this->db->prepare('UPDATE dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id SET j.deployment_id=p.deployment_id WHERE j.machine_id=? AND j.deployment_id IS NULL')->execute([$machine]);
-            $this->db->prepare("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE machine_id=? AND state IN ('preparing','queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)")->execute([$machine]);
+            $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
+            if ($history !== null) {
+                $late = $this->db->prepare('SELECT j.id,p.deployment_id FROM dm_remote_project_job j JOIN dm_remote_project p
+                    ON p.project_id=j.project_id AND p.machine_id=j.machine_id WHERE j.machine_id=? AND j.deployment_id IS NULL FOR UPDATE');
+                $late->execute([$machine]);
+                foreach ($late->fetchAll(PDO::FETCH_ASSOC) as $row)
+                    $history->modifier('dm_remote_project_job','deployment_id=?',[$row['deployment_id']], 'id=?',[$row['id']]);
+                $history->modifier('dm_remote_project_job', "state='expired',finished_at=UTC_TIMESTAMP(6)", [],
+                    "machine_id=? AND state IN ('preparing','queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)",[$machine]);
+            } else {
+                $this->db->prepare('UPDATE dm_remote_project_job j JOIN dm_remote_project p ON p.project_id=j.project_id AND p.machine_id=j.machine_id SET j.deployment_id=p.deployment_id WHERE j.machine_id=? AND j.deployment_id IS NULL')->execute([$machine]);
+                $this->db->prepare("UPDATE dm_remote_project_job SET state='expired',finished_at=UTC_TIMESTAMP(6) WHERE machine_id=? AND state IN ('preparing','queued','claimed') AND expires_at<=UTC_TIMESTAMP(6)")->execute([$machine]);
+            }
             $q = $this->db->prepare("SELECT j.id,j.request_json FROM dm_remote_project_job j JOIN dm_remote_project p ON p.deployment_id=j.deployment_id AND p.project_id=j.project_id AND p.machine_id=j.machine_id JOIN dm_deployment d ON d.id=p.deployment_id AND d.project_id=j.project_id AND d.machine_id=j.machine_id JOIN dm_machine m ON m.id=j.machine_id WHERE j.machine_id=? AND m.status='active' AND d.enabled=1 AND (j.state='queued' OR (j.state='claimed' AND j.claimed_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 180 SECOND))) AND j.expires_at>UTC_TIMESTAMP(6) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE");
             $q->execute([$machine]);
             $r = $q->fetch(PDO::FETCH_ASSOC);
             if ($r !== false) {
+                $history?->archiver('dm_remote_project_job',$r['id']);
                 $this->db->prepare("UPDATE dm_remote_project_job SET state='claimed',claimed_at=UTC_TIMESTAMP(6) WHERE id=? AND state IN ('queued','claimed')")->execute([$r['id']]);
             }
             $this->db->commit();
@@ -199,6 +211,7 @@ final class RemoteProjectQueue
             if ($r['state'] !== 'claimed') {
                 throw new RuntimeException('Remote project job was not claimed');
             }
+            $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
             $request=json_decode($r['request_json'],true,32,JSON_THROW_ON_ERROR);
             if(($result['ok']??null)===true&&($request['operation']??null)==='instance'&&(($result['data']['deployment_id']??null)!==$r['deployment_id']||($result['data']['configuration_revision']??null)!==$request['configuration_revision']))throw new RuntimeException('Instance result has the wrong deployment or configuration identity');
             if (($result['ok'] ?? null) === true && in_array($r['operation'], ['create', 'sync', 'deploy'], true)) {
@@ -223,8 +236,14 @@ final class RemoteProjectQueue
                     $data['central_http_verified'] = true;
                     $data['preview_http_checked_at_utc'] = gmdate('Y-m-d\TH:i:s\Z');
                 }
-                $this->db->prepare('UPDATE dm_remote_project SET ready=1,metadata_json=? WHERE deployment_id=?')
-                    ->execute([json_encode($data, JSON_THROW_ON_ERROR), $r['deployment_id']]);
+                $json = json_encode($data,JSON_THROW_ON_ERROR);
+                if ($history !== null) {
+                    $history->modifier('dm_remote_project','ready=1,metadata_json=?',[$json],
+                        'deployment_id=? AND (ready=0 OR NOT (metadata_json <=> ?))',[$r['deployment_id'],$json]);
+                } else {
+                    $this->db->prepare('UPDATE dm_remote_project SET ready=1,metadata_json=? WHERE deployment_id=?')
+                        ->execute([$json,$r['deployment_id']]);
+                }
                 $provisioning = CowprodProvisioningRegistry::configured($this->db, $this->catalogueConfig, 'agent:'.$machine);
                 if ($provisioning !== null) {
                     $provisioning->activerDistant($r['project_id'], $machine, $p['workspace_path']);
@@ -237,8 +256,15 @@ final class RemoteProjectQueue
                 $p=(new self($this->db,$r['deployment_id']))->project($r['project_id']);$data=$result['data'];
                 if($data['deployment_id']!==$r['deployment_id']||($data['project_id']??null)!==$r['project_id']||($data['workspace_path']??null)!==$p['workspace_path'])throw new RuntimeException('Instance result identity mismatch');
                 $data['central_http_verified']=false;
-                $this->db->prepare('UPDATE dm_remote_project SET metadata_json=? WHERE deployment_id=?')->execute([json_encode($data,JSON_THROW_ON_ERROR),$r['deployment_id']]);
+                $json = json_encode($data,JSON_THROW_ON_ERROR);
+                if ($history !== null) {
+                    $history->modifier('dm_remote_project','metadata_json=?',[$json],
+                        'deployment_id=? AND NOT (metadata_json <=> ?)',[$r['deployment_id'],$json]);
+                } else {
+                    $this->db->prepare('UPDATE dm_remote_project SET metadata_json=? WHERE deployment_id=?')->execute([$json,$r['deployment_id']]);
+                }
             }
+            $history?->archiver('dm_remote_project_job',$id);
             $this->db->prepare('UPDATE dm_remote_project_job SET state=?,result_json=?,finished_at=UTC_TIMESTAMP(6) WHERE id=?')
                 ->execute([($result['ok'] ?? false) === true ? 'succeeded' : 'failed', json_encode($result, JSON_THROW_ON_ERROR), $id]);
             $this->db->commit();
