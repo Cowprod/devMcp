@@ -476,6 +476,7 @@
       "AZA_N_ID",
       "AZA_N_MID",
       "AZA_CH_MACHINE_ID",
+      "AZA_CH_IPV4",
       "AZA_DT_OBSERVED_AT",
       "AZA_DT_CREATION",
       "AZA_CH_CREATION",

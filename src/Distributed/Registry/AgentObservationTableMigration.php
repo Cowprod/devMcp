@@ -33,9 +33,10 @@ final class AgentObservationTableMigration
 
         return $this->transaction(function (): array {
             foreach (self::TABLES as $legacy=>[$target, $prefix, $columns]) {
-                if ((int)$this->db->query('SELECT COUNT(*) FROM '.$target)->fetchColumn() === 0)
-                    $this->db->exec('INSERT INTO '.$target.' ('.implode(',', $columns).','.$prefix.'_DT_CREATION)
-                        SELECT '.implode(',', array_keys($columns)).',NULL FROM '.$legacy);
+                $changes = array_map(static fn(string $field): string => $field.'=VALUES('.$field.')', array_slice($columns, 1));
+                $this->db->exec('INSERT INTO '.$target.' ('.implode(',', $columns).','.$prefix.'_DT_CREATION)
+                    SELECT '.implode(',', array_keys($columns)).',NULL FROM '.$legacy
+                    .' ON DUPLICATE KEY UPDATE '.implode(',', $changes));
             }
             return $this->verifier();
         });

@@ -47,7 +47,9 @@ try {
     $deployments->activer();
     $migration = new AgentObservationTableMigration($db);
     $expected = ['dm_agent_zerotier_address'=>1,'dm_workspace_diagnostic'=>1];
-    verifier($migration->preparer() === $expected && $migration->activer() === $expected, 'Toutes les observations conservées');
+    verifier($migration->preparer() === $expected, 'Toutes les observations préparées');
+    $db->exec("UPDATE dm_workspace_diagnostic SET inspected_at='2026-02-01' WHERE deployment_id='$id'");
+    verifier($migration->preparer() === $expected && $migration->activer() === $expected, 'Reprise possible après une modification en mode historique');
     verifier($deployments->verifier() === ['deployments'=>1], 'Clés vers les déploiements');
     $config = ['cowprod_agent_observations'=>[
         'socle_root'=>$socle,'mcp_actor'=>'service:fixture',
