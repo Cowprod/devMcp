@@ -1578,11 +1578,14 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         const save=el('button','btn btn-success','Enregistrer le choix');save.type='submit';form.appendChild(save);
         if(runtimeRemovalEnabled && current && row.dataset.localProject==='1'){
           const remove=el('button','btn btn-danger ms-2','Retirer la configuration');
-          remove.type='button';
-          remove.addEventListener('click',()=>{
-            if(!window.confirm('Retirer la configuration de ce runtime ?'))return;
+          remove.type='submit';
+          remove.formNoValidate=true;
+          remove.addEventListener('click',event=>{
+            if(!window.confirm('Retirer la configuration de ce runtime ?')){
+              event.preventDefault();
+              return;
+            }
             form.elements.namedItem('operation').value='project.runtime.remove';
-            form.submit();
           });
           form.appendChild(remove);
         }
