@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Project\ProjectServiceLaunchPlan;
+use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
 use Symfony\Component\Process\Process;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -30,23 +31,12 @@ try {
         (string) $sql['dsn'], (string) $sql['writer_username'],
         (string) $sql['writer_password']
     );
-    $query = $db->prepare(
-        'SELECT p.project_id, p.state, p.machine, p.workspace_path, p.actions_enabled, '
-        . 'r.port, x.runtime_type, x.entrypoint, x.document_root, x.desired_state '
-        . 'FROM dm_project_provisioning AS p '
-        . 'JOIN dm_preview_port_reservation AS r '
-        . 'ON r.project_id = p.project_id AND r.machine = p.machine '
-        . 'JOIN dm_project_runtime AS x ON x.project_id = p.project_id '
-        . "JOIN dm_runtime_type AS t ON t.code = x.runtime_type "
-        . "AND t.supervisor = 'systemd' AND t.protocol = 'http' AND t.selectable = 1 "
-        . 'WHERE p.project_id = ? LIMIT 1'
-    );
-    $query->execute([$argv[1]]);
-    $record = $query->fetch(PDO::FETCH_ASSOC);
+    $record = ProjectRuntimeCatalog::forRuntime($db, $sql)->serviceRecord($argv[1]);
     $hostname = gethostname();
     if (!is_array($record) || !is_string($hostname)
         || $record['machine'] !== $hostname
-        || (int) $record['actions_enabled'] !== 1) {
+        || (int) $record['actions_enabled'] !== 1
+        || $record['supervisor'] !== 'systemd' || $record['protocol'] !== 'http' || (int) $record['selectable'] !== 1) {
         throw new RuntimeException('Project not authorized on this host');
     }
     $record['port'] = (int) $record['port'];

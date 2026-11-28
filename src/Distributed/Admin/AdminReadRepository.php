@@ -12,7 +12,7 @@ use PDO;
 final class AdminReadRepository
 {
     public function __construct(private readonly PDO $db, private readonly Closure $catalogue,
-        private readonly array $localHost) {}
+        private readonly array $localHost, private readonly array $runtimeConfig = []) {}
 
     public function snapshot(int $now): array
     {
@@ -77,7 +77,7 @@ final class AdminReadRepository
             $projects[$row['project_id']]['assignments'][$row['machine_id']]=$entry;
         }
         // Runtime choice and remote metadata are existing admin sources; never return config JSON or paths.
-        foreach ((new ProjectRuntimeCatalog($this->db))->selections() as $id=>$runtime) {
+        foreach (ProjectRuntimeCatalog::forRuntime($this->db, $this->runtimeConfig)->selections() as $id=>$runtime) {
             if (!isset($projects[$id])) continue;
             $projects[$id]['runtime_type']=$runtime['runtime_type'];
             $projects[$id]['desired_state']=$runtime['desired_state'];

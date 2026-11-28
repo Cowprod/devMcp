@@ -19,7 +19,7 @@ $snapshot=static function(int $now): array {
     $db=DatabaseConnection::connect($config['dsn'],$config['username'],$config['password']);
     $client=new LiveProjectCatalogueClient($db,gethostname());
     $repo=new AdminReadRepository($db,fn()=>$client->read(),
-        ['name'=>gethostname(),'os'=>strtolower(PHP_OS_FAMILY),'architecture'=>php_uname('m')]);
+        ['name'=>gethostname(),'os'=>strtolower(PHP_OS_FAMILY),'architecture'=>php_uname('m')], array_intersect_key($config, ['cowprod_runtimes'=>true]));
     return $repo->snapshot($now);
 };
 $headers=['Authorization'=>$_SERVER['HTTP_AUTHORIZATION']??'', 'Content-Type'=>$_SERVER['CONTENT_TYPE']??''];

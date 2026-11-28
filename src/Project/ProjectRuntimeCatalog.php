@@ -16,6 +16,38 @@ final class ProjectRuntimeCatalog
 {
     public function __construct(private readonly PDO $db) {}
 
+    public static function forRuntime(PDO $db, array $config, ?string $actor = null): self|CowprodRuntimeCatalogue
+    {
+        if (!array_key_exists('cowprod_runtimes', $config))
+            return new self($db);
+        return new CowprodRuntimeCatalogue($db, CowprodPhpSocle::chargerPourCatalogue($config['cowprod_runtimes'], $actor));
+    }
+
+    public function serviceRecord(string $project): ?array
+    {
+        $query = $this->db->prepare(
+            'SELECT p.project_id, p.state, p.machine, p.workspace_path, p.actions_enabled, '
+            . 'r.port, x.runtime_type, x.entrypoint, x.document_root, x.health_path, '
+            . 'x.desired_state, x.revision, t.supervisor, t.protocol, t.selectable '
+            . 'FROM dm_project_provisioning p JOIN dm_preview_port_reservation r '
+            . 'ON r.project_id = p.project_id AND r.machine = p.machine '
+            . 'LEFT JOIN dm_project_runtime x ON x.project_id = p.project_id '
+            . 'LEFT JOIN dm_runtime_type t ON t.code = x.runtime_type WHERE p.project_id = ?'
+        );
+        $query->execute([$project]);
+        $row = $query->fetch(PDO::FETCH_ASSOC);
+        return $row === false ? null : $row;
+    }
+
+    public function setDesiredState(string $project, string $from, string $to, int $revision): void
+    {
+        $change = $this->db->prepare('UPDATE dm_project_runtime SET desired_state = ?, revision = revision + 1 '
+            . 'WHERE project_id = ? AND desired_state = ? AND revision = ?');
+        $change->execute([$to, $project, $from, $revision]);
+        if ($change->rowCount() !== 1)
+            throw new RuntimeException('Concurrent runtime state update');
+    }
+
     /** @return list<array<string,mixed>> */
     public function types(): array
     {

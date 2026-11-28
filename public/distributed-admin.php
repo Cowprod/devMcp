@@ -10,6 +10,10 @@ use Cowprod\DevMcp\Distributed\Admin\RegistryEditor;
 use Cowprod\DevMcp\Distributed\Enrollment\EnrollmentService;
 use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
 use Cowprod\DevMcp\Distributed\Registry\RegistryRepository;
+use Cowprod\DevMcp\Project\CowprodRuntimeCatalogue;
+use Cowprod\DevMcp\Project\ProjectRuntimeCatalog;
+use Cowprod\DevMcp\Project\ProjectServiceRequestPolicy;
+use Symfony\Component\Process\Process;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/bin/remote-job-policy.php';
@@ -289,12 +293,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''));
                 break;
             case 'project.runtime.select':
-                (new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($writer))->select(
+                ProjectRuntimeCatalog::forRuntime($writer, $config, 'web-admin:'.$adminUser)->select(
                     (string) ($_POST['project_id'] ?? ''),
                     (string) ($_POST['runtime_type'] ?? ''),
                     filter_var($_POST['revision'] ?? '', FILTER_VALIDATE_INT) !== false
                         ? (int) $_POST['revision'] : -1
                 );
+                break;
+            case 'project.runtime.remove':
+                $catalogue = ProjectRuntimeCatalog::forRuntime($writer, $config, 'web-admin:'.$adminUser);
+                $project = (string)($_POST['project_id'] ?? '');
+                $revision = filter_var($_POST['revision'] ?? '', FILTER_VALIDATE_INT);
+                if (!$catalogue instanceof CowprodRuntimeCatalogue || $revision === false
+                    || ($catalogue->serviceRecord($project)['machine'] ?? null) !== gethostname())
+                    throw new InvalidArgumentException('Configuration locale indisponible');
+                $unit = ProjectServiceRequestPolicy::unit($project);
+                $service = new Process(['/usr/bin/systemctl', 'show', '--property=ActiveState', '--value', '--', $unit], timeout: 5);
+                $service->mustRun();
+                if (!in_array(trim($service->getOutput()), ['inactive', 'failed'], true))
+                    throw new InvalidArgumentException('Arrêter le service avant de retirer sa configuration');
+                $catalogue->remove($project, $revision);
                 break;
             case 'project.update':
                 $editor->updateProject((string) ($_POST['project_id'] ?? ''), (string) ($_POST['description'] ?? ''),
@@ -337,7 +355,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if ($invitation === null) {
             $section = match ((string) ($_POST['operation'] ?? '')) {
                 'machine.update' => 'machines', 'project.update' => 'projects',
-                'project.runtime.select','project.theme.select' => 'projects',
+                'project.runtime.select','project.runtime.remove','project.theme.select' => 'projects',
                 'project.local_metadata.create' => 'projects',
                 'deployment.update_path' => 'deployments',
                 'instance.register','instance.configure','instance.action' => 'deployments',
@@ -469,7 +487,7 @@ $runtimeTypes = [];
 $projectRuntimes = [];
 $runtimeCatalogueAvailable = false;
 try {
-    $catalog = new \Cowprod\DevMcp\Project\ProjectRuntimeCatalog($db);
+    $catalog = ProjectRuntimeCatalog::forRuntime($db, $config, 'web-admin:'.$adminUser);
     $runtimeTypes = $catalog->types();
     $projectRuntimes = $catalog->selections();
     $runtimeCatalogueAvailable = true;
@@ -1252,6 +1270,7 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
   let remoteJobHistory = <?= json_encode($remoteJobs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   let remoteHistoryAvailable = <?= $remoteHistoryAvailable ? 'true' : 'false' ?>;
   const remoteActionCatalog = <?= json_encode(remoteReadonlyActionCatalog(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+  const runtimeRemovalEnabled = <?= isset($config['cowprod_runtimes']) ? 'true' : 'false' ?>;
   const runtimeTypes = <?= json_encode($runtimeTypes, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) ?>;
   const machineCapabilities = <?= json_encode($machineCapabilities, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
   const machineCapabilityLabels = <?= json_encode(\Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::LABELS, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
@@ -1557,6 +1576,16 @@ $logReady = !is_link($logFile) && is_file($logFile) && filemtime($logFile) >= ti
         });
         select.value=current;group.appendChild(select);form.appendChild(group);
         const save=el('button','btn btn-success','Enregistrer le choix');save.type='submit';form.appendChild(save);
+        if(runtimeRemovalEnabled && current && row.dataset.localProject==='1'){
+          const remove=el('button','btn btn-danger ms-2','Retirer la configuration');
+          remove.type='button';
+          remove.addEventListener('click',()=>{
+            if(!window.confirm('Retirer la configuration de ce runtime ?'))return;
+            form.elements.namedItem('operation').value='project.runtime.remove';
+            form.submit();
+          });
+          form.appendChild(remove);
+        }
         runtimeCard.appendChild(form);
       }else{
         runtimeCard.appendChild(el('p','small text-secondary',

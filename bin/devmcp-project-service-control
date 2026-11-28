@@ -49,7 +49,10 @@ function controllerSql(): array
     $db = DatabaseConnection::connect(
         (string) $sql['dsn'], (string) $sql['writer_username'], (string) $sql['writer_password']
     );
-    return [$config, $db];
+    $actor = $sql['cowprod_runtimes']['service_actor'] ?? null;
+    if (array_key_exists('cowprod_runtimes', $sql) && !is_string($actor))
+        throw new RuntimeException('Runtime service identity unavailable');
+    return [$config, ProjectRuntimeCatalog::forRuntime($db, $sql, $actor)];
 }
 
 function controllerRun(array $argv, int $timeout = 40): array
@@ -106,26 +109,14 @@ function controllerHealth(string $ip, int $port, string $path): array
     return ['http_checked' => true, 'http_status' => $status];
 }
 
-function controllerProcess(PDO $db, array $config, string $id, string $operation): array
+function controllerProcess(ProjectRuntimeCatalog|\Cowprod\DevMcp\Project\CowprodRuntimeCatalogue $catalogue, array $config, string $id, string $operation): array
 {
     ProjectServiceRequestPolicy::validate($operation, $id);
     $hostname = gethostname();
     if (!is_string($hostname) || $hostname === '') {
         throw new RuntimeException('Unknown host');
     }
-    $query = $db->prepare(
-        'SELECT p.project_id, p.state, p.machine, p.workspace_path, p.actions_enabled, '
-        . 'r.port, x.runtime_type, x.entrypoint, x.document_root, x.health_path, '
-        . 'x.desired_state, x.revision, t.supervisor, t.protocol, t.selectable '
-        . 'FROM dm_project_provisioning p '
-        . 'INNER JOIN dm_preview_port_reservation r '
-        . 'ON r.project_id = p.project_id AND r.machine = p.machine '
-        . 'LEFT JOIN dm_project_runtime x ON x.project_id = p.project_id '
-        . 'LEFT JOIN dm_runtime_type t ON t.code = x.runtime_type '
-        . 'WHERE p.project_id = ? LIMIT 1'
-    );
-    $query->execute([$id]);
-    $row = $query->fetch(PDO::FETCH_ASSOC);
+    $row = $catalogue->serviceRecord($id);
     if (!is_array($row) || $row['machine'] !== $hostname || $row['state'] !== 'active'
         || (int) $row['actions_enabled'] !== 1) {
         throw new RuntimeException('Project not active and authorized on this host');
@@ -165,7 +156,7 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         // before making any database change. No new executable can be supplied.
         ProjectServiceLaunchPlan::build($trial, $root, $ip);
         $revision = isset($row['revision']) ? (int) $row['revision'] : 0;
-        $selected = (new ProjectRuntimeCatalog($db))->select($id, $runtime, $revision);
+        $selected = $catalogue->select($id, $runtime, $revision);
         return ['ok' => true, 'selected_runtime' => $selected['runtime_type'],
             'desired_state' => 'stopped', 'port' => $port, 'service_started' => false];
     }
@@ -194,11 +185,10 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
         } else {
             if ($row['runtime_type'] !== $deployRuntime) {
                 $revision = isset($row['revision']) ? (int) $row['revision'] : 0;
-                (new ProjectRuntimeCatalog($db))->select($id, $deployRuntime, $revision);
+                $catalogue->select($id, $deployRuntime, $revision);
                 // Read the committed runtime selection and revision again rather
                 // than assuming the SQL record matches the requested choice.
-                $query->execute([$id]);
-                $row = $query->fetch(PDO::FETCH_ASSOC);
+                $row = $catalogue->serviceRecord($id);
                 if (!is_array($row) || $row['runtime_type'] !== $deployRuntime
                     || $row['desired_state'] !== 'stopped') {
                     throw new RuntimeException('Sélection de runtime non confirmée');
@@ -237,13 +227,7 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
             (string) $currentService['ActiveState']
         );
         if ($operation === 'start' && $row['desired_state'] === 'stopped') {
-            $change = $db->prepare("UPDATE dm_project_runtime SET desired_state = 'running', "
-                . 'revision = revision + 1 WHERE project_id = ? '
-                . "AND desired_state = 'stopped' AND revision = ?");
-            $change->execute([$id, $row['revision']]);
-            if ($change->rowCount() !== 1) {
-                throw new RuntimeException('Concurrent runtime state update');
-            }
+            $catalogue->setDesiredState($id, 'stopped', 'running', (int) $row['revision']);
         }
         $command = $operation === 'start'
             ? ['/usr/bin/systemctl', 'enable', '--now', $unit]
@@ -272,13 +256,7 @@ function controllerProcess(PDO $db, array $config, string $id, string $operation
     }
     if ($operation === 'stop') {
         if ($row['desired_state'] === 'running') {
-            $change = $db->prepare("UPDATE dm_project_runtime SET desired_state = 'stopped', "
-                . 'revision = revision + 1 WHERE project_id = ? '
-                . "AND desired_state = 'running' AND revision = ?");
-            $change->execute([$id, $row['revision']]);
-            if ($change->rowCount() !== 1) {
-                throw new RuntimeException('Concurrent runtime state update');
-            }
+            $catalogue->setDesiredState($id, 'running', 'stopped', (int) $row['revision']);
         }
         $run = controllerRun(['/usr/bin/systemctl', 'disable', '--now', $unit], 40);
         $service = controllerServiceStatus($unit);
@@ -321,7 +299,7 @@ if ($files === []) {
     exit(0);
 }
 try {
-    [$config, $db] = controllerSql();
+    [$config, $catalogue] = controllerSql();
 } catch (Throwable $error) {
     fwrite(STDERR, "Project service SQL unavailable: " . get_class($error) . "\n");
     exit(1); // Preserve requests for retry.
@@ -354,7 +332,7 @@ foreach (array_slice($files, 0, 3) as $file) {
         if (!is_string($op)) {
             throw new RuntimeException('Invalid operation');
         }
-        $result = controllerProcess($db, $config, $id, $op);
+        $result = controllerProcess($catalogue, $config, $id, $op);
     } catch (Throwable $error) {
         $result = ['ok' => false, 'error_class' => get_class($error),
             'error' => 'Project service request rejected'];

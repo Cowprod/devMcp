@@ -1,0 +1,41 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Cowprod\DevMcp\Distributed\Registry\DatabaseConnection;
+use Cowprod\DevMcp\Project\RuntimeCatalogueMigration;
+
+require dirname(__DIR__).'/vendor/autoload.php';
+
+$sMode = $argv[1] ?? '';
+if (!in_array($sMode, ['--prepare', '--verify', '--project-back'], true)
+    || ($sMode === '--verify' ? $argc !== 2 : ($argc !== 3 || $argv[2] !== 'RUNTIME_WRITES_QUIESCED'))) {
+    fwrite(STDERR, "Usage: migrate-cowprod-runtimes --verify | (--prepare|--project-back) RUNTIME_WRITES_QUIESCED\n");
+    exit(2);
+}
+
+try {
+    $sConfig = getenv('DEVMCP_DISTRIBUTED_CONFIG') ?: '/etc/devmcp/mcp-distributed.php';
+    if (!is_file($sConfig) || !is_readable($sConfig))
+        throw new RuntimeException('Configuration distribuée indisponible');
+    $aConfig = require $sConfig;
+    if (!is_array($aConfig))
+        throw new RuntimeException('Configuration distribuée invalide');
+    $bActif = array_key_exists('cowprod_runtimes', $aConfig);
+    if (($sMode === '--prepare' && $bActif) || ($sMode === '--project-back' && !$bActif))
+        throw new RuntimeException('Mode incompatible avec le catalogue actif');
+    $sCompte = $sMode === '--verify' ? 'username' : 'writer_username';
+    $sSecret = $sMode === '--verify' ? 'password' : 'writer_password';
+    $oConn = DatabaseConnection::connect($aConfig['dsn'], $aConfig[$sCompte], $aConfig[$sSecret]);
+    $oMigration = new RuntimeCatalogueMigration($oConn);
+    $aResultat = match ($sMode) {
+        '--prepare' => $oMigration->preparer(),
+        '--project-back' => $oMigration->retour(),
+        '--verify' => $oMigration->verifier(),
+    };
+    echo json_encode($aResultat, JSON_THROW_ON_ERROR).PHP_EOL;
+} catch (Throwable $oErreur) {
+    fwrite(STDERR, 'Migration des runtimes refusée : '.get_class($oErreur).PHP_EOL);
+    exit(1);
+}

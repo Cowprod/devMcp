@@ -42,6 +42,17 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
+    if (array_key_exists('cowprod_runtimes', $distributed)) {
+        $actor = $distributed['cowprod_runtimes']['service_actor'] ?? null;
+        if (!is_string($actor))
+            throw new RuntimeException('Identité du service de runtimes indisponible');
+        $catalogue = \Cowprod\DevMcp\Project\ProjectRuntimeCatalog::forRuntime($db, $distributed, $actor);
+        $catalogue->types();
+        $catalogue->selections();
+        $catalogue->serviceRecord('devmcp');
+        echo "COWPROD_RUNTIMES_RUNTIME_OK\n";
+        exit(0);
+    }
     $migrationPath = dirname(__DIR__) . '/migrations/20261102_project_runtime_catalog.sql';
     $migration = file_get_contents($migrationPath);
     if (!is_string($migration) || trim($migration) === '') {
