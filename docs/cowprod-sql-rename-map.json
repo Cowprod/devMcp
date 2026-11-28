@@ -17,11 +17,26 @@
     "old": "dm_project",
     "target": "T_PROJECT",
     "columns": {
-      "id": "PRO_CH_ID",
+      "id": "PRO_CH_SLUG",
       "description": "PRO_CH_DESCRIPTION",
-      "repository_url": "PRO_CH_REPOSITORY_URL",
+      "repository_url": "PRO_CH_REPOSITORY",
       "created_at": "PRO_DT_CREATION"
-    }
+    },
+    "target_columns": [
+      "PRO_N_ID",
+      "PRO_N_MID",
+      "PRO_CH_SLUG",
+      "PRO_CH_DESCRIPTION",
+      "PRO_CH_REPOSITORY",
+      "PRO_DT_CREATION",
+      "PRO_CH_CREATION",
+      "PRO_DT_SUPPRESSION",
+      "PRO_CH_SUPPRESSION",
+      "PRO_CH_MERE",
+      "PRO_CH_ACTIF"
+    ],
+    "active_config": "cowprod_projects",
+    "archive": "dm_project_legacy"
   },
   {
     "old": "dm_deployment",
@@ -229,11 +244,26 @@
     "old": "dm_machine_capability",
     "target": "T_MACHINECAPABILITY",
     "columns": {
-      "machine_key": "MCA_CH_MACHINE_KEY",
+      "machine_key": "MCA_CH_MACHINE",
       "hosting": "MCA_BL_HOSTING",
       "cordova_android": "MCA_BL_CORDOVA_ANDROID",
       "cordova_ios": "MCA_BL_CORDOVA_IOS"
-    }
+    },
+    "target_columns": [
+      "MCA_N_ID",
+      "MCA_N_MID",
+      "MCA_CH_MACHINE",
+      "MCA_BL_HOSTING",
+      "MCA_BL_CORDOVA_ANDROID",
+      "MCA_BL_CORDOVA_IOS",
+      "MCA_DT_CREATION",
+      "MCA_CH_CREATION",
+      "MCA_DT_SUPPRESSION",
+      "MCA_CH_SUPPRESSION",
+      "MCA_CH_ACTIF"
+    ],
+    "active_config": "cowprod_machine_capabilities",
+    "archive": "dm_machine_capability_legacy"
   },
   {
     "old": "dm_project_provisioning",
@@ -308,63 +338,155 @@
       "protocol": "RTY_CH_PROTOCOL",
       "supervisor": "RTY_CH_SUPERVISOR",
       "selectable": "RTY_BL_SELECTABLE"
-    }
+    },
+    "target_columns": [
+      "RTY_N_ID",
+      "RTY_N_MID",
+      "RTY_CH_CODE",
+      "RTY_CH_LABEL",
+      "RTY_CH_PROTOCOL",
+      "RTY_CH_SUPERVISOR",
+      "RTY_BL_SELECTABLE",
+      "RTY_DT_CREATION",
+      "RTY_CH_CREATION",
+      "RTY_DT_SUPPRESSION",
+      "RTY_CH_SUPPRESSION",
+      "RTY_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_runtimes"
   },
   {
     "old": "dm_project_runtime",
     "target": "T_PROJECTRUNTIME",
     "columns": {
-      "project_id": "PRT_CH_PROJECT_ID",
-      "runtime_type": "PRT_CH_RUNTIME_TYPE",
-      "desired_state": "PRT_CH_DESIRED_STATE",
+      "project_id": "PRT_CH_PROJECT",
+      "runtime_type": "PRT_N_RUNTIMETYPE",
+      "desired_state": "PRT_CH_DESIREDSTATE",
       "entrypoint": "PRT_CH_ENTRYPOINT",
-      "document_root": "PRT_CH_DOCUMENT_ROOT",
-      "health_path": "PRT_CH_HEALTH_PATH",
+      "document_root": "PRT_CH_DOCUMENTROOT",
+      "health_path": "PRT_CH_HEALTHPATH",
       "revision": "PRT_N_REVISION",
-      "updated_at": "PRT_DT_UPDATED_AT"
-    }
+      "updated_at": "PRT_DT_UPDATE"
+    },
+    "target_columns": [
+      "PRT_N_ID",
+      "PRT_N_MID",
+      "PRT_CH_PROJECT",
+      "PRT_N_RUNTIMETYPE",
+      "PRT_CH_DESIREDSTATE",
+      "PRT_CH_ENTRYPOINT",
+      "PRT_CH_DOCUMENTROOT",
+      "PRT_CH_HEALTHPATH",
+      "PRT_N_REVISION",
+      "PRT_DT_UPDATE",
+      "PRT_DT_CREATION",
+      "PRT_CH_CREATION",
+      "PRT_DT_SUPPRESSION",
+      "PRT_CH_SUPPRESSION",
+      "PRT_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_runtimes"
   },
   {
     "old": "dm_theme",
     "target": "T_THEME",
     "columns": {
-      "id": "THE_CH_ID",
+      "id": "THE_CH_SLUG",
       "name": "THE_CH_NAME",
       "project": "THE_CH_PROJECT",
       "repository": "THE_CH_REPOSITORY",
       "preview": "THE_CH_PREVIEW",
-      "is_default": "THE_BL_IS_DEFAULT"
-    }
+      "is_default": "THE_BL_DEFAULT"
+    },
+    "target_columns": [
+      "THE_N_ID",
+      "THE_N_MID",
+      "THE_CH_SLUG",
+      "THE_CH_NAME",
+      "THE_CH_PROJECT",
+      "THE_CH_REPOSITORY",
+      "THE_CH_PREVIEW",
+      "THE_BL_DEFAULT",
+      "THE_DT_CREATION",
+      "THE_CH_CREATION",
+      "THE_DT_SUPPRESSION",
+      "THE_CH_SUPPRESSION",
+      "THE_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_themes"
   },
   {
     "old": "dm_project_theme",
     "target": "T_PROJECTTHEME",
     "columns": {
-      "project_id": "PTH_CH_PROJECT_ID",
-      "theme_id": "PTH_CH_THEME_ID",
-      "installed_sha": "PTH_CH_INSTALLED_SHA"
-    }
+      "project_id": "PTH_CH_PROJECT",
+      "theme_id": "PTH_N_THEME",
+      "installed_sha": "PTH_CH_SHA"
+    },
+    "target_columns": [
+      "PTH_N_ID",
+      "PTH_N_MID",
+      "PTH_CH_PROJECT",
+      "PTH_N_THEME",
+      "PTH_CH_SHA",
+      "PTH_DT_CREATION",
+      "PTH_CH_CREATION",
+      "PTH_DT_SUPPRESSION",
+      "PTH_CH_SUPPRESSION",
+      "PTH_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_themes"
   },
   {
     "old": "dm_template",
     "target": "T_TEMPLATE",
     "columns": {
-      "id": "TPL_CH_ID",
+      "id": "TPL_CH_SLUG",
       "name": "TPL_CH_NAME",
-      "project_type": "TPL_CH_PROJECT_TYPE",
-      "source_project": "TPL_CH_SOURCE_PROJECT",
+      "project_type": "TPL_CH_TYPE",
+      "source_project": "TPL_CH_PROJECT",
       "repository": "TPL_CH_REPOSITORY",
-      "is_default": "TPL_BL_IS_DEFAULT"
-    }
+      "is_default": "TPL_BL_DEFAULT"
+    },
+    "target_columns": [
+      "TPL_N_ID",
+      "TPL_N_MID",
+      "TPL_CH_SLUG",
+      "TPL_CH_NAME",
+      "TPL_CH_TYPE",
+      "TPL_CH_PROJECT",
+      "TPL_CH_REPOSITORY",
+      "TPL_BL_DEFAULT",
+      "TPL_DT_CREATION",
+      "TPL_CH_CREATION",
+      "TPL_DT_SUPPRESSION",
+      "TPL_CH_SUPPRESSION",
+      "TPL_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_templates"
   },
   {
     "old": "dm_project_template",
     "target": "T_PROJECTTEMPLATE",
     "columns": {
-      "project_id": "PTP_CH_PROJECT_ID",
-      "template_id": "PTP_CH_TEMPLATE_ID",
-      "source_sha": "PTP_CH_SOURCE_SHA",
-      "applied_sha": "PTP_CH_APPLIED_SHA"
-    }
+      "project_id": "PTP_CH_PROJECT",
+      "template_id": "PTP_N_TEMPLATE",
+      "source_sha": "PTP_CH_SOURCE",
+      "applied_sha": "PTP_CH_APPLIED"
+    },
+    "target_columns": [
+      "PTP_N_ID",
+      "PTP_N_MID",
+      "PTP_CH_PROJECT",
+      "PTP_N_TEMPLATE",
+      "PTP_CH_SOURCE",
+      "PTP_CH_APPLIED",
+      "PTP_DT_CREATION",
+      "PTP_CH_CREATION",
+      "PTP_DT_SUPPRESSION",
+      "PTP_CH_SUPPRESSION",
+      "PTP_CH_ACTIVE"
+    ],
+    "active_config": "cowprod_templates"
   }
 ]

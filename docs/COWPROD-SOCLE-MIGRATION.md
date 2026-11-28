@@ -102,6 +102,32 @@ En cas d’échec après création du dépôt, le résultat indique
 `partial_failure/template_publish`. Le dépôt et le workspace restent disponibles
 pour inspection. Vérifier l’état Git et l’affectation existante avant de relancer.
 
+## Capacités des machines préparées sur la branche dédiée
+
+La migration de `dm_machine_capability` vers `T_MACHINECAPABILITY`
+(`MCA_`) conserve les ID machine, la valeur `local` et les trois droits
+déclarés. Une modification conserve l’état précédent et la signature
+authentifiée. Les lectures existantes passent par une vue en lecture seule
+après la bascule. Un retrait complet de déclaration n’existe pas dans le
+parcours actuel. L’opérateur peut désactiver chaque capacité et le changement
+est historisé.
+
+Avant activation, sauvegarder et restaurer les déclarations sur une
+instance isolée. Suspendre les créations de machines et les écritures de
+capacités, puis exécuter
+`migrate-cowprod-machine-capabilities --prepare CAPABILITY_WRITES_QUIESCED`,
+`--verify` et `--activate CAPABILITY_WRITES_QUIESCED`. Définir
+`cowprod_machine_capabilities` dans les configurations MCP et Web, avec
+l’identité de service et la version du socle déjà approuvée. Les lecteurs
+doivent pouvoir lire la vue et sa table source. Les rédacteurs reçoivent
+SELECT, INSERT et UPDATE sur la nouvelle table. L’auto-update reconnaît ce
+mode et saute le seed historique de l’ancienne table.
+
+Vérifier Web, mobile, commande MCP et les parcours de contrôle des
+capacités. Rejouer le retour avec `--project-back CAPABILITY_WRITES_QUIESCED`
+pendant la suspension des écritures et retirer le réglage après contrôle.
+Le retour projette les valeurs courantes et conserve l’historique.
+
 ## Registre des projets préparé sur la branche dédiée
 
 `T_PROJECT` utilise le préfixe `PRO_`, une clé numérique interne et les

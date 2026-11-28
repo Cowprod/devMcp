@@ -1,10 +1,17 @@
 # Cartographie SQL devMCP — proposition de migration Cowprod
 
-**État : inventaire du code source, aucun changement de schéma autorisé ou exécuté.** Inventaire relevé le 27 novembre 2026 à partir des 16 migrations de `database/migrations/` et `migrations/` via le connecteur devMCP, confronté aux règles de `Cowprod/referenciel/NOMMAGE_SQL_PHP.md`. Les deux fichiers `deploy/distributed/grant-*.sql` sont des droits SQL, pas des créations de tables.
+Le relevé en lecture seule de TouchDeck du 28 novembre 2026 couvre
+**36 tables physiques InnoDB**. Il comprend les 30 tables d’origine et les
+six tables Cowprod déjà actives. Les paires thèmes, modèles et runtimes
+conservent leurs anciennes tables pour le retour arrière. Le relevé a
+retrouvé 37 colonnes participant à des clés étrangères et aucun trigger.
 
-**Limite : les 30 tables ci-dessous sont déclarées par les migrations, et non attestées par une lecture de `information_schema` sur la base de production.** Avant le premier DDL, comparer automatiquement les tables, colonnes, types, PK, FK, index, triggers, vues et éventuels schémas divergents de la base réelle. Ne pas confondre présence dans Git et présence en production.
+Chaque table d’origine figure dans le périmètre. La nomenclature des tables
+et colonnes est décrite dans [le mapping JSON](cowprod-sql-rename-map.json).
+Les schémas réellement implémentés y sont indiqués par `target_columns` et
+leur configuration d’activation. Les autres noms restent des propositions.
 
-## Correspondance des tables — propositions non encore approuvées
+## Correspondance des tables
 
 | Table actuelle | Table proposée | Préfixe de colonnes | Nature présumée | Références FK déclarées |
 | --- | --- | --- | --- | --- |
@@ -39,7 +46,10 @@
 | `dm_template` | `T_TEMPLATE` | `TPL` | Catalogue fonctionnel | — |
 | `dm_project_template` | `T_PROJECTTEMPLATE` | `PTP` | Catalogue fonctionnel | `dm_template` |
 
-Cette nomenclature de cibles `T_*` est **proposée** selon l'exemple normatif `T_TAGCATEGORY`; elle ne doit pas être interprétée comme une décision de nommage définitive pour les tables techniques. Aucun préfixe de trois lettres ne se répète.
+Les préfixes à trois lettres sont uniques. Les cibles de thèmes, modèles et
+runtimes sont actives sur TouchDeck. Le registre `T_PROJECT` et les capacités
+`T_MACHINECAPABILITY` sont préparés dans le code et attendent leur migration
+en production.
 
 ## Colonnes actuellement déclarées (pour établir la correspondance exhaustive)
 
@@ -95,11 +105,35 @@ Le relevé ci-dessous intègre aussi l'ajout `dm_job.policy_revision_id` de la m
 6. **Privilèges** : les instructions GRANT et les politiques des connexions MySQL doivent être revues si elles désignent des objets renommés.
 7. **Dépendances externes** : vérifier les accès depuis les agents, scripts root, jobs systemd, autres installations éventuelles et tâches planifiées ; ne pas présumer que les seuls consommateurs sont les classes PHP.
 
-## Prochaine phase exécutable sans toucher à la production
+## Lots couvrant les trente tables d’origine
 
-1. Obtenir un relevé **lecture seule** de `information_schema.TABLES`, `COLUMNS`, `KEY_COLUMN_USAGE`, `REFERENTIAL_CONSTRAINTS`, `STATISTICS`, `TRIGGERS` et `VIEWS` avec un compte habilité en lecture ; confronter à cet inventaire.
-2. Extraire toutes les références SQL dans les PHP, les migrations, les tests, les scripts de déploiement et les configurations, y compris les chaînes SQL construites dynamiquement.
-3. Générer pour chaque table et colonne le mapping définitif source → cible, types et index inchangés, avec exclusions et exceptions **à approuver**.
-4. Construire une migration compatible MySQL/MariaDB et un déploiement logiciel coordonné : sauvegarde vérifiée, test sur copie, vérification des volumes/PK/FK, stratégie de bascule et retour arrière documenté. **Ne pas exécuter de DDL dans l'autoupdate courant** tant que ce dossier n'a pas été validé.
+| Lot | Tables d’origine | Scripts et contrats à migrer avec les tables |
+| --- | --- | --- |
+| Thèmes, modèles, runtimes — en production | `dm_theme`, `dm_project_theme`, `dm_template`, `dm_project_template`, `dm_runtime_type`, `dm_project_runtime` | Catalogues PHP, administration, contrôleur systemd, notifications, initialisation et retour |
+| Registre des projets — préparé | `dm_project` | Provisionnement, administration, inscription lab et clé étrangère des déploiements |
+| Capacités des machines — préparé | `dm_machine_capability` | Création et édition Web/mobile, commande MCP, initialisation, auto-update et droits SQL |
+| Déploiements et configuration | `dm_deployment`, `dm_remote_project`, `dm_project_provisioning`, `dm_local_project_config`, `dm_shared_action_config`, `dm_project_registry_state`, `dm_preview_port_reservation` | Provisionnement local/distant, import SQL, démarrage systemd, migration multi-déploiements, contrôle des réservations et droits |
+| Machines, identités et politiques | `dm_machine`, `dm_agent_identity`, `dm_enrollment_invitation`, `dm_action_template`, `dm_deployment_action`, `dm_policy_revision` | Enrôlement, révocation, contrôle des actions autorisées, droits SQL et clés étrangères de la file |
+| Files et journaux | `dm_job`, `dm_job_attempt`, `dm_job_event`, `dm_remote_readonly_job`, `dm_remote_hosting_job`, `dm_remote_project_job`, `dm_audit_event` | Polling, transitions, verrous, retries, expiration, anti-doublon, journaux, requêtes de notifications et mécanismes de reprise |
+| Observations des agents | `dm_workspace_diagnostic`, `dm_agent_zerotier_address` | Ping, diagnostic, expiration et décisions basées sur la fraîcheur de l’observation |
 
-**Statut :** cartographie du schéma déclaratif terminée ; photographie du schéma réel, inventaire exhaustif des consommateurs et choix des exceptions encore à faire. Aucune table ni donnée de production modifiée.
+Les tables techniques sont incluses dans le chantier de nommage et de revue
+des écritures. Chaque proposition d’exception à l’historisation ou à la
+suppression logique doit indiquer la table, le parcours concerné et sa
+justification. Les règles d’autorisation et les identifiants des agents ou
+jobs restent compatibles pendant la bascule.
+
+## Vérification avant et après chaque lot
+
+`php bin/check-cowprod-sql-schema.php --details` relève les objets, colonnes,
+index, clés étrangères et triggers sans lire les données métier. Le rapport
+résume les états hérités, préparés et actifs. Les migrations d’installation,
+les droits, les commandes, les workers et les pilotes d’auto-update font
+partie de la recette de chaque lot. Les noms effectivement lus ou écrits
+peuvent être retrouvés par `git grep -n -w NOM_TABLE -- src bin public
+deploy database migrations tests`.
+
+Comparer les comptes et les relations sur une restauration isolée et
+vérifier une installation vierge et une mise à jour. Répéter un retour
+arrière avec des écritures effectuées après bascule avant de modifier la
+production.

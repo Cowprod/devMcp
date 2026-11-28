@@ -10,7 +10,7 @@ use PDO;
 
 final class RegistryEditor
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null, private readonly array $capabilityConfig=[]) {}
 
     public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
@@ -27,7 +27,7 @@ final class RegistryEditor
                 "INSERT INTO dm_machine (id,name,os_family,architecture,status) VALUES (?,?,?,?, 'pending')"
             );
             $statement->execute([$id, $name, $os, $architecture]);
-            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($id,$os,$capabilities);
+            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db, $this->capabilityConfig, $this->actor))->save($id,$os,$capabilities);
             $this->audit('machine.create', 'machine', $id);
             $this->db->commit();
         } catch (\Throwable $e) {
@@ -46,7 +46,7 @@ final class RegistryEditor
                 $q=$this->db->prepare('SELECT os_family FROM dm_machine WHERE id=?');$q->execute([$id]);$os=$q->fetchColumn();
                 if(!is_string($os))throw new InvalidArgumentException('Machine introuvable');
             }
-            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->save($id,$os,$values);
+            (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db, $this->capabilityConfig, $this->actor))->save($id,$os,$values);
             $this->audit('machine.capabilities.update','machine',$id);
             $this->db->commit();
         }catch(\Throwable $error){$this->db->rollBack();throw $error;}

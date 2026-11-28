@@ -245,7 +245,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
         $writer = DatabaseConnection::connect((string) $config['dsn'], (string) $config['writer_username'], (string) $config['writer_password']);
         $projectActor = 'web-admin:'.$adminUser;
-        $editor = new RegistryEditor($writer, $projectActor, CowprodProjectRegistry::configured($writer, $config, $projectActor));
+        $editor = new RegistryEditor($writer, $projectActor, CowprodProjectRegistry::configured($writer, $config, $projectActor),
+            array_intersect_key($config, ['cowprod_machine_capabilities'=>true]));
         $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,'web-admin');
         $instanceConfiguration=static function():array{
             $configuration=[];

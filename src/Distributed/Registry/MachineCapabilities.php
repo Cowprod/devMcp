@@ -2,7 +2,9 @@
 declare(strict_types=1);
 namespace Cowprod\DevMcp\Distributed\Registry;
 
+use Cowprod\DevMcp\Project\CowprodPhpSocle;
 use InvalidArgumentException;
+use LogicException;
 use PDO;
 use RuntimeException;
 
@@ -10,7 +12,11 @@ use RuntimeException;
 final class MachineCapabilities
 {
     public const LABELS = ['hosting'=>'Hébergement web (statique, PHP, Node)', 'cordova_android'=>'Builds Cordova Android', 'cordova_ios'=>'Builds iOS / Cordova iOS'];
-    public function __construct(private readonly PDO $db) {}
+    public function __construct(
+        private readonly PDO $db,
+        private readonly array $aConfig = [],
+        private readonly ?string $sActeur = null,
+    ) {}
 
     public static function validate(string $os,array $values): array
     {
@@ -52,11 +58,54 @@ final class MachineCapabilities
     {
         if($key!=='local'&&!preg_match('/^[a-f0-9]{32}$/D',$key))throw new InvalidArgumentException('Identifiant machine invalide');
         $values=self::validate($os,$values);
+        if (array_key_exists('cowprod_machine_capabilities', $this->aConfig)) {
+            $this->saveCowprod($key, $values);
+            return;
+        }
         $check=$this->db->prepare('SELECT machine_key FROM dm_machine_capability WHERE machine_key=?');$check->execute([$key]);
         $sql=$check->fetchColumn()===false
             ?'INSERT INTO dm_machine_capability (hosting,cordova_android,cordova_ios,machine_key) VALUES (?,?,?,?)'
             :'UPDATE dm_machine_capability SET hosting=?,cordova_android=?,cordova_ios=? WHERE machine_key=?';
         $this->db->prepare($sql)->execute([...(array_map(static fn($v)=>(int)$v,array_values($values))),$key]);
+    }
+
+    private function saveCowprod(string $sMachine, array $aValeurs): void
+    {
+        if (!$this->db->inTransaction())
+            throw new LogicException('Transaction de capacités requise');
+
+        $sActeur = CowprodPhpSocle::chargerPourCatalogue($this->aConfig['cowprod_machine_capabilities'], $this->sActeur);
+        if (trim($sActeur) === '' || mb_strlen($sActeur) > 191 || preg_match('/[\x00-\x1f]/', $sActeur))
+            throw new InvalidArgumentException('Signature des capacités indisponible');
+
+        $oConn = $this->db;
+        $aMere = oRs('', __DIR__.'/machineCapability/modMachineCapability.sql',
+            'MCA_CH_MACHINE='.urlencode(prepString2Update($sMachine)), false, '', $oConn)[0] ?? null;
+        if ($aMere !== null && array_map('boolval', array_intersect_key($aMere, $aValeurs)) === $aValeurs)
+            return;
+
+        $bSession = array_key_exists('_SESSION', $GLOBALS);
+        $aSession = $_SESSION ?? [];
+        try {
+            $_SESSION = ['logged'=>'1', 'sUser'=>$sActeur] + $aSession;
+            if ($aMere === null) {
+                $nId = getIdConPdo('T_MACHINECAPABILITY', 'MCA_CH_MACHINE', $sMachine, $oConn);
+                $sCreation = ', MCA_DT_CREATION=NOW(6), MCA_CH_CREATION='.prepString2Update(sSignature());
+            } else {
+                $nId = $aMere['MCA_N_ID'];
+                historiseTable('T_MACHINECAPABILITY', 'MCA', $nId, $oConn);
+                $sCreation = '';
+            }
+            $oConn->exec('UPDATE T_MACHINECAPABILITY SET MCA_BL_HOSTING='.prepNum2Update((int)$aValeurs['hosting'])
+                .', MCA_BL_CORDOVA_ANDROID='.prepNum2Update((int)$aValeurs['cordova_android'])
+                .', MCA_BL_CORDOVA_IOS='.prepNum2Update((int)$aValeurs['cordova_ios'])
+                .$sCreation.' WHERE MCA_N_ID='.prepNum2Update($nId));
+        } finally {
+            if ($bSession)
+                $_SESSION = $aSession;
+            else
+                unset($_SESSION);
+        }
     }
 
     public function require(string $key,string $capability): void
