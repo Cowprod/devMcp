@@ -12,13 +12,25 @@ Le 27 novembre, le précontrôle en lecture seule de TouchDeck a retrouvé les
 30 tables attendues et leurs colonnes, sans divergence sur ces noms. Ce
 contrôle ne couvre pas encore les types, contraintes, index, triggers et vues.
 
+## État du chantier sur TouchDeck
+
+Le pilote déployé à la révision `1757946` couvre le catalogue des thèmes et
+leurs affectations, avec le socle `a3524fe`. Le contrôle de bascule a retrouvé
+deux thèmes et sept affectations. La génération d’un projet PHP a également
+été vérifiée sur TouchDeck. Cette génération est un usage distinct du socle.
+
+La mise en conformité du code métier de devMCP reste le chantier prioritaire.
+Le catalogue des modèles, les runtimes, les données métier des projets et
+leurs interfaces d’administration restent à traiter. La cartographie SQL
+recense les propositions pour les tables techniques sans valider d’exception.
+
 ## Suivi des écarts dans devMCP
 
 | Domaine | Constat dans le code | Correction et état |
 | --- | --- | --- |
-| Tables métier et nommage | Les catalogues de thèmes, modèles, runtimes et projets utilisent `dm_*` et des colonnes génériques. Voir la cartographie des cibles `T_*` et des préfixes à trois lettres. | Préparer le pilote thèmes et affectations. Renommage réel en attente de validation du plan. |
-| Historisation | `ThemeCatalogue::select/installLocal` et `TemplateCatalogue::select/markApplied` modifient leurs lignes sur place. La journalisation d’actions et les révisions Git ne conservent pas la version complète de la ligne métier. | Ajouter filiation et instantanés avec `historiseTable` dans la transaction métier. Socle testé, conversion du schéma existant en attente. |
-| Suppression | L’abandon d’une sélection non appliquée appelle `DELETE` dans les deux catalogues. Plusieurs purges des files et événements sont techniques. | Supprimer logiquement les lignes métier après migration. Documenter les purges techniques par table avec volume et politique de rétention. |
+| Tables métier et nommage | Les catalogues des modèles, des runtimes et des projets utilisent encore des tables `dm_*` et des colonnes génériques. | Les thèmes utilisent `T_THEME` et `T_PROJECTTHEME`. Les autres cibles et préfixes sont proposés dans la cartographie. |
+| Historisation | `TemplateCatalogue::select/markApplied` et `ProjectRuntimeCatalog::select` modifient encore les lignes sur place. | Filiation et instantanés en service pour les affectations de thèmes. Étendre aux autres écritures métier. |
+| Suppression | L’abandon d’un modèle non appliqué exécute encore un `DELETE`. Plusieurs purges des files et événements sont techniques. | Suppression logique en service pour les thèmes. Documenter les purges techniques par table avec volume et politique de rétention. |
 | Signatures | Sessions d’admin, audit, identité d’agent et horodatages existent. Les lignes de catalogue ne portent pas toutes les signatures de création et de suppression. | Récupérer l’identité vérifiée à la frontière métier. Faire approuver le traitement des écritures d’agent. Ne jamais inventer une signature historique manquante. |
 | SQL métier | `src/Project/ThemeCatalogue.php`, `TemplateCatalogue.php`, `ProjectRuntimeCatalog.php` et certaines requêtes de `public/distributed-admin.php` utilisent des requêtes inline, des alias courts et du binding. | Migrer progressivement vers `.sql` + `oRs()` et helpers de préparation. Garder les contrôles existants en technique jusqu’à revue des exceptions. |
 | Identifiants | Les clés texte de projets, machines et jobs sont des contrats MCP/agent. L’admin en expose certaines dans les liens et données de formulaires ou AJAX. | Séparer identifiant navigateur et clé d’API, déchiffrer puis refaire le contrôle d’accès côté serveur. Fournir la clé externe par configuration. Préserver les identifiants MCP, ZeroTier, agents et artefacts. |
@@ -90,7 +102,60 @@ En cas d’échec après création du dépôt, le résultat indique
 `partial_failure/template_publish`. Le dépôt et le workspace restent disponibles
 pour inspection. Vérifier l’état Git et l’affectation existante avant de relancer.
 
-## Pilote des thèmes prêt pour homologation
+## Lot préparé sur la branche dédiée — catalogue des modèles de devMCP
+
+Les noms proposés dans la cartographie sont `T_TEMPLATE` (`TPL_`) et
+`T_PROJECTTEMPLATE` (`PTP_`). Préserver les clés texte renvoyées par MCP,
+le SHA source du socle et le SHA publié dans le projet. Le projet source de
+chaque modèle reste dans le registre de projets existant.
+
+- Migrer toutes les entrées et affectations actives, avec comparaison champ
+  par champ. L’ancien schéma ne fournit ni date ni signature pour ces lignes.
+- Inventorier les écritures MCP avant bascule, notamment la création intégrée
+  d’un projet PHP et la publication d’un modèle. Historiser la sélection et
+  l’enregistrement des SHA dans la transaction, avec l’acteur authentifié.
+  Appliquer la suppression logique au retrait d’un modèle non appliqué.
+- Garder une seule affectation active par projet et le refus de changer un
+  modèle déjà appliqué. Conserver les réponses MCP et vérifier les courses
+  entre sélection, retrait et enregistrement des SHA.
+- Répéter en base isolée la reprise et la projection de retour. Contrôler les
+  métadonnées et SHA après des écritures effectuées dans le nouveau catalogue.
+  Soumettre le plan de bascule avant toute modification du schéma de production.
+
+### Bascule proposée pour les modèles
+
+1. Sauvegarder `dm_template`, `dm_project_template` et le fichier de
+   configuration distribuée du tunnel. Laisser finir les publications de
+   modèles en cours, puis suspendre les écritures MCP et les mises à jour.
+2. Préparer les tables avec
+   `php bin/migrate-cowprod-templates --prepare TEMPLATE_WRITES_QUIESCED`.
+   Vérifier avec `--verify` en désignant la configuration SQL de lecture via
+   `DEVMCP_DISTRIBUTED_CONFIG` si la configuration du tunnel est uniquement
+   configurée pour l’écriture.
+3. Activer `cowprod_templates` dans la configuration distribuée MCP.
+   Utiliser le même `socle_root` et le même `socle_revision` que les thèmes,
+   avec l’identité MCP de cette installation dans `mcp_actor`. Le choix du
+   modèle est verrouillé pendant la publication Git. Redémarrer le tunnel,
+   vérifier sa disponibilité et relire le catalogue et les affectations par MCP.
+4. Pour revenir au catalogue précédent, suspendre à nouveau les écritures.
+   Projeter les écritures récentes avec `--project-back TEMPLATE_WRITES_QUIESCED`,
+   comparer avec `--verify`, retirer le réglage puis relancer le tunnel.
+   L’historique des nouvelles tables demeure disponible après le retour.
+   L’auto-update contrôle l’accès au catalogue actif. Il ne lance pas ce DDL.
+
+Si Git a publié le commit mais que la validation SQL échoue, le commit reste
+sur Git. Vérifier le SHA et l’affectation avant toute relance. Le retour SQL
+préserve les écritures validées en base et ne force aucune révision Git.
+
+Recette sur une instance jetable, avec un socle déjà généré
+
+```sh
+COWPROD_TEMPLATE_TEST_DSN='mysql:unix_socket=/chemin/jetable/mysql.sock;charset=utf8mb4' \
+COWPROD_TEMPLATE_TEST_SOCLE='/chemin/vers/socle-généré' \
+php tests/cowprod-template-catalogue.php
+```
+
+## Pilote des thèmes en production
 
 Les noms retenus sont `T_THEME` (`THE_`) et `T_PROJECTTHEME` (`PTH_`).
 Les slugs publics demeurent les identifiants de projet et de thème dans les

@@ -818,7 +818,7 @@ final class ProjectTools
             return $result+['assets_modified'=>false];
         }catch(InvalidArgumentException $error){throw new \Mcp\Exception\ToolCallException($error->getMessage());}
     }
-    private function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue
+    private function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue|\Cowprod\DevMcp\Project\CowprodTemplateCatalogue
     {
         if($this->remoteTools===null)throw new \Mcp\Exception\ToolCallException('Catalogue SQL indisponible');
         return $this->remoteTools->templateCatalogue();
@@ -849,16 +849,17 @@ final class ProjectTools
     public function templateApply(string $project,string $sha): array
     {
         try{
-            $choice=$this->templateCatalogue()->assignment($project);
-            $template=$choice['template_id']??throw new InvalidArgumentException('Select template first');
-            if(($choice['applied_sha']??null)!==null)throw new InvalidArgumentException('Template already applied');
-            $meta=$this->templateCatalogue()->info($template);
-            if(!in_array($meta['project_type'],['cordova','php'],true))throw new InvalidArgumentException('Template type is not yet supported');
-            $source=$this->localActionProject($meta['source_project']);
-            $target=$this->localActionProject($project);
-            $revision=(new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->apply($source->root,$target->root,$sha,$project,$meta['project_type']);
-            $result=$this->templateCatalogue()->markApplied($project,$template,$sha,$revision);
-            $this->audit->append(['project'=>$project,'action'=>'template.apply','template_id'=>$template,'revision'=>$revision,'outcome'=>'succeeded']);
+            $result = $this->templateCatalogue()->apply($project, $sha, function (array $meta) use ($project, $sha): string {
+                if (!in_array($meta['project_type'], ['cordova', 'php'], true))
+                    throw new InvalidArgumentException('Template type is not yet supported');
+                $source = $this->localActionProject($meta['source_project']);
+                $target = $this->localActionProject($project);
+                return (new \Cowprod\DevMcp\Project\ProjectTemplatePublisher())->apply(
+                    $source->root, $target->root, $sha, $project, $meta['project_type']
+                );
+            });
+            $revision = $result['applied_sha'];
+            $this->audit->append(['project'=>$project,'action'=>'template.apply','template_id'=>$result['template_id'],'revision'=>$revision,'outcome'=>'succeeded']);
             return $result+['git_revision'=>$revision,'committed'=>true,'pushed'=>true];
         }catch(\Throwable $e){throw new \Mcp\Exception\ToolCallException($e->getMessage());}
     }

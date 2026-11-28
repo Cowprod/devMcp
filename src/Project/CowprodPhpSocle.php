@@ -18,6 +18,54 @@ final class CowprodPhpSocle
     private const CONFIG = ['config/global.example.php', 'config/inc_connexion.example.php'];
     private const VERIFICATEUR = 'outils/verifier-socle.php';
 
+    public static function chargerPourCatalogue(array $aReglage, ?string $sActeur = null): string
+    {
+        $sRacine = $aReglage['socle_root'] ?? null;
+        $sRevision = $aReglage['socle_revision'] ?? null;
+        $sActeur ??= $aReglage['mcp_actor'] ?? null;
+        if (!is_string($sRacine) || realpath($sRacine) !== $sRacine || !is_dir($sRacine)
+            || !is_string($sRevision) || !preg_match('/^[a-f0-9]{40}$/D', $sRevision) || !is_string($sActeur))
+            throw new RuntimeException('Configuration du catalogue Cowprod invalide');
+
+        self::chargerApi($sRacine, $sRevision);
+        return $sActeur;
+    }
+
+    private static function chargerApi(string $sRacine, string $sRevision): void
+    {
+        static $sCharge = null;
+        $sIdentite = $sRacine.'@'.$sRevision;
+        if ($sCharge === $sIdentite)
+            return;
+        if ($sCharge !== null)
+            throw new RuntimeException('Redémarrer le processus après changement de version du socle');
+
+        $sVerrou = $sRacine.'/socle.lock.json';
+        if (!is_file($sVerrou) || realpath($sVerrou) !== $sVerrou)
+            throw new RuntimeException('Verrou du socle Cowprod indisponible');
+        $aVerrou = json_decode(file_get_contents($sVerrou), true, 512, JSON_THROW_ON_ERROR);
+        if (($aVerrou['repository'] ?? '') !== self::DEPOT || ($aVerrou['revision'] ?? '') !== $sRevision
+            || !is_array($aVerrou['files'] ?? null) || !isset($aVerrou['files']['public/api/inc_function.php']))
+            throw new RuntimeException('Révision du socle Cowprod inattendue');
+
+        foreach ($aVerrou['files'] as $sFichier => $sHash) {
+            if (!str_starts_with($sFichier, 'public/api/') || !str_ends_with($sFichier, '.php'))
+                continue;
+            $sChemin = $sRacine.'/'.$sFichier;
+            if (!is_file($sChemin) || realpath($sChemin) !== $sChemin || hash_file('sha256', $sChemin) !== $sHash)
+                throw new RuntimeException('API du socle Cowprod divergente');
+        }
+        $sApi = $sRacine.'/public/api';
+        $aFichiers = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($sApi, \FilesystemIterator::SKIP_DOTS));
+        foreach ($aFichiers as $oFichier) {
+            $sFichier = substr($oFichier->getPathname(), strlen($sRacine) + 1);
+            if ($oFichier->getExtension() === 'php' && !isset($aVerrou['files'][$sFichier]))
+                throw new RuntimeException('API du socle absente du verrou');
+        }
+        require_once $sApi.'/inc_function.php';
+        $sCharge = $sIdentite;
+    }
+
     /** @return array<string, string> */
     public function lire(string $sSource, string $sRevision): array
     {

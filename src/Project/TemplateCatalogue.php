@@ -8,6 +8,15 @@ use PDO;
 final class TemplateCatalogue
 {
     public function __construct(private readonly PDO $db) {}
+
+    public static function forRuntime(PDO $db, array $config): self|CowprodTemplateCatalogue
+    {
+        if (!array_key_exists('cowprod_templates', $config))
+            return new self($db);
+
+        return new CowprodTemplateCatalogue($db, CowprodPhpSocle::chargerPourCatalogue($config['cowprod_templates']));
+    }
+
     public function all(?string $type=null): array
     {
         if($type!==null && !preg_match('/^[a-z][a-z0-9-]{0,31}$/D',$type))throw new InvalidArgumentException('Invalid project type');
@@ -53,6 +62,17 @@ final class TemplateCatalogue
             $result=$this->assignment($project);$this->db->commit();return $result;
         }catch(\Throwable $e){if($this->db->inTransaction())$this->db->rollBack();throw $e;}
     }
+    public function apply(string $project, string $sourceSha, callable $publish): array
+    {
+        $choice = $this->assignment($project);
+        $template = $choice['template_id'] ?? throw new InvalidArgumentException('Select template first');
+        if ($choice['applied_sha'] !== null)
+            throw new InvalidArgumentException('Template already applied');
+
+        $revision = $publish($this->info($template));
+        return $this->markApplied($project, $template, $sourceSha, $revision);
+    }
+
     public function markApplied(string $project,string $template,string $sourceSha,string $appliedSha): array
     {
         self::assertProject($project);

@@ -42,6 +42,13 @@ try {
         (string) $distributed['writer_username'],
         (string) $distributed['writer_password'],
     );
+    if (array_key_exists('cowprod_templates', $distributed)) {
+        $catalogue = \Cowprod\DevMcp\Project\TemplateCatalogue::forRuntime($db, $distributed);
+        $catalogue->all();
+        $catalogue->assignment('devmcp');
+        echo "COWPROD_TEMPLATES_RUNTIME_OK\n";
+    }
+
     $migrationPath = dirname(__DIR__) . '/migrations/20261126_template_catalogue.sql';
     $migration = file_get_contents($migrationPath);
     if (!is_string($migration) || trim($migration) === '') {

@@ -18,20 +18,20 @@ use Mcp\Exception\ToolCallException;
  */
 final class RemoteTools
 {
-    public function __construct(private readonly PDO $db, private readonly string $sourceRoot = '/var/lib/devmcp/remote-sources',private readonly ?string $deploymentId=null, private readonly array $themeConfig=[]) {}
+    public function __construct(private readonly PDO $db, private readonly string $sourceRoot = '/var/lib/devmcp/remote-sources',private readonly ?string $deploymentId=null, private readonly array $catalogueConfig=[]) {}
 
     public function forDeployment(string $project,string $id): self
     {
         $row=(new \Cowprod\DevMcp\Project\DeploymentRegistry($this->db))->get($id);
         if($row['project_id']!==$project)throw new InvalidArgumentException('Deployment belongs to another project');
-        return new self($this->db,$this->sourceRoot,$id,$this->themeConfig);
+        return new self($this->db,$this->sourceRoot,$id,$this->catalogueConfig);
     }
 
     public function themeCatalogue(): \Cowprod\DevMcp\Project\ThemeCatalogue|\Cowprod\DevMcp\Project\CowprodThemeCatalogue
-    {return \Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->themeConfig);}
+    {return \Cowprod\DevMcp\Project\ThemeCatalogue::forRuntime($this->db, $this->catalogueConfig);}
 
-    public function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue
-    {return new \Cowprod\DevMcp\Project\TemplateCatalogue($this->db);}
+    public function templateCatalogue(): \Cowprod\DevMcp\Project\TemplateCatalogue|\Cowprod\DevMcp\Project\CowprodTemplateCatalogue
+    {return \Cowprod\DevMcp\Project\TemplateCatalogue::forRuntime($this->db, $this->catalogueConfig);}
 
     public function deploymentService(): \Cowprod\DevMcp\Project\DeploymentService
     {return new \Cowprod\DevMcp\Project\DeploymentService($this->db,'mcp-admin',$this->sourceRoot);}
@@ -160,7 +160,7 @@ final class RemoteTools
             (string) $settings['dsn'],
             (string) $settings['writer_username'],
             (string) $settings['writer_password']
-        ), themeConfig: array_intersect_key($settings, ['cowprod_themes' => true]));
+        ), catalogueConfig: array_intersect_key($settings, ['cowprod_themes' => true, 'cowprod_templates' => true]));
     }
 
     /** @param array<string,mixed> $previewConfig */
