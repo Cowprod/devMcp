@@ -60,6 +60,8 @@ try {
     $deployments->activer();
     $migration = new RemoteWorkTableMigration($db);
     $expected = ['dm_remote_project'=>1,'dm_remote_project_job'=>1,'dm_remote_readonly_job'=>1,'dm_remote_hosting_job'=>1];
+    verifier($migration->preparer() === $expected, 'Initial copy');
+    $db->exec("UPDATE dm_remote_project_job SET expires_at=DATE_ADD(expires_at,INTERVAL 1 MINUTE) WHERE id='$job'");
     verifier($migration->preparer() === $expected && $migration->activer() === $expected, 'Four projections identical to their source tables');
     verifier($deployments->verifier() === ['deployments'=>1], 'Foreign keys of deployment children');
     verifier(HostingLabSchemaMigration::state($db) === 'ready', 'Hosting allowlist unchanged');

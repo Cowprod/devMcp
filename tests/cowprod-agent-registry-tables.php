@@ -60,6 +60,8 @@ try {
 
     $migration = new AgentRegistryTableMigration($db);
     $initial = ['dm_machine'=>2,'dm_agent_identity'=>1,'dm_enrollment_invitation'=>1];
+    verifier($migration->preparer() === $initial, 'Copie initiale');
+    $db->exec("UPDATE dm_machine SET last_seen_at=UTC_TIMESTAMP(6) WHERE id='$machine'");
     verifier($migration->preparer() === $initial && $migration->activer() === $initial, 'Identités et seize relations préservées');
     verifier($deployments->verifier() === ['deployments'=>1], 'Affectation d’origine');
     $auth = new AgentAuthenticator($db);

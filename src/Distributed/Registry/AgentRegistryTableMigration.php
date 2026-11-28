@@ -55,17 +55,19 @@ final class AgentRegistryTableMigration
         return $this->transaction(function (): array {
             foreach (self::KEYS as $legacy=>$key) {
                 ['target'=>$target, 'columns'=>$columns] = $this->tables[$legacy];
-                if ((int)$this->db->query('SELECT COUNT(*) FROM '.$target)->fetchColumn() !== 0)
-                    continue;
+                $mutable = array_values(array_diff_key($columns,array_flip($key)));
                 $prefix = $this->prefix($legacy);
                 $extraColumns = [$prefix.'_CH_CREATION'];
                 $extraValues = ['NULL'];
                 if ($legacy !== 'dm_machine') {
                     $extraColumns[] = $prefix.'_DT_SUPPRESSION';
                     $extraValues[] = $legacy === 'dm_agent_identity' ? 'revoked_at' : 'consumed_at';
+                    $mutable[] = $prefix.'_DT_SUPPRESSION';
                 }
+                $changes = array_map(static fn(string $field): string => $field.'=VALUES('.$field.')',$mutable);
                 $this->db->exec('INSERT INTO '.$target.' ('.implode(',', [...array_values($columns),...$extraColumns]).')
-                    SELECT '.implode(',', [...array_keys($columns),...$extraValues]).' FROM '.$legacy);
+                    SELECT '.implode(',', [...array_keys($columns),...$extraValues]).' FROM '.$legacy
+                    .' ON DUPLICATE KEY UPDATE '.implode(',',$changes));
             }
             return $this->verifier();
         });

@@ -37,11 +37,13 @@ final class RemoteWorkTableMigration
         return $this->transaction(function (): array {
             foreach (self::KEYS as $legacy=>$key) {
                 ['target'=>$target, 'columns'=>$columns] = $this->tables[$legacy];
-                if ((int)$this->db->query('SELECT COUNT(*) FROM '.$target)->fetchColumn() !== 0)
-                    continue;
-                $addition = $legacy !== 'dm_remote_project' ? [$this->prefix($legacy).'_CH_CREATION'] : [$this->prefix($legacy).'_DT_CREATION',$this->prefix($legacy).'_CH_CREATION'];
+                $prefix = $this->prefix($legacy);
+                $addition = $legacy !== 'dm_remote_project' ? [$prefix.'_CH_CREATION'] : [$prefix.'_DT_CREATION',$prefix.'_CH_CREATION'];
+                $mutable = array_diff_key($columns,array_flip($key));
+                $changes = array_map(static fn(string $field): string => $field.'=VALUES('.$field.')',$mutable);
                 $this->db->exec('INSERT INTO '.$target.' ('.implode(',', [...array_values($columns),...$addition]).')
-                    SELECT '.implode(',', [...array_keys($columns),...array_fill(0,count($addition),'NULL')]).' FROM '.$legacy);
+                    SELECT '.implode(',', [...array_keys($columns),...array_fill(0,count($addition),'NULL')]).' FROM '.$legacy
+                    .' ON DUPLICATE KEY UPDATE '.implode(',',$changes));
             }
             return $this->verifier();
         });
