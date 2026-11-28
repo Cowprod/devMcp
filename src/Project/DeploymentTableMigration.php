@@ -113,7 +113,7 @@ final class DeploymentTableMigration
     public function retour(): array
     {
         $this->assertIdle();
-        foreach (['dm_workspace_diagnostic','dm_policy_revision','dm_deployment_action','dm_job',
+        foreach (['dm_machine','dm_workspace_diagnostic','dm_policy_revision','dm_deployment_action','dm_job',
             'dm_remote_project','dm_remote_readonly_job','dm_remote_hosting_job'] as $child)
             if ($this->childViewActive($child))
                 throw new RuntimeException('Revenir à '.$child.' avant les déploiements');

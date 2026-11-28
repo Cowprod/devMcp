@@ -85,7 +85,7 @@ try {
         throw new RuntimeException('result_size');
     }
     $state = ($payload['result']['ok'] ?? false) === true ? 'succeeded' : 'failed';
-    $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+    $history = \Cowprod\DevMcp\Project\CowprodRegistryHistory::configured($db,$config,'agent:'.$machineId);
     if ($history !== null) {
         $changed = $history->modifier('dm_remote_readonly_job','state=?,result_json=?,finished_at=UTC_TIMESTAMP(6)',
             [$state,$result],"id=? AND machine_id=? AND state='claimed'",[$payload['job_id'],$machineId]);

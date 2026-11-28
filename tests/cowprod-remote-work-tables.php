@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Cowprod\DevMcp\Distributed\Admin\HostingLabSchemaMigration;
 use Cowprod\DevMcp\Distributed\Registry\RemoteWorkTableMigration;
-use Cowprod\DevMcp\Project\CowprodRemoteWorkHistory;
+use Cowprod\DevMcp\Project\CowprodRegistryHistory;
 use Cowprod\DevMcp\Project\DeploymentTableMigration;
 use Cowprod\DevMcp\Project\MultiDeploymentMigration;
 use Cowprod\DevMcp\Project\RemoteProjectQueue;
@@ -82,7 +82,7 @@ try {
     verifier((int)$db->query("SELECT COUNT(*) FROM T_REMOTEPROJECT WHERE RPR_N_MID IS NOT NULL
         AND RPR_CH_CONFIG_JSON IS NULL")->fetchColumn() === 1, 'Historical environment values excluded');
 
-    $history = CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machine);
+    $history = CowprodRegistryHistory::configured($db,$config,'agent:'.$machine);
     foreach (['dm_remote_readonly_job'=>$readonly,'dm_remote_hosting_job'=>$hosting] as $table=>$task) {
         verifier($history->modifier($table,"state='claimed',claimed_at=UTC_TIMESTAMP(6)",[],
             "id=? AND machine_id=? AND state='queued'",[$task,$wrong]) === 0, 'Wrong machine cannot claim');

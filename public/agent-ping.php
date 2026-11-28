@@ -89,8 +89,19 @@ try {
 
     if (isset($payload['agent_version'])) {
         $version=$payload['agent_version'];
-        if(str_ends_with($version,':inst1'))$db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$version,$machineId]);
-        else $db->prepare("UPDATE dm_machine SET agent_version=CASE WHEN agent_version=CONCAT(?,':inst1') THEN agent_version ELSE ? END WHERE id=?")->execute([$version,$version,$machineId]);
+        $history = \Cowprod\DevMcp\Project\CowprodRegistryHistory::agents($db,$config,'agent:'.$machineId);
+        if ($history !== null) {
+            $where = 'id=? AND NOT (BINARY agent_version <=> BINARY ?)';
+            $parameters = [$machineId,$version];
+            if (!str_ends_with($version,':inst1')) {
+                $where .= " AND NOT (BINARY agent_version <=> BINARY CONCAT(?,':inst1'))";
+                $parameters[] = $version;
+            }
+            $history->modifier('dm_machine','agent_version=?',[$version],$where,$parameters);
+        } else {
+            if(str_ends_with($version,':inst1'))$db->prepare('UPDATE dm_machine SET agent_version=? WHERE id=?')->execute([$version,$machineId]);
+            else $db->prepare("UPDATE dm_machine SET agent_version=CASE WHEN agent_version=CONCAT(?,':inst1') THEN agent_version ELSE ? END WHERE id=?")->execute([$version,$version,$machineId]);
+        }
     }
     $machineState = $db->prepare('SELECT status FROM dm_machine WHERE id=?');
     $machineState->execute([$machineId]);

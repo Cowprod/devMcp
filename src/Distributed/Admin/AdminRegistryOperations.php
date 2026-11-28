@@ -28,7 +28,7 @@ final class AdminRegistryOperations
         $editor=new RegistryEditor($this->db,$this->actor,
             \Cowprod\DevMcp\Project\CowprodProjectRegistry::configured($this->db,$this->catalogueConfig,$this->actor),
             array_intersect_key($this->catalogueConfig, ['cowprod_machine_capabilities'=>true]),
-            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor));
+            \Cowprod\DevMcp\Project\CowprodDeploymentRegistry::configured($this->db,$this->catalogueConfig,$this->actor),$this->catalogueConfig);
         if($method==='GET'&&$path==='/assignments'){
             $rows=(new \Cowprod\DevMcp\Distributed\Registry\RegistryRepository($this->db))->deployments();
             return ['assignments'=>array_map(static fn($r)=>['id'=>$r['id'],'project_id'=>$r['project_id'],'machine_id'=>$r['machine_id'],

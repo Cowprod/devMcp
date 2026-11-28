@@ -87,6 +87,8 @@ final class RemoteWorkTableMigration
     public function retour(): array
     {
         $this->assertIdle();
+        if ($this->type('dm_machine') === 'VIEW')
+            throw new RuntimeException('Revenir au registre historique des agents avant cette bascule');
         $rename = [];
         $views = [];
         foreach (self::KEYS as $legacy=>$key) {

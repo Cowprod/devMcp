@@ -163,7 +163,7 @@ final class RemoteProjectQueue
         $this->db->beginTransaction();
         try {
             // Late jobs from an older central process retain their exact project+machine binding.
-            $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
+            $history = CowprodRegistryHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
             if ($history !== null) {
                 $late = $this->db->prepare('SELECT j.id,p.deployment_id FROM dm_remote_project_job j JOIN dm_remote_project p
                     ON p.project_id=j.project_id AND p.machine_id=j.machine_id WHERE j.machine_id=? AND j.deployment_id IS NULL FOR UPDATE');
@@ -211,7 +211,7 @@ final class RemoteProjectQueue
             if ($r['state'] !== 'claimed') {
                 throw new RuntimeException('Remote project job was not claimed');
             }
-            $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
+            $history = CowprodRegistryHistory::configured($this->db,$this->catalogueConfig,'agent:'.$machine);
             $request=json_decode($r['request_json'],true,32,JSON_THROW_ON_ERROR);
             if(($result['ok']??null)===true&&($request['operation']??null)==='instance'&&(($result['data']['deployment_id']??null)!==$r['deployment_id']||($result['data']['configuration_revision']??null)!==$request['configuration_revision']))throw new RuntimeException('Instance result has the wrong deployment or configuration identity');
             if (($result['ok'] ?? null) === true && in_array($r['operation'], ['create', 'sync', 'deploy'], true)) {

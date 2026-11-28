@@ -84,7 +84,7 @@ final class DeploymentService
                 $q=$this->db->prepare('SELECT id FROM dm_deployment WHERE machine_id=? AND workspace_path=? AND id<>?');$q->execute([$row['machine_id'],$workspace,$id]);if($q->fetchColumn()!==false)throw new InvalidArgumentException('Workspace already assigned');
             }
             $this->assertPort($row['machine_id'],$config['port'],$id);
-            CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,$this->actor)?->archiver('dm_remote_project',$id);
+            CowprodRegistryHistory::configured($this->db,$this->catalogueConfig,$this->actor)?->archiver('dm_remote_project',$id);
             $this->db->prepare('UPDATE dm_remote_project SET config_json=?,config_revision=config_revision+1,workspace_path=? WHERE deployment_id=?')->execute([json_encode($config,JSON_THROW_ON_ERROR),$workspace,$id]);
             if ($this->cowprod !== null)
                 $this->cowprod->updatePath($id,$workspace);
@@ -142,7 +142,7 @@ final class DeploymentService
     }
     private function modifierPreparation(string $set,array $values,string $where,array $filter): void
     {
-        $history = CowprodRemoteWorkHistory::configured($this->db,$this->catalogueConfig,'service:devmcp-project-control');
+        $history = CowprodRegistryHistory::configured($this->db,$this->catalogueConfig,'service:devmcp-project-control');
         if ($history !== null) {
             $history->modifier('dm_remote_project_job',$set,$values,$where,$filter);
             return;

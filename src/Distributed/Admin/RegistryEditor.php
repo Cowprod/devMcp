@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Cowprod\DevMcp\Distributed\Admin;
 
 use Cowprod\DevMcp\Project\CowprodProjectRegistry;
+use Cowprod\DevMcp\Project\CowprodRegistryHistory;
 use Cowprod\DevMcp\Project\CowprodDeploymentRegistry;
 use InvalidArgumentException;
 use PDO;
 
 final class RegistryEditor
 {
-    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null, private readonly array $capabilityConfig=[], private readonly ?CowprodDeploymentRegistry $deployments=null) {}
+    public function __construct(private readonly PDO $db,private readonly string $actor='web-admin', private readonly ?CowprodProjectRegistry $projects=null, private readonly array $capabilityConfig=[], private readonly ?CowprodDeploymentRegistry $deployments=null, private readonly array $catalogueConfig=[]) {}
 
     public function createMachine(string $name, string $os, string $architecture, array $capabilities = ['hosting'=>true,'cordova_android'=>false,'cordova_ios'=>false]): string
     {
@@ -24,10 +25,17 @@ final class RegistryEditor
         $id = bin2hex(random_bytes(16));
         $this->db->beginTransaction();
         try {
-            $statement = $this->db->prepare(
-                "INSERT INTO dm_machine (id,name,os_family,architecture,status) VALUES (?,?,?,?, 'pending')"
-            );
-            $statement->execute([$id, $name, $os, $architecture]);
+            if (CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,$this->actor) !== null) {
+                $statement = $this->db->prepare("INSERT INTO T_MACHINE
+                    (MAC_CH_ID,MAC_CH_NAME,MAC_CH_OS_FAMILY,MAC_CH_ARCHITECTURE,MAC_CH_CREATION)
+                    VALUES (?,?,?,?,?)");
+                $statement->execute([$id,$name,$os,$architecture,strtolower(trim($this->actor))]);
+            } else {
+                $statement = $this->db->prepare(
+                    "INSERT INTO dm_machine (id,name,os_family,architecture,status) VALUES (?,?,?,?, 'pending')"
+                );
+                $statement->execute([$id, $name, $os, $architecture]);
+            }
             (new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db, $this->capabilityConfig, $this->actor))->save($id,$os,$capabilities);
             $this->audit('machine.create', 'machine', $id);
             $this->db->commit();
@@ -60,6 +68,7 @@ final class RegistryEditor
         }
         $this->db->beginTransaction();
         try {
+            CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,$this->actor)?->archiver('dm_machine',$machineId);
             $statement = $this->db->prepare(
                 "UPDATE dm_machine SET status = 'active' WHERE id = ? AND status = 'pending' "
                 . 'AND EXISTS (SELECT 1 FROM dm_agent_identity '
@@ -150,8 +159,14 @@ final class RegistryEditor
         $this->db->beginTransaction();
         try {
             \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::validate($os,(new \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities($this->db))->get($id));
-            $statement = $this->db->prepare('UPDATE dm_machine SET name=?, os_family=?, architecture=? WHERE id=?');
-            $statement->execute([$name, $os, $architecture, $id]);
+            $history = CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,$this->actor);
+            if ($history !== null) {
+                $history->modifier('dm_machine','name=?,os_family=?,architecture=?',[$name,$os,$architecture],
+                    'id=? AND (BINARY name<>BINARY ? OR os_family<>? OR architecture<>?)',[$id,$name,$os,$architecture]);
+            } else {
+                $statement = $this->db->prepare('UPDATE dm_machine SET name=?, os_family=?, architecture=? WHERE id=?');
+                $statement->execute([$name, $os, $architecture, $id]);
+            }
             $check = $this->db->prepare('SELECT id FROM dm_machine WHERE id=?');
             $check->execute([$id]);
             if ($check->fetchColumn() === false) {

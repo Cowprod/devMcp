@@ -365,6 +365,10 @@ Basculer après suspension des écrivains. Vérifier les droits réels de
 lecture et la remontée d'observations d'un agent. Revenir aux observations
 d'origine avant un éventuel retour des déploiements.
 
+TouchDeck a reçu 13 diagnostics et trois observations ZeroTier après la
+bascule du 28 novembre 2026. Sauvegardes et résultats dans
+`/var/backups/devmcp/observations-cowprod-20261128T152238Z.6GPwIcn4`.
+
 ## Planificateur distribué
 
 `T_ACTIONTEMPLATE`, `T_POLICYREVISION`, `T_DEPLOYMENTACTION`, `T_JOB` et
@@ -390,6 +394,12 @@ des deux comptes, les dépendances et les transitions sous verrou. En cas
 de retour, projeter le groupe dans l'ordre des dépendances et rétablir les
 clés du journal avant le redémarrage.
 
+Bascule confirmée sur TouchDeck le 28 novembre 2026. Ces cinq tables
+étaient vides en production. Une recette avec des données de test sur les
+deux moteurs a vérifié la chaîne complète, le bail et la quarantaine.
+Sauvegardes et résultats dans
+`/var/backups/devmcp/scheduler-cowprod-20261128T153028Z.yTfCPKTK`.
+
 ## Workspaces et files distantes
 
 `T_REMOTEPROJECT`, `T_REMOTEPROJECTJOB`, `T_REMOTEREADONLYJOB` et
@@ -412,6 +422,30 @@ Suspendre les écrivains avant d'activer `cowprod_remote_work`. Vérifier les
 travaux en cours, les permissions et l'auto-update après bascule. Le retour
 projette les états courants dans les archives en gardant l'historique.
 Le registre des déploiements doit rester actif durant le retour.
+
+## Machines et enrôlement
+
+`T_MACHINE`, `T_AGENTIDENTITY` et `T_ENROLLMENTINVITATION` conservent les
+identifiants, les comptes et les statuts du protocole. Seize clés vers
+les machines relient les tables actives et leurs archives aux mêmes
+identifiants stables. Les autres dépendances restent internes à ce lot.
+
+La consommation d'une invitation et la révocation d'une identité sont des
+retraits logiques datés. L'historique des transitions conserve la
+signature, la date et le statut. Les empreintes de jetons et de
+credentials restent dans les lignes mères. La table des machines
+historise l'édition, l'approbation et les changements de version de
+l'agent. Les heartbeats ne mettent à jour que la dernière présence.
+La vérification du token, son usage unique, l'approbation et la révocation
+continuent à utiliser les contrôles d'origine.
+
+Répéter `migrate-cowprod-agent-registry --prepare AGENT_REGISTRY_WRITES_QUIESCED`,
+`--activate AGENT_REGISTRY_WRITES_QUIESCED`, `--verify` et
+`--project-back AGENT_REGISTRY_WRITES_QUIESCED` sur une restauration.
+Basculer après normalisation des autres tables dépendant des machines.
+Activer `cowprod_agent_registry` après vérification des relations et des
+droits, puis constater les heartbeats authentifiés. Le retour du registre
+des agents doit précéder celui des tables qui le référencent.
 
 ## Runtimes de devMCP en production
 

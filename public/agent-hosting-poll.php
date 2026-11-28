@@ -58,7 +58,7 @@ try {
     $db->beginTransaction();
     try {
         // An offline agent must never claim a stale privileged request.
-        $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+        $history = \Cowprod\DevMcp\Project\CowprodRegistryHistory::configured($db,$config,'agent:'.$machineId);
         if ($history !== null) {
             $history->modifier('dm_remote_hosting_job',"state='expired',finished_at=UTC_TIMESTAMP(6),result_json=?",
                 ['{"ok":false,"error":"hosting_job_expired"}'],"machine_id=? AND state='queued' AND expires_at<=UTC_TIMESTAMP(6)",[$machineId]);

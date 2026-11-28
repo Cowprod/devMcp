@@ -78,6 +78,8 @@ final class AgentObservationTableMigration
     public function retour(): array
     {
         $this->assertIdle();
+        if ($this->type('dm_machine') === 'VIEW')
+            throw new RuntimeException('Revenir au registre historique des agents avant cette bascule');
         $renames = [];
         $views = [];
         foreach (self::TABLES as $legacy=>$description) {

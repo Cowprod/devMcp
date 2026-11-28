@@ -248,7 +248,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $projectActor = 'web-admin:'.$adminUser;
         $editor = new RegistryEditor($writer, $projectActor, CowprodProjectRegistry::configured($writer, $config, $projectActor),
             array_intersect_key($config, ['cowprod_machine_capabilities'=>true]),
-            CowprodDeploymentRegistry::configured($writer,$config,$projectActor));
+            CowprodDeploymentRegistry::configured($writer,$config,$projectActor),$config);
         $instances=new \Cowprod\DevMcp\Project\DeploymentService($writer,$projectActor,
             cowprod:CowprodDeploymentRegistry::configured($writer,$config,$projectActor),catalogueConfig:$config);
         $instanceConfiguration=static function():array{
@@ -283,7 +283,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $editor->createMachine((string) ($_POST['name'] ?? ''), (string) ($_POST['os'] ?? ''), (string) ($_POST['architecture'] ?? ''), \Cowprod\DevMcp\Distributed\Registry\MachineCapabilities::fromPost($_POST));
                 break;
             case 'enrollment.issue':
-                $invitation = (new EnrollmentService($writer))->issue((string) ($_POST['machine_id'] ?? ''));
+                $invitation = (new EnrollmentService($writer,$config,$projectActor))->issue((string) ($_POST['machine_id'] ?? ''));
                 $platform = $writer->prepare('SELECT os_family FROM dm_machine WHERE id=?');
                 $platform->execute([(string) $_POST['machine_id']]);
                 $invitation['os_family'] = $platform->fetchColumn();

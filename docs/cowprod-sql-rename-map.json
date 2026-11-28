@@ -11,7 +11,26 @@
       "status": "MAC_CH_STATUS",
       "last_seen_at": "MAC_DT_LAST_SEEN_AT",
       "created_at": "MAC_DT_CREATION"
-    }
+    },
+    "archive": "dm_machine_legacy",
+    "active_config": "cowprod_agent_registry",
+    "target_columns": [
+      "MAC_N_ID",
+      "MAC_N_MID",
+      "MAC_CH_ID",
+      "MAC_CH_NAME",
+      "MAC_CH_OS_FAMILY",
+      "MAC_CH_ARCHITECTURE",
+      "MAC_CH_AGENT_VERSION",
+      "MAC_CH_STATUS",
+      "MAC_DT_LAST_SEEN_AT",
+      "MAC_DT_CREATION",
+      "MAC_CH_CREATION",
+      "MAC_DT_SUPPRESSION",
+      "MAC_CH_SUPPRESSION",
+      "MAC_CH_MERE",
+      "MAC_CH_NAMEMERE"
+    ]
   },
   {
     "old": "dm_project",
@@ -135,7 +154,24 @@
       "expires_at": "AGI_DT_EXPIRES_AT",
       "revoked_at": "AGI_DT_REVOKED_AT",
       "created_at": "AGI_DT_CREATION"
-    }
+    },
+    "archive": "dm_agent_identity_legacy",
+    "active_config": "cowprod_agent_registry",
+    "target_columns": [
+      "AGI_N_ID",
+      "AGI_N_MID",
+      "AGI_CH_ID",
+      "AGI_CH_MACHINE_ID",
+      "AGI_CH_CREDENTIAL_HASH",
+      "AGI_DT_EXPIRES_AT",
+      "AGI_DT_REVOKED_AT",
+      "AGI_DT_CREATION",
+      "AGI_CH_CREATION",
+      "AGI_DT_SUPPRESSION",
+      "AGI_CH_SUPPRESSION",
+      "AGI_CH_MERE",
+      "AGI_CH_HASHMERE"
+    ]
   },
   {
     "old": "dm_job",
@@ -305,7 +341,24 @@
       "expires_at": "ENI_DT_EXPIRES_AT",
       "consumed_at": "ENI_DT_CONSUMED_AT",
       "created_at": "ENI_DT_CREATION"
-    }
+    },
+    "archive": "dm_enrollment_invitation_legacy",
+    "active_config": "cowprod_agent_registry",
+    "target_columns": [
+      "ENI_N_ID",
+      "ENI_N_MID",
+      "ENI_CH_ID",
+      "ENI_CH_MACHINE_ID",
+      "ENI_CH_TOKEN_HASH",
+      "ENI_DT_EXPIRES_AT",
+      "ENI_DT_CONSUMED_AT",
+      "ENI_DT_CREATION",
+      "ENI_CH_CREATION",
+      "ENI_DT_SUPPRESSION",
+      "ENI_CH_SUPPRESSION",
+      "ENI_CH_MERE",
+      "ENI_CH_HASHMERE"
+    ]
   },
   {
     "old": "dm_workspace_diagnostic",

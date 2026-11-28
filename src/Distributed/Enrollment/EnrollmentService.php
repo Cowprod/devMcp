@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Distributed\Enrollment;
 
+use Cowprod\DevMcp\Project\CowprodRegistryHistory;
 use InvalidArgumentException;
 use PDO;
 use RuntimeException;
@@ -14,7 +15,7 @@ use RuntimeException;
  */
 final class EnrollmentService
 {
-    public function __construct(private readonly PDO $db)
+    public function __construct(private readonly PDO $db, private readonly array $catalogueConfig = [], private readonly string $actor = 'service:devmcp-enrollment')
     {
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
@@ -35,11 +36,16 @@ final class EnrollmentService
             if ($check->fetchColumn() !== 'pending') {
                 throw new RuntimeException('Machine is not pending');
             }
-            $expire = $this->db->prepare(
-                'UPDATE dm_enrollment_invitation SET consumed_at = UTC_TIMESTAMP(6) '
-                . 'WHERE machine_id = ? AND consumed_at IS NULL'
-            );
-            $expire->execute([$machineId]);
+            $history = CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,$this->actor);
+            if ($history !== null) {
+                $history->retirerAgent('dm_enrollment_invitation','machine_id=? AND consumed_at IS NULL',[$machineId]);
+            } else {
+                $expire = $this->db->prepare(
+                    'UPDATE dm_enrollment_invitation SET consumed_at = UTC_TIMESTAMP(6) '
+                    . 'WHERE machine_id = ? AND consumed_at IS NULL'
+                );
+                $expire->execute([$machineId]);
+            }
             $insert = $this->db->prepare(
                 'INSERT INTO dm_enrollment_invitation (id,machine_id,token_hash,expires_at) '
                 . 'VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND))'
@@ -83,10 +89,15 @@ final class EnrollmentService
                 . 'VALUES (?,?,?,DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 90 DAY))'
             );
             $identity->execute([bin2hex(random_bytes(16)), $row['machine_id'], hash('sha256', $credential)]);
-            $consume = $this->db->prepare(
-                'UPDATE dm_enrollment_invitation SET consumed_at = UTC_TIMESTAMP(6) WHERE id = ? AND consumed_at IS NULL'
-            );
-            $consume->execute([$row['id']]);
+            $history = CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,'agent:'.$row['machine_id']);
+            if ($history !== null) {
+                $history->retirerAgent('dm_enrollment_invitation','id=? AND consumed_at IS NULL',[$row['id']]);
+            } else {
+                $consume = $this->db->prepare(
+                    'UPDATE dm_enrollment_invitation SET consumed_at = UTC_TIMESTAMP(6) WHERE id = ? AND consumed_at IS NULL'
+                );
+                $consume->execute([$row['id']]);
+            }
             $this->audit('enrollment.redeem', (string) $row['machine_id']);
             $this->db->commit();
             return ['machine_id' => (string) $row['machine_id'], 'credential' => $credential];

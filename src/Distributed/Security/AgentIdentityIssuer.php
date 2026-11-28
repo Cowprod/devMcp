@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cowprod\DevMcp\Distributed\Security;
 
+use Cowprod\DevMcp\Project\CowprodRegistryHistory;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -15,7 +16,7 @@ use PDO;
  */
 final class AgentIdentityIssuer
 {
-    public function __construct(private readonly PDO $db)
+    public function __construct(private readonly PDO $db, private readonly array $catalogueConfig = [], private readonly string $actor = 'service:devmcp-agent-issuer')
     {
         $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->db->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
@@ -47,6 +48,9 @@ final class AgentIdentityIssuer
         if (preg_match('/^[a-f0-9]{32}$/D', $identityId) !== 1) {
             throw new InvalidArgumentException('Invalid identity ID');
         }
+        $history = CowprodRegistryHistory::agents($this->db,$this->catalogueConfig,$this->actor);
+        if ($history !== null)
+            return $history->retirerAgent('dm_agent_identity','id=? AND revoked_at IS NULL',[$identityId]) === 1;
         $stmt = $this->db->prepare(
             'UPDATE dm_agent_identity SET revoked_at=UTC_TIMESTAMP(6) '
             . 'WHERE id=? AND revoked_at IS NULL'

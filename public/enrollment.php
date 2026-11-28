@@ -41,7 +41,7 @@ try {
         (string) $config['writer_username'],
         (string) $config['writer_password']
     );
-    $result = (new EnrollmentService($db))->redeem($data['token']);
+    $result = (new EnrollmentService($db,$config))->redeem($data['token']);
     echo json_encode($result, JSON_THROW_ON_ERROR);
 } catch (Throwable $error) {
     http_response_code(400);

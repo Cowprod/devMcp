@@ -58,7 +58,7 @@ try {
         echo '{"protocol_version":1,"jobs":[]}';
         exit;
     }
-    $history = \Cowprod\DevMcp\Project\CowprodRemoteWorkHistory::configured($db,$config,'agent:'.$machineId);
+    $history = \Cowprod\DevMcp\Project\CowprodRegistryHistory::configured($db,$config,'agent:'.$machineId);
     $history?->archiver('dm_remote_readonly_job',$job['id']);
     $arguments = json_decode($job['arguments_json'], true, 8, JSON_THROW_ON_ERROR);
     if (!is_array($arguments) || !remoteJobAllowed($job['action_name'], $arguments)) {
